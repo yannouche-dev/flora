@@ -5,7 +5,7 @@
 // (vide=masque: a plant block hidden until a plant is chosen; results hidden only once its search has answered, none
 // found — a screen's search never answering for another's: a slowed worker, nothing hidden, counted « 0 espèce » nor
 // said empty before its own answer, at a first load, from one screen to the next, through the home; nor a deck hidden or
-// at its end, nor results zone=0 « Aucune plante… »), its links (plante=: a plant of its own, whatever the current one; results zone=0: the whole flora whatever the
+// at its end, nor results zone=0 « Aucune plante… », its grid sorted from the keyboard keeping its focus and headers), its links (plante=: a plant of its own, whatever the current one; results zone=0: the whole flora whatever the
 // zone; toucher=fiche: a result opens its sheet; toucher=rien: nothing), and the editor's « Cadre » writing them in the
 // address. iNaturalist answered as in free-layout.spec.mjs: 12 plants around.
 import { test, expect, plantId, answerAround } from './fixtures.mjs';
@@ -77,6 +77,11 @@ async function watchOrtie(page) {
 }
 /** Nothing seen (watchOrtie). */
 const NONE = { hidden: 0, zero: 0, empty: 0, deckHidden: 0, deckEnd: 0 };
+/** A results(zone=0) cell's search over the whole flora (state.js#wholeOf): the sort it asks, answered or not. @param {import('@playwright/test').Locator} cell */
+const wholeSearch = cell => cell.locator('dl-results').evaluate(el => {
+  const s = /** @type {any} */ (el).state;
+  return { sort: new URLSearchParams(s.wholeFor.split('?')[1] || '').get('sort'), answered: s.whole?.key === s.wholeFor };
+});
 
 test.describe('un grand écran', () => {
   test.skip(({ isMobile }) => isMobile, 'a wide screen');
@@ -218,6 +223,27 @@ test.describe('un grand écran', () => {
     await listed();
     expect(await seen()).toEqual(NONE);
     expect(await whole.locator('.cell-head .sub').textContent()).toMatch(/^\d+ espèces? · toute la France$/);
+  });
+
+  test('results(grid,zone=0) trié au clavier : le focus reste sur son bouton, la grille garde ses en-têtes pendant la réponse de sa recherche', async ({ app, page }) => {
+    const seen = await watchOrtie(page);
+    await app.open(`#/layout/[results(grid,zone=0)]?${AT}&q=ortie`);
+    const whole = cellOf(page, 'results'), list = whole.locator('gf-plant-list');
+    await expect(list.locator('gf-plant-card').first()).toBeVisible();
+    const head = list.locator('.head[role="row"]'), sort = head.locator('button.sort').first();
+    await expect(sort).toHaveText('Photo');
+    await sort.focus();
+    await sort.press('Enter');
+    // Its search over the whole flora asked again, sorted (the worker slowed): the button keeps the focus, the grid its headers.
+    await expect.poll(async () => (await wholeSearch(whole)).sort).toBe('photo');
+    await expect(sort).toBeFocused();
+    await expect(head).toBeVisible();
+    // Answered: the same, its rows back, sorted.
+    await expect.poll(async () => (await wholeSearch(whole)).answered).toBe(true);
+    await expect(list.locator('gf-plant-card').first()).toBeVisible();
+    await expect(sort).toBeFocused();
+    await expect(head.locator('[role="columnheader"]').first()).toHaveAttribute('aria-sort', 'ascending');
+    expect(await seen()).toEqual(NONE);
   });
 
   test('plante=<id> : un bloc à sa plante, quelle que soit la plante courante', async ({ app, page }) => {

@@ -1179,12 +1179,13 @@ export class DlResults extends LitElement {
     if (!s) return nothing;
     const grid = this.grid;
     // zone=0: the search over the whole flora, whatever the zone (state.js#wholeOf, asked by the layout), said so — its
-    // list once it answered the search on screen (until then, « Aucune plante… » is never said).
+    // plants once it answered the search on screen (until then, none and « Aucune plante… » never said; the list stays,
+    // its headers and its focus with it).
     if (this.params.zone === false) {
-      const whole = s.whole;
+      const whole = s.whole, answered = whole?.key === s.wholeFor;
       return html`${s.live.at ? html`<div class="scope" role="note">${icon('globe-europe-africa')}<span>Toute la France : cette case ne suit pas la zone.</span></div>` : nothing}
-        ${whole?.key === s.wholeFor ? html`<gf-plant-list ?grid=${grid} .current=${s.live.plant} .items=${whole.items} .channel=${this.channel}
-          .lit=${s.hover?.plant ?? null} @plant-hover=${(/** @type {CustomEvent} */ e) => this.#onHover(e)}></gf-plant-list>` : nothing}`;
+        <gf-plant-list ?grid=${grid} .current=${s.live.plant} .items=${answered ? whole.items : []} .answered=${answered} .channel=${this.channel}
+          .lit=${s.hover?.plant ?? null} @plant-hover=${(/** @type {CustomEvent} */ e) => this.#onHover(e)}></gf-plant-list>`;
     }
     const note = s.live.at ? scopeNote(s) : '';
     // Kept to what a map shows of the zone (moved by hand: state.js setView): said, with the way back.
