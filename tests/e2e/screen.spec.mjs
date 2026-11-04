@@ -620,6 +620,32 @@ test.describe('un grand écran', () => {
     await expect(favorites.locator('.count')).toHaveText('0');
   });
 
+  test('♥ ou une nouvelle flore : des résultats sur toute la France (zone=0) cherchent à nouveau eux aussi — ses favoris cochés, sa liste suit', async ({ app, page }) => {
+    await app.open(screen('[results(list,zone=0),plant]', `${AT}&mine=favorites&p=${plantId('Urtica dioica')}`));
+    const whole = cellAt(page, '0');
+    await expect(whole.locator('gf-plant-list .empty')).toBeVisible();
+    // A favourite: its search over the whole flora asked again, the nettle in it.
+    const heart = cellAt(page, '1').locator('.action-bar button.fav');
+    await heart.click();
+    await expect(heart).toHaveAttribute('aria-pressed', 'true');
+    await expect(whole.locator('gf-plant-card')).toHaveCount(1);
+    await expect(whole.locator('.cell-head .sub')).toHaveText('1 espèce · toute la France');
+    // A new flora: asked again, what it lists kept meanwhile.
+    await page.evaluate(() => {
+      const w = /** @type {any} */ (window);
+      w.__searches = 0;
+      const post = Worker.prototype.postMessage;
+      Worker.prototype.postMessage = function (/** @type {any} */ message, /** @type {any} */ options) {
+        // The search over the whole flora (core/search.js searchWhole): neither kept to plants nor counting them.
+        if (message?.type === 'search' && !('observed' in message)) w.__searches++;
+        post.call(this, message, options);
+      };
+    });
+    await page.evaluate(async () => { const { store } = await import('/app/core/store.js'); store.set({ meta: { ...store.state.meta } }); });
+    await expect.poll(() => page.evaluate(() => /** @type {any} */ (window).__searches)).toBe(1);
+    await expect(whole.locator('gf-plant-card')).toHaveCount(1);
+  });
+
   test('une nouvelle flore : la recherche de l’écran cherche à nouveau, celle de Flore inchangée ; l’accueil ne cherche rien', async ({ app, page }) => {
     await app.open('#/?family=Rosaceae');
     await expect.poll(() => app.state('results.total')).toBeGreaterThan(0);

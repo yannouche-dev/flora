@@ -604,6 +604,17 @@ export class LayoutState extends EventTarget {
   }
 
   /**
+   * The search over the whole flora asked again for the same search, as every search of the screen runs again
+   * (gf-layout.js#rerun: « Mes plantes » changed — its facet, its counts —, a new flora): what it lists kept until it
+   * answers. None asked (no results(zone=0) cell): nothing.
+   */
+  rewhole() {
+    if (!this.wholeFor) return;
+    this.wholeFor = '';
+    this.wholeOf(true);
+  }
+
+  /**
    * The current plant: its observations in the scope (#plantObs), its names (the cells' heads). Its names are read
    * once the flora is in the database: on a first visit the layout is drawn while it downloads, and a plant read then
    * (?p= in the address) would be none — its heads empty for good, since the same plant is never read twice.
