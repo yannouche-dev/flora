@@ -2,8 +2,9 @@
 // worker the test answers (core/search.js posts to it): its search run once the flora is there, published — an older
 // run's answer, come last, dropped —, or fetched without being published; nothing said found before its first answer
 // (`answered`); another screen's answer forgotten (`forget`: no answer again, its scope kept); kept to the plants of a
-// zone, then to the whole flora again. The app's (Flore's: APP) never is. A search component's `answered`
-// (SearchController): its channel's, the app's always.
+// zone, then to the whole flora again; a new answer asked and not come yet (`pending`: another text, even before it is
+// run; other plants kept to). The app's (Flore's: APP) never is. A search component's `answered` and `pending`
+// (SearchController): its channel's, the app's always answered, never pending.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
@@ -129,4 +130,43 @@ test('SearchController.answered : celui de la recherche de son hôte (faux avant
   assert.equal(control.answered, true);
   host.channel = APP;
   assert.equal(control.answered, true);
+});
+
+test('pending : une nouvelle réponse demandée (un autre texte, même pas encore cherché ; d’autres plantes gardées) et pas venue — ses résultats sont ceux d’avant ; publiée, plus rien n’attend ; une recherche qui échoue non plus ; l’app, jamais', async () => {
+  const ch = new SearchChannel();
+  answer = async () => found(0);
+  await ch.run();
+  assert.deepEqual([ch.answered, ch.pending, ch.results.total], [true, false, 0]);
+  // Another text typed, its search not run yet (a pause in the typing): pending at once.
+  ch.setQuery({ ...emptyQuery(), q: 'ortie' });
+  assert.equal(ch.pending, true);
+  /** @type {() => void} */ let go = () => {};
+  answer = () => new Promise(resolve => { go = () => resolve(found(1)); });
+  const running = ch.run();
+  await wait(10);
+  assert.deepEqual([ch.pending, ch.results.total], [true, 0]);
+  go();
+  await running;
+  assert.deepEqual([ch.pending, ch.results.total], [false, 1]);
+  // Fetched for other plants, published: what it was asked for, nothing left to wait for.
+  answer = async () => found(2);
+  ch.setScope([1, 2]);
+  assert.equal(ch.pending, true);
+  ch.publish(await ch.fetch());
+  assert.equal(ch.pending, false);
+  // An answer fetched before another text: published, the newer one still pending.
+  const before = await ch.fetch();
+  ch.setQuery({ ...emptyQuery(), q: 'ail' });
+  ch.publish(before);
+  assert.equal(ch.pending, true);
+  // Failing: nothing to wait for any more.
+  answer = async () => { throw new Error('IndexedDB fermée'); };
+  await ch.run();
+  assert.equal(ch.pending, false);
+  // A component's: its channel's; the app's never.
+  const host = { channel: ch, addController() {}, requestUpdate() {} };
+  ch.setQuery({ ...emptyQuery(), q: 'chêne' });
+  assert.equal(new SearchController(/** @type {any} */ (host)).pending, true);
+  assert.equal(new SearchController(/** @type {any} */ ({ channel: null, addController() {}, requestUpdate() {} })).pending, false);
+  assert.equal(APP.pending, undefined);
 });

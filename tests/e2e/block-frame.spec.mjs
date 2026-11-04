@@ -277,6 +277,18 @@ test.describe('un grand écran', () => {
     expect(await seen()).toEqual(NONE);
   });
 
+  test('« Aucune plante… » d’une recherche vide ne reste pas sur la suivante : retenu tant que sa réponse n’est pas venue', async ({ app, page }) => {
+    const seen = await watchOrtie(page);
+    await app.open('#/layout/[search(list=0),results(list)]?q=zzzz');
+    const empty = cellOf(page, 'results').locator('gf-plant-list .empty');
+    await expect(empty).toHaveText('Aucune plante ne correspond à cette recherche.');
+    // Another text typed (the worker slowed): nothing said empty of it before its answer, its rows then.
+    await cellOf(page, 'search').locator('gf-plant-search input').fill('ortie');
+    await expect(cellOf(page, 'results').locator('gf-plant-card a.row').first()).toBeVisible();
+    expect((await seen()).empty).toBe(0);
+    await expect(empty).toHaveCount(0);
+  });
+
   test('results(grid,zone=0) : pendant la réponse d’une autre recherche, ses lignes d’avant restent ; un autre écran ne montre jamais celles du précédent', async ({ app, page }) => {
     const seen = await watchWhole(page);
     await app.open(`#/layout/[results(grid,zone=0)]?${AT}&q=ortie`);

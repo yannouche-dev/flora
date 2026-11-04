@@ -11,9 +11,11 @@ import { runSearch, searchIn } from './search.js';
 /**
  * @typedef {import('./store.js').Query} Query
  * @typedef {import('./search.js').ScopeExtra} ScopeExtra
- * @typedef {{ readonly query: Query, readonly results: any, readonly answered?: boolean, setQuery(query: Query): void, run(): void,
+ * @typedef {{ readonly query: Query, readonly results: any, readonly answered?: boolean, readonly pending?: boolean, setQuery(query: Query): void, run(): void,
  *   addEventListener: EventTarget['addEventListener'], removeEventListener: EventTarget['removeEventListener'] }} Channel
  *   `answered`: false while its results are no answer yet (a search of its own, SearchChannel); none: always one (APP).
+ *   `pending`: a new answer asked and not come yet (another text, filters, sort, plants kept to): its results are the
+ *   answer before (SearchChannel); none: never said (APP).
  */
 
 /** A query with nothing in it. @returns {Query} */
@@ -36,7 +38,6 @@ export const APP = {
 export class SearchChannel extends EventTarget {
   constructor() {
     super();
-    /** @type {Query} */ this.query = emptyQuery();
     this.results = noResults();
     /** The plants it is kept to (a zone's), null: the whole flora, and what comes with them. @type {number[] | null} */ this.scope = null;
     /** @type {ScopeExtra} */ this.extra = {};
@@ -45,6 +46,17 @@ export class SearchChannel extends EventTarget {
     this.answered = false;
   }
 
+  /** @type {Query} */ #query = emptyQuery();
+  /** What it was asked (each query, each scope set) and what its results answer: apart, a new answer is pending. */
+  #asked = 0;
+  #answers = 0;
+  /** What each answer fetched was asked for (fetch, then publish). @type {WeakMap<object, number>} */
+  #askedOf = new WeakMap();
+
+  /** Its query (text, filters, sort): set — here, or from the address —, a new answer is pending until published. */
+  get query() { return this.#query; }
+  set query(query) { this.#query = query; this.#asked++; }
+
   /** @param {Query} query */
   setQuery(query) { this.query = query; this.#changed(); }
 
@@ -52,21 +64,30 @@ export class SearchChannel extends EventTarget {
    * The plants it is kept to (null: the whole flora), with what comes with them (each one's observations, those a map
    * shows): its next run follows. @param {number[] | null} ids @param {ScopeExtra} [extra]
    */
-  setScope(ids, extra = {}) { this.scope = ids ? [...ids] : null; this.extra = ids ? extra : {}; }
+  setScope(ids, extra = {}) { this.scope = ids ? [...ids] : null; this.extra = ids ? extra : {}; this.#asked++; }
+
+  /**
+   * A new answer asked and not come yet (another text, filters, sort — typed and still resting too —, other plants
+   * kept to): its results are the answer before — « nothing found » is not said of them.
+   */
+  get pending() { return this.#answers !== this.#asked; }
 
   /** Its search run in the worker (once the flora is there), published; an older run's answer dropped. @returns {Promise<void>} */
   async run() { const found = await this.fetch(); if (found) this.publish(found); }
 
-  /** Its search run, not published: the answer, or null (a newer run started meanwhile, or it failed). */
+  /** Its search run, not published: the answer, or null (a newer run started meanwhile, or it failed — then nothing pending). */
   async fetch() {
-    const run = ++this.ran;
+    const run = ++this.ran, asked = this.#asked;
     await whenReady();
     const found = await searchIn(this.query, this.scope, this.extra).catch(() => null);
-    return found && run === this.ran ? found : null;
+    if (run !== this.ran) return null;
+    if (!found) { this.#answers = asked; return null; }
+    this.#askedOf.set(found, asked);
+    return found;
   }
 
-  /** An answer published: its results, answered, `change`. @param {any} found */
-  publish(found) { this.results = found; this.answered = true; this.#changed(); }
+  /** An answer published: its results, answered (what it was asked for, no longer pending), `change`. @param {any} found */
+  publish(found) { this.results = found; this.answered = true; this.#answers = this.#askedOf.get(found) ?? this.#asked; this.#changed(); }
 
   /**
    * Its answer forgotten, no answer yet (another screen's search: its plants, its count, nothing found, never said for
@@ -95,6 +116,9 @@ export class SearchController {
 
   /** Whether its results are an answer: a search of its own once it answered (until then « nothing found » is never said); the app's, always. */
   get answered() { return this.channel.answered !== false; }
+
+  /** Whether a new answer of a search of its own is coming (its results the one before: « nothing found » held back); the app's, never. */
+  get pending() { return this.channel.pending === true; }
 
   /** The app's state, with the channel's query and results. */
   get state() {
