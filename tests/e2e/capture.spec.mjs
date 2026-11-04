@@ -66,7 +66,7 @@ test('Noter ici, mode cueillette : case de récolte décochée ; plante toxique 
   expect(await harvestsOf(page, plantId('Conium maculatum'))).toEqual([0]);
 });
 
-test('Nouveau lieu, mode cueillette : « Récolté aujourd’hui » décoché ; le cocher pour une plante toxique ouvre l’avertissement de « Noter ici », jamais confirm()', async ({ app, page }) => {
+test('un téléphone, nouveau lieu, mode cueillette : « Récolté aujourd’hui » décoché ; le cocher pour une plante toxique ouvre l’avertissement de « Noter ici », jamais confirm()', async ({ app, page }) => {
   // On a desktop, the place saved at once moves to the Carte's panel: the editor of a new place is the phone's.
   test.skip(!app.phone, 'éditeur d’un nouveau lieu : téléphone');
   /** The browser's own dialogs (confirm(): its OK would note the harvest): none. @type {string[]} */

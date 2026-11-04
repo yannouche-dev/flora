@@ -1,5 +1,6 @@
-// End-to-end tests (@playwright/test): the app served as static files, in Chromium, on a phone (390 px, touch) and a
-// desktop (1280 px). Every outside request is answered by the tests (fixtures.mjs): no test reaches a real service,
+// End-to-end tests (@playwright/test): the app served as static files, in Chromium, on a desktop (1280 px) — and, on a
+// phone (390 px, touch), the tests about the phone only: those whose title (or describe) says it (PHONE), or the
+// file of the touch gestures. A test written for both widths runs once, on the desktop. Every outside request is answered by the tests (fixtures.mjs): no test reaches a real service,
 // and the flora is the reduced one of tests/fixtures (300 plants), unless a spec asks for the real one.
 //   npm run test:e2e                      starts its own server (python3 -m http.server, 127.0.0.1, port E2E_PORT or 8907)
 //   E2E_BASE_URL=http://127.0.0.1:8000/ npm run test:e2e     against a server already running (an assembled _site)
@@ -8,6 +9,8 @@ import { defineConfig } from '@playwright/test';
 const PORT = Number(process.env.E2E_PORT || 8907);
 const BASE = process.env.E2E_BASE_URL || `http://127.0.0.1:${PORT}/`;
 const ROOT = new URL('../../', import.meta.url).pathname;
+// Matched against the project's name, the file and the titles: never « phone » (the project's own name).
+const PHONE = /téléphone|mobile|tactile|doigt|étroit|au toucher|touch\.spec/i;
 
 export default defineConfig({
   testDir: '.',
@@ -31,7 +34,7 @@ export default defineConfig({
     trace: 'retain-on-failure'
   },
   projects: [
-    { name: 'phone-390', use: { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true } },
+    { name: 'phone-390', grep: PHONE, use: { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true } },
     { name: 'desktop-1280', use: { viewport: { width: 1280, height: 900 } } }
   ],
   webServer: process.env.E2E_BASE_URL ? undefined : {
