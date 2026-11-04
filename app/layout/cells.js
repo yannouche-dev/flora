@@ -239,7 +239,10 @@ export class DlMap extends LitElement {
     /* The map and its zone panel; above them, in the cell's flow, the long press's first-use hint: never over the map
        (in the panel it made it taller, over the map's own controls). */
     .stage { flex: 1; min-height: 0; position: relative; }
-    .stage > gf-map { position: absolute; inset: 0; display: block; }
+    .stage > gf-map { position: absolute; inset: 0; display: block; transition: opacity 0.2s; }
+    /* A new answer of the zone coming (state.js updating): the map dimmed until it is replaced (after a moment: a quick
+       one never flashes) — never the controls over it, in use (the radius being dragged). */
+    :host([updating]) .stage > gf-map { opacity: 0.55; transition: opacity 0.2s 0.15s; }
     .press-hint { flex: none; margin: 6px 8px; box-shadow: none; background: var(--gf-surface-2); }
     /* Under the map's own address search (whose place picked moves the scope too: its point, below). */
     .panel { position: absolute; z-index: 500; left: 8px; top: 60px; width: min(300px, calc(100% - 64px)); display: grid; gap: 6px; padding: 8px 10px; border-radius: 12px;
@@ -445,22 +448,26 @@ export class DlMap extends LitElement {
   }
   /** @type {any} */ #areaMemo = null;
 
-  /** The current plant's observations in the scope, large, its photo in each (those of the period: when). */
+  /**
+   * The current plant's observations in the scope, large, its photo in each (state.js plantObs: its own among the
+   * zone's points — the same as its row counts —, or iNaturalist's for a plant outside the zone): those of the sources
+   * this map shows (src), of the period (when).
+   */
   get #highlight() {
     const s = /** @type {LayoutState} */ (this.state);
-    const obs = s.plantObs, info = s.plantInfo, when = this.#p.when;
-    // Its own observations are iNaturalist's (state.js): a map that shows only GBIF's has none of them.
-    if (!obs || !info || !obs.points.length || !this.#p.src.includes('inat') || !s.filters.sources.includes('inat')) return null;
-    if (this.#hlMemo?.key === obs.key + ':' + info.name + ':' + when) return this.#hlMemo.value;
+    const obs = s.plantObs, info = s.plantInfo, P = this.#p;
+    if (!obs || !info || !obs.points.length) return null;
+    const key = obs.key + ':' + info.name + ':' + P.when + ':' + P.src.join('+');
+    if (this.#hlMemo?.key === key && this.#hlMemo.obs === obs) return this.#hlMemo.value;
     const sp = s.species?.byPlant.get(info.id);
     const photo = sp?.photo && moduleOn('photos') ? sp.photo.replace(/\/square\./, '/small.') : null;
-    const points = obs.points.filter(p => inWhen(p.date, when));
-    const value = !points.length ? null : { key: obs.key + ':' + when, photo, credit: photo ? sp?.credit ?? null : null, common: info.name, sci: info.sci, taxonId: sp?.taxonId ?? null,
+    const points = obs.points.filter(p => P.src.includes(p.kind) && inWhen(p.date, P.when));
+    const value = !points.length ? null : { key: obs.key + ':' + P.when + ':' + P.src.join('+'), photo, credit: photo ? sp?.credit ?? null : null, common: info.name, sci: info.sci, taxonId: sp?.taxonId ?? null,
       points: points.map(p => ({ coordinates: p.coordinates, title: info.name, url: p.url, date: p.date, taxonId: sp?.taxonId ?? null, sci: info.sci, plantId: info.id })) };
-    this.#hlMemo = { key: obs.key + ':' + info.name + ':' + when, value };
+    this.#hlMemo = { key, obs, value };
     return value;
   }
-  /** @type {{ key: string, value: any } | null} */ #hlMemo = null;
+  /** @type {{ key: string, obs: import('./state.js').PlantObs, value: any } | null} */ #hlMemo = null;
 
   /**
    * A map of France or of the world (portee=): the iNaturalist taxa of the plants it shows — the plants found in the
@@ -533,14 +540,15 @@ export class DlMap extends LitElement {
     const s = /** @type {LayoutState} */ (this.state);
     const id = s.live.obs;
     if (!id) return null;
-    if (this.#focusMemo?.id === id) return this.#focusMemo.value;
-    const p = s.points.find(x => obsId(x.url) === id) ?? s.plantObs?.points.find(x => obsId(x.url) === id);
-    if (!p) return null;
-    const value = { coordinates: p.coordinates, title: /** @type {any} */ (p).title ?? s.plantInfo?.name ?? 'Observation', url: p.url, photo: /** @type {any} */ (p).photo ?? null };
-    this.#focusMemo = { id, value };
+    // Found again among other points (another answer of the zone, the current plant's): the same while they are.
+    const pts = s.points, own = s.plantObs?.points ?? null;
+    if (this.#focusMemo?.id === id && this.#focusMemo.pts === pts && this.#focusMemo.own === own) return this.#focusMemo.value;
+    const p = pts.find(x => x.url && obsId(x.url) === id) ?? own?.find(x => x.url && obsId(x.url) === id);
+    const value = p ? { coordinates: p.coordinates, title: /** @type {any} */ (p).title ?? s.plantInfo?.name ?? 'Observation', url: p.url, photo: /** @type {any} */ (p).photo ?? null } : null;
+    this.#focusMemo = { id, pts, own, value };
     return value;
   }
-  /** @type {{ id: string, value: any } | null} */ #focusMemo = null;
+  /** @type {{ id: string, pts: any[], own: any[] | null, value: any } | null} */ #focusMemo = null;
 
   /**
    * The cell's own look (core/map-settings.js), as its address says it: its background (base=, and annee= the year or
@@ -813,6 +821,7 @@ export class DlMap extends LitElement {
     this.setAttribute('ctl', [...ctl.on].join(' '));
     this.toggleAttribute('ctl-compact', ctl.compact);
     this.toggleAttribute('big-gps', this.params?.intent === 'terrain' && ctl.on.has('gps'));
+    this.toggleAttribute('updating', Boolean(s?.updating));
     if (!s || !map) return;
     this.#defaultScope();
     // No longer leading the list (liste=zone, France or the world now): it shows the whole zone again.
@@ -833,6 +842,12 @@ export class DlMap extends LitElement {
     const said = s.live.at && s.speciesState !== 'loading' && s.speciesState !== 'error' ? scopeNote(s) : '';
     if (said && said !== this.#said) map.announce(said);
     this.#said = said;
+    // The current plant's own observations (its big points, state.js plantObs): none in the zone, or — a plant not
+    // among the zone's — iNaturalist's alone, said in the map's « État ».
+    const obs = this.#p.portee === 'zone' && this.#p.plante !== 'non' && s.live.at ? s.plantObs : null;
+    const name = obs && s.plantInfo?.id === s.live.plant ? s.plantInfo.name : null;
+    map.setStatus('plant', !obs || !name ? '' : !obs.points.length ? `${name} : aucune observation dans la zone`
+      : obs.outside ? `${name} : hors des observations de la zone (iNaturalist seul)` : '');
     this.#placeControls();
     // Once the map's own controls are drawn (a frame later: a rebuilt search pill, the 3D map's controls).
     requestAnimationFrame(() => this.#placeControls());
@@ -1235,7 +1250,10 @@ export class DlSearch extends LitElement {
     gf-results-bar { flex: none; }
     .filters { flex: none; max-height: 45%; overflow-y: auto; padding: 0 12px; border-bottom: 1px solid var(--gf-border); background: var(--gf-surface); }
     :host([no-list]) .filters { flex: 1; max-height: none; min-height: 8rem; }
-    dl-results { flex: 1; min-height: 8rem; }
+    dl-results { flex: 1; min-height: 8rem; transition: opacity 0.2s; }
+    /* A new answer of the zone coming (state.js updating): its list dimmed until it is replaced (its bar, being typed
+       in, never). */
+    dl-results[aria-busy='true'] { opacity: 0.55; transition: opacity 0.2s 0.15s; }
   `];
 
   constructor() {
@@ -1266,7 +1284,7 @@ export class DlSearch extends LitElement {
     const list = this.params.list !== false;
     return html`<gf-results-bar .wide=${false} count-above .channel=${this.channel} @open-filters=${(/** @type {Event} */ e) => { e.stopPropagation(); this._filters = !open; setCell(this, { filters: !open }); }}></gf-results-bar>
       ${open ? html`<div class="filters" role="region" aria-label="Filtres">${filterPanel(this.state, this.channel)}</div>` : nothing}
-      ${list ? html`<dl-results .state=${this.state} .params=${{ view: 'auto' }} .channel=${this.channel}></dl-results>` : nothing}`;
+      ${list ? html`<dl-results .state=${this.state} .params=${{ view: 'auto' }} .channel=${this.channel} aria-busy=${this.state?.updating ? 'true' : nothing}></dl-results>` : nothing}`;
   }
 }
 customElements.define('dl-search', DlSearch);

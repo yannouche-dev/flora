@@ -129,7 +129,7 @@ test('ce que montre une carte de la zone : la liste gardée à ses plantes, la r
   // Its search: what it is kept to, each time it is.
   /** @type {{ ids: number[] | null, within: number[] | null }[]} */
   const kept = [];
-  const channel = /** @type {any} */ ({ query: {}, results: {}, setQuery() {}, run() {}, addEventListener() {}, removeEventListener() {},
+  const channel = /** @type {any} */ ({ query: {}, results: {}, setQuery() {}, run() {}, fetch: async () => null, publish() {}, addEventListener() {}, removeEventListener() {},
     setScope(/** @type {number[] | null} */ ids, /** @type {any} */ extra = {}) { kept.push({ ids: ids && [...ids].sort((a, b) => a - b), within: extra.within ?? null }); } });
   const s = new LayoutState({ radius: 1000, channel });
   let refit = null;
@@ -186,7 +186,7 @@ test('une source coupée dans Réglages › Modules : laissée des sources par d
         observed_on: '2026-05-02', place_guess: 'Paris', taxon: { id: AIL.id + 1, name: AIL.scientificName, preferred_common_name: null } }] }), { headers: { 'content-type': 'application/json' } })
       : new Response('', { status: 503 });
   });
-  const channel = /** @type {any} */ ({ query: {}, results: {}, setQuery() {}, run() {}, setScope() {}, addEventListener() {}, removeEventListener() {} });
+  const channel = /** @type {any} */ ({ query: {}, results: {}, setQuery() {}, run() {}, fetch: async () => null, publish() {}, setScope() {}, addEventListener() {}, removeEventListener() {} });
   /** @param {InstanceType<typeof LayoutState>} s */
   const ready = async s => { for (let i = 0; i < 100 && s.speciesState !== 'ready'; i++) await tick(); assert.equal(s.speciesState, 'ready'); };
   setModule('gbif', false);
@@ -228,9 +228,9 @@ test('sans recherche donnée, la sienne (SearchChannel), jamais celle de Flore :
   assert.notEqual(/** @type {any} */ (s.channel), APP);
   // Another screen's (another group's): apart.
   assert.notEqual(new LayoutState().channel, s.channel);
-  // Its runs counted (the worker answers nothing here).
+  // Its runs counted (the worker answers nothing here): asked with the zone's plants, published with them.
   let runs = 0;
-  s.channel.run = async () => { runs++; };
+  s.channel.fetch = async () => { runs++; return null; };
   s.set({ at: AT }, 'none');
   for (let i = 0; i < 100 && (s.speciesState !== 'ready' || !runs); i++) await tick();
   assert.deepEqual([s.speciesState, s.scoped, [...(s.channel.scope ?? [])].sort((a, b) => a - b)], ['ready', true, [AIL.id, ORTIE.id].sort((a, b) => a - b)]);
@@ -242,4 +242,134 @@ test('sans recherche donnée, la sienne (SearchChannel), jamais celle de Flore :
   await tick();
   assert.deepEqual([s.scoped, s.channel.scope, runs], [false, null, ran]);
   assert.equal(store.state.query, flore);
+});
+
+/**
+ * iNaturalist's answer: these observations (their id and plant), in a row east of `at` (all in the zone).
+ * @param {[number, number]} at @param {[number, any][]} obs
+ */
+const inatAnswer = (at, obs) => new Response(JSON.stringify({ total_results: obs.length, results: obs.map(([id, plant], i) => ({ id, uri: `https://www.inaturalist.org/observations/${id}`,
+  geojson: { type: 'Point', coordinates: [at[0] + i * 0.0005, at[1]] }, observed_on: '2026-05-02', place_guess: 'Dijon', taxon: { id: plant.id + 1, name: plant.scientificName, preferred_common_name: null } })) }),
+{ headers: { 'content-type': 'application/json' } });
+/** A search of its own as the state uses it (core/search-channel.js): its answers, nothing found. */
+const fakeChannel = () => /** @type {any} */ ({ query: emptyQuery(), results: {}, setQuery() {}, run() {}, setScope() {}, addEventListener() {}, removeEventListener() {},
+  fetch: async () => ({ total: 0, items: [], inZone: null }), publish() {} });
+/** The zone's answer given (its plants known). @param {InstanceType<typeof LayoutState>} s */
+const zoneReady = async s => { for (let i = 0; i < 100 && s.speciesState !== 'ready'; i++) await tick(); assert.equal(s.speciesState, 'ready'); };
+
+test('une seule publication : les points de la zone, ses plantes, leurs nombres et la réponse de sa recherche donnés ensemble, dans une même tâche — rien avant', async t => {
+  const fetch = globalThis.fetch;
+  t.after(() => { globalThis.fetch = fetch; });
+  const AT = /** @type {[number, number]} */ ([5.04, 47.32]);
+  globalThis.fetch = /** @type {any} */ (async (/** @type {string} */ input) => new URL(String(input)).host === 'api.inaturalist.org'
+    ? inatAnswer(AT, [[11, AIL], [12, AIL], [13, ORTIE]]) : new Response('', { status: 503 }));
+  // Its search's answer, given when the test says.
+  /** @type {(found: any) => void} */
+  let answer = () => {};
+  let asked = 0, late = false;
+  /** @type {{ points: number, species: string }[]} */
+  const published = [];
+  const channel = /** @type {any} */ ({ query: emptyQuery(), results: {}, setQuery() {}, run() {}, setScope() {}, addEventListener() {}, removeEventListener() {},
+    fetch: () => { asked++; return new Promise(resolve => { answer = resolve; }); },
+    publish() { published.push({ points: s.points.length, species: s.speciesState }); setTimeout(() => { late = true; }); } });
+  const s = new LayoutState({ radius: 1000, channel });
+  t.after(() => s.dispose());
+  /** @type {{ points: number, species: string, updating: boolean, published: number, late: boolean }[]} */
+  const changes = [];
+  s.addEventListener('change', () => changes.push({ points: s.points.length, species: s.speciesState, updating: s.updating, published: published.length, late }));
+  s.set({ at: AT, filtres: { sources: ['inat'] } }, 'none');
+  for (let i = 0; i < 100 && !asked; i++) await tick();
+  await tick();
+  // Its search asked with the zone's plants — nothing given yet: no point, no plant, no count, no answer; dimmed.
+  assert.equal(asked, 1);
+  assert.ok(changes.length > 0 && changes.every(c => c.points === 0 && c.published === 0));
+  assert.deepEqual([s.points.length, s.species, s.obsCounts, s.speciesState, s.updating], [0, null, null, 'loading', true]);
+  const before = changes.length;
+  answer({ total: 2, items: [], inZone: null });
+  await tick();
+  // Given at once: one change, the search's answer published just before it, in the same task.
+  assert.deepEqual(changes.slice(before), [{ points: 3, species: 'ready', updating: false, published: 1, late: false }]);
+  assert.deepEqual(published, [{ points: 3, species: 'ready' }]);
+  s.dispose();
+});
+
+test('rien de périmé : d’autres filtres pendant un chargement, la réponse d’avant arrivée en retard est ignorée — ce qui était montré gardé (estompé) jusqu’à la nouvelle ; entre deux cercles, ni les points de l’ancien ni ceux de la plante', async t => {
+  const fetch = globalThis.fetch;
+  t.after(() => { globalThis.fetch = fetch; });
+  const AT = /** @type {[number, number]} */ ([5.1, 47.4]), AT2 = /** @type {[number, number]} */ ([5.2, 47.4]);
+  /** @type {(() => void) | null} */
+  let release = null;
+  globalThis.fetch = /** @type {any} */ (async (/** @type {string} */ input) => {
+    const url = new URL(String(input));
+    if (url.host !== 'api.inaturalist.org') return new Response('', { status: 503 });
+    const grade = url.searchParams.get('quality_grade');
+    const at = Number(url.searchParams.get('lng')) > 5.15 ? AT2 : AT;
+    // Every grade: the garlic twice and the nettle; the verified ones and those to identify: held, then the nettle
+    // alone (late); the verified ones: the garlic once.
+    if (grade === 'research,needs_id') { await new Promise(resolve => { release = () => resolve(null); }); return inatAnswer(at, [[29, ORTIE]]); }
+    return inatAnswer(at, grade === 'research' ? [[31, AIL]] : [[21, AIL], [22, AIL], [23, ORTIE]]);
+  });
+  const s = new LayoutState({ radius: 1000, channel: fakeChannel() });
+  t.after(() => s.dispose());
+  s.set({ at: AT, plant: AIL.id, filtres: { sources: ['inat'] } }, 'none');
+  await zoneReady(s);
+  assert.deepEqual([s.points.length, s.plantObs?.points.length, s.updating], [3, 2, false]);
+  const shown = s.points, plantShown = s.plantObs;
+  // Other filters, their answer held: what was shown stays — the plant's big points too —, dimmed.
+  s.set({ filtres: { sources: ['inat'], qualite: ['recherche', 'aidentifier'] } }, 'none');
+  for (let i = 0; i < 100 && !release; i++) await tick();
+  assert.ok(release);
+  assert.ok(s.points === shown && s.plantObs === plantShown);
+  assert.deepEqual([s.speciesState, s.updating], ['loading', true]);
+  // Others again before it answered: theirs given; the held one's, answering late, never.
+  s.set({ filtres: { sources: ['inat'], qualite: ['recherche'] } }, 'none');
+  await zoneReady(s);
+  const now = () => [s.points.map(p => p.id), s.species?.list.map(x => x.plantId), s.plantObs?.points.length, s.updating];
+  assert.deepEqual(now(), [['i31'], [AIL.id], 1, false]);
+  /** @type {() => void} */ (/** @type {unknown} */ (release))();
+  await tick();
+  await tick();
+  assert.deepEqual(now(), [['i31'], [AIL.id], 1, false]);
+  // Another circle: the old one's points and the plant's go at once — never shown under it.
+  s.set({ at: AT2 }, 'none');
+  assert.deepEqual([s.points, s.plantObs, s.obsCounts, s.updating], [[], null, null, true]);
+  await zoneReady(s);
+  assert.deepEqual([s.plantObs?.points.length, s.plantObs?.points[0].coordinates[0]], [1, AT2[0]]);
+  s.dispose();
+});
+
+test('les gros points de la plante choisie : de la zone, les siens parmi ses observations — aucune requête, autant que sa ligne en compte ; hors de la zone, ceux d’iNaturalist seul, demandés selon les filtres et la période', async t => {
+  const fetch = globalThis.fetch;
+  t.after(() => { globalThis.fetch = fetch; });
+  const AT = /** @type {[number, number]} */ ([5.3, 47.4]);
+  /** @type {string[]} */
+  const asked = [];
+  globalThis.fetch = /** @type {any} */ (async (/** @type {string} */ input) => {
+    const url = new URL(String(input));
+    if (url.host !== 'api.inaturalist.org') return new Response('', { status: 503 });
+    asked.push(url.href);
+    if (url.pathname === '/v1/taxa') return new Response(JSON.stringify({ results: [{ id: ORTIE.id + 1, name: ORTIE.scientificName }] }), { headers: { 'content-type': 'application/json' } });
+    return inatAnswer(AT, url.searchParams.get('taxon_id') ? [[51, ORTIE], [52, ORTIE]] : [[41, AIL], [42, AIL], [43, AIL]]);
+  });
+  const s = new LayoutState({ radius: 1000, channel: fakeChannel() });
+  t.after(() => s.dispose());
+  s.set({ at: AT, periode: 'annee', filtres: { sources: ['inat'] } }, 'none');
+  await zoneReady(s);
+  // The garlic, of the zone: its own among the zone's points, at once — as many as its row says; nothing asked.
+  s.pick(AIL.id, { how: 'none' });
+  const counted = s.obsCounts?.counts.get(AIL.id);
+  assert.deepEqual([s.plantObs?.points.length, s.plantObs?.outside], [3, false]);
+  assert.equal(s.plantObs?.points.length, (counted?.inat ?? 0) + (counted?.gbif ?? 0));
+  await tick();
+  assert.deepEqual(asked.filter(u => u.includes('taxon_id=') || u.includes('/v1/taxa')), []);
+  // The nettle, not among them: iNaturalist's alone, asked once — every grade (the zone's filters say none), this year.
+  s.pick(ORTIE.id, { how: 'none' });
+  assert.equal(s.plantObs, null);
+  for (let i = 0; i < 100 && !s.plantObs; i++) await tick();
+  assert.deepEqual([s.plantObs?.points.length, s.plantObs?.outside, [...new Set(s.plantObs?.points.map(p => p.kind))]], [2, true, ['inat']]);
+  const own = asked.filter(u => u.includes('taxon_id='));
+  assert.equal(own.length, 1);
+  const q = new URL(own[0]).searchParams;
+  assert.deepEqual([q.get('taxon_id'), q.get('quality_grade'), q.get('year')], [String(ORTIE.id + 1), null, String(new Date().getFullYear())]);
+  s.dispose();
 });

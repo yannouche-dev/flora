@@ -283,7 +283,10 @@ export class GfLayout extends LitElement {
     .cell-head .cell-mark::before { content: attr(data-mark); }
     .cell-head .sub { flex: 1; min-width: 0; font-size: 0.8rem; color: var(--gf-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .cell-head .sub i { font-family: var(--gf-font-serif); }
-    .cell-body { flex: 1; min-height: 0; display: flex; flex-direction: column; position: relative; }
+    .cell-body { flex: 1; min-height: 0; display: flex; flex-direction: column; position: relative; transition: opacity 0.2s; }
+    /* A new answer of the zone coming (state.js updating): what the cell shows, dimmed until it is replaced — after a
+       moment: a quick one never flashes. A map dims its own (dl-map: the map, never the controls in use over it). */
+    .cell:not([data-comp='map']) > .cell-body[aria-busy='true'] { opacity: 0.55; transition: opacity 0.2s 0.15s; }
     .cell-body > * { flex: 1; min-height: 0; }
     .cell-body gf-plant-detail { overflow-y: auto; }
     .cell-body .scroll { overflow-y: auto; }
@@ -1269,10 +1272,15 @@ export class GfLayout extends LitElement {
     const info = fixed ? this.#namesOf(fixed) : s.plantInfo && s.plantInfo.id === s.live.plant ? s.plantInfo : null;
     const count = (/** @type {number} */ n) => `${n.toLocaleString('fr-FR')} espèce${n > 1 ? 's' : ''}`;
     const whole = id === 'results' && r.known && r.params.zone === false;
+    // A new answer of its zone coming (another period, other filters, another circle, none: state.js `updating`): what
+    // its map, list and deck show stays, dimmed, until the answer replaces all of it at once; its counts « Mise à jour… ».
+    const busy = s.updating && (id === 'map' || id === 'deck' || (id === 'results' && !whole));
     const sub = !r.known ? 'à corriger'
-      : id === 'map' || id === 'place' ? scopeWords(s)
+      : id === 'map' ? scopeWords(s) + (s.updating ? ' · Mise à jour…' : '')
+      : id === 'place' ? scopeWords(s)
       : whole ? (s.whole?.key === s.wholeFor && s.whole ? count(s.whole.total) + ' · toute la France' : '')
-      : id === 'search' || id === 'results' || id === 'filters' ? (this.#store.state.status === 'ready' && channel.answered ? count(results.total) + (results.inZone ? ' · dans la vue' : '') : '')
+      : id === 'search' || id === 'results' || id === 'filters' ? (this.#store.state.status === 'ready' && channel.answered
+        ? s.updating ? 'Mise à jour…' : count(results.total) + (results.inZone ? ' · dans la vue' : '') : '')
       : info ? html`${fixed ? html`<span class="pin" title=${`Plante fixée (plante=${fixed}) : cette case ne suit pas la plante courante`}>${icon('pin-angle-fill')}<span class="visually-hidden">Plante fixée :</span></span> ` : nothing}${info.name}${info.name !== info.sci ? html` · <i>${info.sci}</i>` : nothing}` : '';
     // The frame (registry.js#FRAME): its head whole, its title alone, or none (but while editing: the tools are there);
     // the actions of its head; large over the layout, folded to its head, hidden while it has nothing to show.
@@ -1313,7 +1321,7 @@ export class GfLayout extends LitElement {
       ${head === 'non' ? nothing : head === 'simple' ? html`<header class="cell-head"><h2>${title}</h2><span class="spacer"></span>${pick}${actions}</header>`
         : html`<header class="cell-head"><h2>${icon(cellIcon(r))} ${title}${mark ? html`<b class="cell-mark" aria-hidden="true" title=${mark.label} data-mark=${mark.short}></b>` : nothing}</h2><span class="sub">${sub}</span>
         ${badge}${links}${views}${pick}${actions}</header>`}
-      <div class="cell-body" ?hidden=${folded}>${empty ? this.#slot(key) : renderCell(r, { state: s, channel, view: this.#store.state.mode, plant: s.live.plant, first, editing })}
+      <div class="cell-body" ?hidden=${folded} aria-busy=${busy ? 'true' : nothing}>${empty ? this.#slot(key) : renderCell(r, { state: s, channel, view: this.#store.state.mode, plant: s.live.plant, first, editing })}
         ${crossed ? this.#cross(path, title) : nothing}</div>
     </section>`;
   }

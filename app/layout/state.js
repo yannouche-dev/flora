@@ -32,13 +32,16 @@
 //
 // What it loads for the scope (the circle's latest observations — their plants the list —, the current plant's own
 // observations there) is asked once the circle rests (250 ms), the request before cancelled, a late answer for another
-// circle dropped. Pure functions (readLive, liveSearch) are tested under Node; the class needs the app.
+// circle dropped. One answer, one publication: the zone's points, its plants, their counts and its search's answer are
+// computed first, then given together in one task — the cells (map, list, deck, counts) drawn once, never one before
+// the others; meanwhile what was shown stays, dimmed (`updating`: « Mise à jour… »), but a new circle's map never shows
+// the old one's points. Pure functions (readLive, liveSearch) are tested under Node; the class needs the app.
 
 import { getPlant, nameOf } from '../core/plants.js';
 import { forgetFailures } from '../core/cache.js';
 import { findPlace } from '../core/geoservices.js';
 import { errorKind } from '../core/net.js';
-import { observationsAround, plantCounts, plantsIn, speciesOf, taxonIdOf } from '../core/nearby.js';
+import { observationsAround, plantCounts, plantOfPoint, plantsIn, speciesOf, taxonIdOf } from '../core/nearby.js';
 import { boxHolds, circleBox } from '../core/around3d.js';
 import { OBS_DEFAULTS, SOURCE_NAMES, defaultSources, failedText, inatQuery, obsKey, obsParams, readObsFilters, sourcesText, zoneObservations } from '../core/observations.js';
 import { fromHash, toHash } from '../core/query.js';
@@ -55,7 +58,10 @@ import { DISTANCE, distanceText, parseDistance } from './registry.js';
  * @typedef {'toujours' | 'annee' | 'mois'} Period
  * @typedef {import('../core/nearby.js').NearbySpecies} NearbySpecies
  * @typedef {import('../core/nearby.js').AroundPoint} AroundPoint
- * @typedef {{ coordinates: [number, number], date: string | null, url: string }} Observation
+ * @typedef {{ coordinates: [number, number], date: string | null, url: string | null, kind: string }} Observation  `kind`:
+ *   its source (core/observations.js: 'inat', 'gbif')
+ * @typedef {{ key: string, points: Observation[], outside: boolean }} PlantObs  the current plant's observations in the
+ *   zone (`key`: its id and the scope they are of); `outside`: a plant not among the zone's — iNaturalist's alone, asked
  * @typedef {'push' | 'replace' | 'none'} How   how the address follows a change: a new entry, the same one, not at all
  */
 
@@ -211,8 +217,18 @@ export class LayoutState extends EventTarget {
     this.obsCounts = null;
     /** @type {import('../core/observations.js').ObsFailure[]} */ this.failed = [];
     /** @type {{ key: string, count: number }[]} */ this.datasets = [];
-    /** The current plant's own observations in the scope. @type {{ key: string, points: Observation[] } | null} */
+    /**
+     * The current plant's own observations in the scope (the maps' big points): a plant of the zone's, its own among
+     * the zone's points; another, iNaturalist's (#plantObs). @type {PlantObs | null}
+     */
     this.plantObs = null;
+    /** Their request (a plant outside the zone's), cancelled by the next change. @type {AbortController | null} */
+    this.plantAbort = null;
+    /**
+     * What the cells show is the zone's last answer, a new one coming (another period, other filters, another circle,
+     * none): dimmed, « Mise à jour… », until it replaces all of it at once (#loadScope).
+     */
+    this.updating = false;
     /** The current plant's names (the cells' heads). @type {{ id: number, name: string, sci: string } | null} */
     this.plantInfo = null;
     /** Its search is kept to the scope's plants (its channel's setScope): taken off when the layout goes. */
@@ -341,15 +357,21 @@ export class LayoutState extends EventTarget {
   }
 
   /**
-   * The list kept to the view's plants: the search run again when they changed, the cells told. The zone's points
-   * still coming (another period, other filters): found among them once there (#loadScope).
+   * The list kept to the view's plants: its search run again when they changed, its answer published with the cells
+   * told — unless another view, or other plants of the zone, came meanwhile (theirs publish). The zone's points still
+   * coming (another period, other filters): found among them once there (#loadScope).
    */
-  #narrow() {
+  async #narrow() {
     if (this.speciesState === 'loading') return;
     const within = this.#withinNow();
     if (String(within) === String(this.within)) return;
     this.within = within;
-    if (this.species) this.#rescope(this.species.list.map(s => /** @type {number} */ (s.plantId)));
+    const s = this.species;
+    if (!s) { this.#changed(); return; }
+    this.channel.setScope(s.list.map(x => /** @type {number} */ (x.plantId)), { observed: this.#observed, within });
+    const results = await this.channel.fetch();
+    if (!results || this.within !== within || this.species !== s) return;
+    this.channel.publish(results);
     this.#changed();
   }
 
@@ -377,29 +399,53 @@ export class LayoutState extends EventTarget {
     // Another circle: a view of the old one is let go (the list the whole of the new zone); another period, other
     // filters keep it (its plants found again among the new points).
     const circle = this.live.at ? this.radius + ':' + this.live.at.join(',') : '';
-    if (circle !== this.#circle) { this.#circle = circle; this.view = null; this.within = null; }
+    const moved = circle !== this.#circle;
+    if (moved) { this.#circle = circle; this.view = null; this.within = null; }
     const key = this.scopeKey;
     if (key !== this.scopeFor) {
       this.scopeFor = key;
       clearTimeout(this.timer);
       this.abort?.abort();
       this.abort = null;
-      // Another zone: what was loaded for the old one goes at once (never its points under the new circle) — GBIF's
-      // datasets kept while only the filters changed (counted as if none were chosen: one being ticked stays in view).
-      this.points = []; this.pointsTotal = 0; this.totals = { inat: null, gbif: null }; this.failed = []; this.obsCounts = null; this.#observed = null;
+      // Another circle (or none): what was loaded for the old one goes at once — never its points, nor the current
+      // plant's, under the new circle. Another period, other filters: what is shown stays, dimmed (`updating`), until
+      // the new answer replaces all of it at once (#loadScope). GBIF's datasets kept while only the filters changed
+      // (counted as if none were chosen: one being ticked stays in view).
+      if (moved) {
+        this.points = []; this.pointsTotal = 0; this.totals = { inat: null, gbif: null }; this.failed = []; this.obsCounts = null; this.#observed = null;
+        this.plantAbort?.abort(); this.plantAbort = null; this.plantObs = null; this.obsFor = '';
+      }
       const zone = key.split(':').slice(0, 3).join(':');
       if (zone !== this.#datasetsZone) { this.datasets = []; this.#datasetsZone = zone; }
       if (!key) {
         this.species = null; this.speciesState = 'idle'; this.speciesError = null; this.speciesFailure = null;
-        this.#rescope(null);
+        this.updating = false;
+        this.#unscope();
         this.#changed();
       } else {
         this.speciesState = 'loading';
+        this.updating = true;
         this.#changed();
         this.timer = setTimeout(() => this.#loadScope(key), 250);
       }
     }
     this.#loadPlant();
+  }
+
+  /**
+   * No zone any more: its search over the whole flora again, its answer published with the cells told (the list
+   * dimmed meanwhile) — a zone again meanwhile publishes its own. One never kept to a zone: nothing to do.
+   */
+  async #unscope() {
+    if (!this.scoped) return;
+    this.scoped = false;
+    this.channel.setScope(null);
+    this.updating = true;
+    const results = await this.channel.fetch();
+    if (this.scopeKey) return;
+    this.updating = false;
+    if (results) this.channel.publish(results);
+    this.#changed();
   }
 
   /**
@@ -442,53 +488,78 @@ export class LayoutState extends EventTarget {
 
   /**
    * The scope's observations (the latest of the period, from the sources the filters keep, merged: the map's points)
-   * and their plants (the list: the search kept to them). @param {string} key
+   * and their plants (the list: the search kept to them) — everything computed first, the search's answer too (fetched,
+   * not published), then given at once: one task, the cells drawn once. Its search answering late because something
+   * was typed meanwhile (fetch: null), that run publishes its own answer; the rest is given all the same. Every source
+   * failing: the search over the whole flora again, given the same way. @param {string} key
    */
   async #loadScope(key) {
     const at = /** @type {[number, number]} */ (this.live.at), r = this.radius;
     const abort = this.abort = new AbortController();
+    const gone = () => abort.signal.aborted || key !== this.scopeKey;
     // The flora in the database first: iNaturalist's names are matched to it (core/nearby.js reads it once).
     await whenReady();
-    if (abort.signal.aborted || key !== this.scopeKey) return;
+    if (gone()) return;
+    /** @type {any} */
+    let results = null;
     try {
       const found = await zoneObservations(at, r, { filters: this.filters, periode: this.periode, max: ZONE_MAX, signal: abort.signal });
       const plants = await speciesOf(found.points);
-      if (abort.signal.aborted || key !== this.scopeKey) return;
+      if (gone()) return;
       const list = plants.list.filter(s => s.plantId);
+      const counts = plantCounts(found.points, plants.plantOf);
+      // The search's sort « Plus observées » (workers/search-core.js `observed`): each plant's total, cloned to the worker.
+      const observed = Object.fromEntries([...counts].map(([id, c]) => [id, c.inat + c.gbif]));
+      // A map's view kept (another period, other filters): its plants among the new points.
+      const view = this.view;
+      const within = view ? plantsIn(found.points, plants.plantOf, view.box, view.kinds) : null;
+      this.scoped = true;
+      this.channel.setScope(list.map(s => /** @type {number} */ (s.plantId)), { observed, within });
+      results = await this.channel.fetch();
+      if (gone()) return;
       this.points = found.points;
       this.pointsTotal = (found.totals.inat ?? 0) + (found.totals.gbif ?? 0);
       this.totals = found.totals;
       this.failed = found.failed;
       this.datasets = found.datasets;
       this.species = { key, list, byPlant: new Map(list.map(s => [/** @type {number} */ (s.plantId), s])), plantOf: plants.plantOf };
-      const counts = plantCounts(found.points, plants.plantOf);
       this.obsCounts = { counts, sources: this.filters.sources.filter(x => !found.failed.some(f => f.name === SOURCE_NAMES[x])) };
-      // The search's sort « Plus observées » (workers/search-core.js `observed`): each plant's total, cloned to the worker.
-      this.#observed = Object.fromEntries([...counts].map(([id, c]) => [id, c.inat + c.gbif]));
-      // A map's view kept (another period, other filters): its plants among the new points.
-      this.within = this.#withinNow();
+      this.#observed = observed;
+      this.within = within;
       this.speciesState = 'ready';
       this.speciesError = null;
       this.speciesFailure = null;
-      this.#rescope(list.map(s => /** @type {number} */ (s.plantId)));
     } catch (error) {
-      if (abort.signal.aborted || key !== this.scopeKey) return;
+      if (gone()) return;
       // Each source's failure (core/observations.js ObsError); else every source asked, not answering.
       const sources = this.filters.sources;
       const said = /** @type {{ failed?: import('../core/observations.js').ObsFailure[] }} */ (error).failed;
       const failed = said?.length ? said : sources.map(x => ({ name: SOURCE_NAMES[x], off: false }));
+      const failure = failed.every(f => f.off) ? 'off' : navigator.onLine ? 'unreachable' : 'offline';
+      if (this.scoped) {
+        this.scoped = false;
+        this.channel.setScope(null);
+        results = await this.channel.fetch();
+        if (gone()) return;
+      }
       this.points = []; this.pointsTotal = 0; this.totals = { inat: null, gbif: null }; this.failed = failed; this.datasets = []; this.obsCounts = null; this.#observed = null;
       this.species = null;
       this.within = null;
       this.speciesState = 'error';
-      this.speciesFailure = failed.every(f => f.off) ? 'off' : navigator.onLine ? 'unreachable' : 'offline';
-      this.speciesError = this.speciesFailure === 'off' ? `${failedText(failed)} (Réglages › Modules) : la zone ne filtre pas les plantes.`
-        : this.speciesFailure === 'unreachable' ? `${failedText(failed)} : la zone ne filtre pas les plantes pour l’instant.`
+      this.speciesFailure = failure;
+      this.speciesError = failure === 'off' ? `${failedText(failed)} (Réglages › Modules) : la zone ne filtre pas les plantes.`
+        : failure === 'unreachable' ? `${failedText(failed)} : la zone ne filtre pas les plantes pour l’instant.`
         : `Hors ligne : la zone ne filtre pas les plantes (${sourcesText(sources)} ${sources.length > 1 ? 'sont' : 'est'} en ligne).`;
-      this.#rescope(null);
     }
+    this.updating = false;
+    // The current plant's big points: its own among these points, given with them (another plant's: asked) — found
+    // again even for the same key (« Réessayer »: the same zone, its points anew).
+    this.obsFor = '';
+    this.#plantObs(false);
+    if (results) this.channel.publish(results);
     this.#changed();
-    this.#loadPlant();
+    // A map moved meanwhile (the search was asked for the view before): the list kept to what it shows now.
+    this.#narrow();
   }
 
   /**
@@ -509,22 +580,13 @@ export class LayoutState extends EventTarget {
     }, () => {});
   }
 
-  /** The search kept to these plants (null: the whole flora) — and to a map's view of them —, and run again. @param {number[] | null} ids */
-  async #rescope(ids) {
-    if (!ids && !this.scoped) return;
-    this.scoped = Boolean(ids);
-    this.channel.setScope(ids, { observed: ids ? this.#observed : null, within: ids ? this.within : null });
-    await whenReady();
-    this.channel.run();
-  }
-
   /**
-   * The current plant: its names (the cells' heads), its observations in the scope (the map: iNaturalist's, as the
-   * zone's filters say — the same grades as its points, inatQuery). Its names are read once
-   * the flora is in the database: on a first visit the layout is drawn while it downloads, and a plant read then (?p=
-   * in the address) would be none — its heads empty for good, since the same plant is never read twice.
+   * The current plant: its observations in the scope (#plantObs), its names (the cells' heads). Its names are read
+   * once the flora is in the database: on a first visit the layout is drawn while it downloads, and a plant read then
+   * (?p= in the address) would be none — its heads empty for good, since the same plant is never read twice.
    */
   async #loadPlant() {
+    this.#plantObs();
     const id = this.live.plant;
     if (id && this.infoFor !== id) {
       this.infoFor = id;
@@ -538,19 +600,51 @@ export class LayoutState extends EventTarget {
       this.infoFor = 0;
       if (this.plantInfo) { this.plantInfo = null; this.#changed(); }
     }
-    const s = this.species;
-    const key = id && s ? id + '@' + s.key : '';
+  }
+
+  /**
+   * The current plant's observations in the scope (the maps' big points), for the zone's plants as they are (`key`:
+   * its id and their scope; another key, they go at once). A plant of the zone's: its own among the zone's points —
+   * the same sources, period, filters and datasets, as many as its row's « n obs. » —, nothing asked. Another (chosen
+   * elsewhere: the whole flora's results, a fixed plant): iNaturalist's alone (#plantAround), said so on the map
+   * (`outside`). None without a zone, or before its plants are known. Drawn at once, unless `draw` is false
+   * (#loadScope gives them with the rest). @param {boolean} [draw]
+   */
+  #plantObs(draw = true) {
+    // The zone's plants of this circle: another circle's, still shown while its own come, give it none.
+    const id = this.live.plant, s = this.species?.key.startsWith(this.#circle + ':') ? this.species : null;
+    const key = id && s && this.live.at ? id + '@' + s.key : '';
     if (key === this.obsFor) return;
     this.obsFor = key;
-    if (!key || !this.live.at) { if (this.plantObs) { this.plantObs = null; this.#changed(); } return; }
-    // A plant not among the zone's (chosen elsewhere: the whole flora's results, a fixed plant): its taxon found by its
-    // name — its observations in the zone, if any, shown all the same (never an empty map without a word).
-    const taxon = s?.byPlant.get(id)?.taxonId ?? (this.plantInfo?.id === id ? await taxonIdOf(this.plantInfo.sci).catch(() => null) : null);
-    if (this.obsFor !== key) return;
-    if (!taxon) { this.plantObs = { key, points: [] }; this.#changed(); return; }
-    const pts = await observationsAround(taxon, /** @type {[number, number]} */ (this.live.at), this.radius, undefined, inatQuery(this.filters)).catch(() => []);
-    if (this.obsFor !== key) return;
-    this.plantObs = { key, points: pts };
+    this.plantAbort?.abort();
+    this.plantAbort = null;
+    const had = this.plantObs !== null;
+    if (key && id && s?.byPlant.has(id)) {
+      this.plantObs = { key, points: this.points.filter(p => plantOfPoint(s.plantOf, p) === id), outside: false };
+    } else {
+      this.plantObs = null;
+      if (id && key) this.#plantAround(id, key);
+    }
+    if (draw && (had || this.plantObs)) this.#changed();
+  }
+
+  /**
+   * A plant not among the zone's: its taxon found by its name, its iNaturalist observations in the circle asked — as
+   * the zone's filters (inatQuery: its quality grades, never research grade alone unless they say so) and its period
+   * say —, shown all the same (never an empty map without a word); one request, cancelled by the next change. Not
+   * answering: none, nothing said. @param {number} id @param {string} key
+   */
+  async #plantAround(id, key) {
+    const abort = this.plantAbort = new AbortController();
+    const at = /** @type {[number, number]} */ (this.live.at), r = this.radius, filters = inatQuery(this.filters), periode = this.periode;
+    const live = () => !abort.signal.aborted && this.obsFor === key;
+    await whenReady();
+    const sci = this.plantInfo?.id === id ? this.plantInfo.sci : (await getPlant(id))?.scientificName;
+    const taxon = sci ? await taxonIdOf(sci).catch(() => undefined) : null;
+    if (!live() || taxon === undefined) return;
+    const pts = taxon ? await observationsAround(taxon, at, r, abort.signal, filters, periode).catch(() => null) : [];
+    if (!live() || !pts) return;
+    this.plantObs = { key, points: pts.map(p => ({ coordinates: p.coordinates, date: p.date, url: p.url, kind: 'inat' })), outside: true };
     this.#changed();
   }
 
@@ -563,6 +657,7 @@ export class LayoutState extends EventTarget {
     clearTimeout(this.timer);
     this.abort?.abort();
     this.findAbort?.abort();
+    this.plantAbort?.abort();
     if (this.scoped) { this.scoped = false; this.channel.setScope(null); }
   }
 }

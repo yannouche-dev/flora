@@ -1,10 +1,12 @@
 // « Écran sur mesure » : cells that mirror each other (state.js, cells.js dl-map). The list is the map's: the map
 // shows the zone's observations (iNaturalist's latest, of the period), the list their plants (one each, the flora's),
 // and a filter keeps both to its plants; the period is every cell's (periode= in the address: the zone's observations
-// that month, their plants the results); a map of France and one of the world (portee=) show where the same plants
-// were observed (iNaturalist's tiles, their taxa), the current plant's on top; a plant chosen outside the zone's list
-// still has its observations in the zone (its taxon found by its name). The zone's filters say which observations, every
-// one by default (no quality grade): the zone's, the current plant's, the tiles of France and the world alike.
+// that month, their plants the results) — while they come, the map, the list and their counts kept, dimmed (« Mise à
+// jour… »), then replaced together; another circle's map never the old one's points; a map of France and one of the
+// world (portee=) show where the same plants were observed (iNaturalist's tiles, their taxa), the current plant's on
+// top; a plant chosen outside the zone's list still has its observations in the zone (its taxon found by its name). The
+// zone's filters say which observations, every one by default (no quality grade): the zone's, the current plant's, the
+// tiles of France and the world alike.
 // iNaturalist answered here: 12 plants around; GBIF: nothing of its own in the zone (both sources asked by default).
 import { test, expect, plantId, answerZoneGbif } from './fixtures.mjs';
 import { mapState } from './quiet.mjs';
@@ -109,6 +111,43 @@ test.describe('un grand écran', () => {
     await app.ready();
     await expect.poll(() => found(page)).toBe(6);
     await expect(page.locator('dl-map').getByRole('button', { name: 'Ce mois-ci' })).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  test('une autre période : la carte, la liste et leurs nombres gardés, estompés (« Mise à jour… »), puis remplacés ensemble ; un autre cercle : ses points partis aussitôt', async ({ app, page }) => {
+    await answer(page);
+    await app.open(`#/layout/[map(r=1km;ctl=rayon+periode),results]?${AT}`);
+    await expect.poll(() => found(page)).toBe(12);
+    const map = page.locator('gf-layout section.cell[data-comp="map"]'), list = page.locator('gf-layout section.cell[data-comp="results"]');
+    await expect(list.locator('.sub')).toHaveText('12 espèces');
+    /** The zone's observations asked for these words, held until let go. @param {RegExp} words */
+    const hold = async words => {
+      /** @type {() => void} */ let release = () => {};
+      const held = new Promise(resolve => { release = () => resolve(null); });
+      await page.route(words, async route => { await held; return route.fallback(); });
+      return release;
+    };
+    // This month's, held: what was shown stays — its 12 plants, their points —, dimmed, its counts « Mise à jour… ».
+    let release = await hold(/^https:\/\/api\.inaturalist\.org\/v1\/observations\?.*month=/);
+    await map.getByRole('group', { name: 'Période des observations' }).getByRole('button', { name: 'Ce mois-ci' }).click();
+    for (const cell of [map, list]) await expect(cell.locator('.cell-body')).toHaveAttribute('aria-busy', 'true');
+    await expect(list.locator('.sub')).toHaveText('Mise à jour…');
+    await expect(map.locator('.sub')).toHaveText('1 km autour du point choisi · Mise à jour…');
+    expect([await found(page), (await taxaOn(page, 0)).length]).toEqual([12, 12]);
+    // Come: the list, its count and the map replaced together.
+    release();
+    await expect.poll(async () => [await found(page), (await taxaOn(page, 0)).length]).toEqual([6, 6]);
+    for (const cell of [map, list]) await expect(cell.locator('.cell-body')).not.toHaveAttribute('aria-busy');
+    await expect(list.locator('.sub')).toHaveText('6 espèces');
+    // Another circle, its observations held: the old one's points gone at once, the list kept (dimmed) until they come.
+    release = await hold(/^https:\/\/api\.inaturalist\.org\/v1\/observations\?.*radius=0\.50/);
+    await map.locator('input[type="range"]').focus();
+    await page.keyboard.press('ArrowLeft');
+    await expect.poll(() => taxaOn(page, 0)).toEqual([]);
+    await expect(list.locator('.cell-body')).toHaveAttribute('aria-busy', 'true');
+    expect(await found(page)).toBe(6);
+    release();
+    await expect.poll(async () => (await taxaOn(page, 0)).length).toBe(6);
+    await expect(list.locator('.cell-body')).not.toHaveAttribute('aria-busy');
   });
 
   test('trois cartes : la zone, la France, le monde — les mêmes plantes, les observations de la France et du monde en carreaux d’iNaturalist', async ({ app, page }) => {

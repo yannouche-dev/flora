@@ -119,10 +119,10 @@ test('liens : toutes les plantes de la zone (suit=0), la plante courante seule o
   await expect.poll(async () => (await given(page)).points?.length).toBeLessThan(12);
   await app.go(`#/layout/[map(r=1km;suit=0),search]?${AT}&q=${encodeURIComponent('Urtica dioica')}`);
   await expect.poll(async () => (await given(page)).points?.length).toBe(32);
-  // The current plant alone: its points only — iNaturalist's two, GBIF's four (given its taxon there) —, and its own
-  // observations, large.
+  // The current plant alone: its points only — iNaturalist's two, GBIF's four (given its taxon there) —, and the same
+  // observations, large (its own among the zone's: as many as its row counts, never asked apart).
   await app.go(`#/layout/[map(r=1km;plante=seule),plant]?${AT}&p=${ortie}`);
-  await expect.poll(async () => (await given(page)).highlight).toBe(3);
+  await expect.poll(async () => (await given(page)).highlight).toBe(6);
   await expect.poll(async () => ((await given(page)).points ?? []).map(p => `${p.kind}:${p.taxonId}`).sort())
     .toEqual(['gbif:1000', 'gbif:1000', 'gbif:1000', 'gbif:1000', 'inat:1000', 'inat:1000']);
   // Not shown: no large points.
@@ -130,7 +130,7 @@ test('liens : toutes les plantes de la zone (suit=0), la plante courante seule o
   await expect.poll(async () => (await given(page)).highlight).toBe(null);
   // Grouped (regroupe): the current plant's observations given as the map's cluster.
   await app.go(`#/layout/[map(r=1km;regroupe),plant]?${AT}&p=${ortie}`);
-  await expect.poll(async () => (await given(page)).cluster).toBe(3);
+  await expect.poll(async () => (await given(page)).cluster).toBe(6);
   expect((await given(page)).highlight).toBe(null);
   // A point touched: its plant's sheet opens.
   await app.go(`#/layout/[map(r=1km;toucher=fiche),plant]?${AT}`);
