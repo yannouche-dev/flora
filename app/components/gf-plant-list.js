@@ -307,7 +307,9 @@ export class GfPlantList extends LitElement {
     const columns = this.#columns();
     if (this.grid) this.style.setProperty('--gf-cols', columns.map(k => columnWidth(k, gridView)).join(' '));
     const header = this.grid ? this.#header(columns) : nothing;
-    if (status === 'ready' && !items.length) {
+    // Nothing found, said once its search has answered (a screen's, core/search-channel.js answered; Flore's always has):
+    // until then, an empty list.
+    if (status === 'ready' && !items.length && (this.items != null || this.#store.answered)) {
       return html`${header}<p class="empty">${this.empty ?? 'Aucune plante ne correspond à cette recherche.'}</p>`;
     }
 

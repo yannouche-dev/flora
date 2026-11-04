@@ -155,7 +155,7 @@ export class GfResultsBar extends LitElement {
       </div>
       <div class="row">
         <span class="count" aria-live="polite" tabindex="-1">
-          ${status === 'ready' ? html`${results.total.toLocaleString('fr-FR')} espèce${results.total > 1 ? 's' : ''}` : nothing}
+          ${status === 'ready' && this.#store.answered ? html`${results.total.toLocaleString('fr-FR')} espèce${results.total > 1 ? 's' : ''}` : nothing}
           ${status === 'ready' && this.#store.state.floraStoring ? html`<small class="storing"
             title="La flore s’enregistre sur cet appareil : bientôt disponible hors ligne">· mise hors ligne…</small>` : nothing}
         </span>

@@ -1,7 +1,9 @@
 // A search of its own (app/core/search-channel.js, SearchChannel: each group of a screen of one's own), against a
 // worker the test answers (core/search.js posts to it): its search run once the flora is there, published — an older
 // run's answer, come last, dropped —, or fetched without being published; nothing said found before its first answer
-// (`answered`); kept to the plants of a zone, then to the whole flora again. The app's (Flore's: APP) never is.
+// (`answered`); another screen's answer forgotten (`forget`: no answer again, its scope kept); kept to the plants of a
+// zone, then to the whole flora again. The app's (Flore's: APP) never is. A search component's `answered`
+// (SearchController): its channel's, the app's always.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
@@ -25,7 +27,7 @@ let answer = async () => found(0);
   }
 };
 
-const { APP, SearchChannel, emptyQuery } = await import('../../app/core/search-channel.js');
+const { APP, SearchChannel, SearchController, emptyQuery } = await import('../../app/core/search-channel.js');
 const { runSearch } = await import('../../app/core/search.js');
 const { store } = await import('../../app/core/store.js');
 
@@ -97,4 +99,34 @@ test('la recherche de l’app (Flore) n’est jamais gardée à une zone : rien 
   assert.equal(sent.q, 'chêne');
   assert.deepEqual(['only', 'observed', 'within'].filter(k => sent[k] != null), []);
   assert.equal(store.state.results.total, 300);
+});
+
+test('forget : la réponse d’un autre écran oubliée — rien de trouvé ni de répondu, sans `change`, la zone gardée ; la recherche suivante répond', async () => {
+  const ch = new SearchChannel();
+  answer = async () => found(4);
+  ch.setScope([5, 6]);
+  await ch.run();
+  assert.deepEqual([ch.answered, ch.results.total], [true, 4]);
+  let changes = 0;
+  ch.addEventListener('change', () => changes++);
+  ch.forget();
+  assert.deepEqual([ch.answered, ch.results.total, ch.results.items, ch.results.facets, ch.scope, changes], [false, 0, [], {}, [5, 6], 0]);
+  answer = async () => found(1);
+  await ch.run();
+  assert.deepEqual([ch.answered, ch.results.total, changes], [true, 1, 1]);
+  assert.deepEqual(asked.at(-1).only, [5, 6]);
+});
+
+test('SearchController.answered : celui de la recherche de son hôte (faux avant sa première réponse) ; celle de l’app (Flore), toujours', async () => {
+  const host = { channel: /** @type {any} */ (null), addController() {}, removeController() {}, requestUpdate() {}, updateComplete: Promise.resolve(true) };
+  const control = new SearchController(host);
+  assert.equal(control.answered, true);
+  const ch = new SearchChannel();
+  host.channel = ch;
+  assert.equal(control.answered, false);
+  answer = async () => found(3);
+  await ch.run();
+  assert.equal(control.answered, true);
+  host.channel = APP;
+  assert.equal(control.answered, true);
 });

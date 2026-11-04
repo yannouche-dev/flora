@@ -11,12 +11,16 @@ import { runSearch, searchIn } from './search.js';
 /**
  * @typedef {import('./store.js').Query} Query
  * @typedef {import('./search.js').ScopeExtra} ScopeExtra
- * @typedef {{ readonly query: Query, readonly results: any, setQuery(query: Query): void, run(): void,
+ * @typedef {{ readonly query: Query, readonly results: any, readonly answered?: boolean, setQuery(query: Query): void, run(): void,
  *   addEventListener: EventTarget['addEventListener'], removeEventListener: EventTarget['removeEventListener'] }} Channel
+ *   `answered`: false while its results are no answer yet (a search of its own, SearchChannel); none: always one (APP).
  */
 
 /** A query with nothing in it. @returns {Query} */
 export const emptyQuery = () => ({ q: '', filters: { status: [], legal: [], family: [], genus: [], photo: [], french: [], mine: [] }, sort: '' });
+
+/** Results with nothing in them: no answer yet. */
+const noResults = () => ({ total: 0, items: [], facets: {}, suggestions: [], fuzzy: 0, sort: 'fr', counted: false, inZone: null });
 
 /** The app's search, Flore's: its store (store.js) and the worker's search over the whole flora (search.js). @type {Channel} */
 export const APP = {
@@ -33,7 +37,7 @@ export class SearchChannel extends EventTarget {
   constructor() {
     super();
     /** @type {Query} */ this.query = emptyQuery();
-    this.results = { total: 0, items: [], facets: {}, suggestions: [], fuzzy: 0, sort: 'fr', counted: false, inZone: null };
+    this.results = noResults();
     /** The plants it is kept to (a zone's), null: the whole flora, and what comes with them. @type {number[] | null} */ this.scope = null;
     /** @type {ScopeExtra} */ this.extra = {};
     this.ran = 0;
@@ -64,6 +68,12 @@ export class SearchChannel extends EventTarget {
   /** An answer published: its results, answered, `change`. @param {any} found */
   publish(found) { this.results = found; this.answered = true; this.#changed(); }
 
+  /**
+   * Its answer forgotten, no answer yet (another screen's search: its plants, its count, nothing found, never said for
+   * this one's before it answers); its scope kept, no `change` (its next run publishes).
+   */
+  forget() { this.results = noResults(); this.answered = false; }
+
   #changed() { this.dispatchEvent(new Event('change')); }
 }
 
@@ -82,6 +92,9 @@ export class SearchController {
 
   /** The channel the host reads: its own, else the app's. */
   get channel() { return this.host.channel ?? APP; }
+
+  /** Whether its results are an answer: a search of its own once it answered (until then « nothing found » is never said); the app's, always. */
+  get answered() { return this.channel.answered !== false; }
 
   /** The app's state, with the channel's query and results. */
   get state() {

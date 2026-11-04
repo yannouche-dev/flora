@@ -27,9 +27,10 @@
 //    (history.js#renewBehind: Back keeps the changes); « Terminé » goes back there (history.js#closeTo), or, opened being
 //    modified, replaces this entry by the screen in use. Partager always gives the screen in use (no edit=1).
 //  - Its search, its own: each group's (a, b, c: core/search-channel.js), written in the address (q=, b.q=…) — Flore's
-//    is never emptied nor changed by a screen. It runs again as Flore's does (main.js): « Mes plantes » changed, a new
-//    flora. « Ouvrir dans Flore » (⋯ in use: the first group's; a search cell's head: its group's) takes it there, a new
-//    entry: its text, filters and sort, never its zone nor its plant.
+//    is never emptied nor changed by a screen; another screen's never answers for it (nothing found, counted or empty
+//    before its own answer). It runs again as Flore's does (main.js): « Mes plantes » changed, a new flora. « Ouvrir dans
+//    Flore » (⋯ in use: the first group's, when it has one; a search cell's head: its group's) takes it there, a new
+//    entry — Flore itself, even during the first steps: its text, filters and sort, never its zone nor its plant.
 //  - The home (#/layout, no layout): Mes écrans (screen-list.js), then « Partir d’une grille », « Ou d’un modèle »
 //    (models.js), each drawn small, each opened being modified. It never touches a search.
 //  - « Mes écrans » (screens.js): a screen in use whose layout can be read (a cell known at least) is kept on this device
@@ -58,6 +59,7 @@ import { LitElement, html, css, nothing, repeat } from 'lit';
 import { closeTo, depth, entryValue, markEntry, openView, pushHash, renewBehind, replaceHash, replaceView, sheetMark } from '../core/history.js';
 import { href } from '../core/router.js';
 import { letGoSuggestions, toHash } from '../core/query.js';
+import { arrivedAt } from '../core/discover.js';
 import { getPlant, nameOf } from '../core/plants.js';
 import { spotEvents } from '../core/collections.js';
 import { store, StoreController, whenReady } from '../core/store.js';
@@ -98,14 +100,14 @@ const TAB_PAD = 22;
 const FADE = 32;
 /** Components that show the current plant: the tab a plant chosen brings (narrow). */
 const FOLLOWS_PLANT = new Set(['plant', 'media', 'deck']);
-/** The state of a screen with nothing in its address (the home's). */
-const EMPTY_LIVE = readLive('');
 /** Being modified, in the address (router.js href.layout: last). */
 const EDITING = /(?:^|&)edit=1(?:&|$)/;
 /** Mes écrans: how long a screen in use rests (its address unchanged) before it is kept (ms). */
 const KEEP_AFTER = 800;
 /** « Ouvrir dans Flore »: what it does (⋯ in use, a search cell's head). */
 const TO_FLORE = 'Ouvrir cette recherche dans Flore (sans la zone)';
+/** The cells that show their group's search itself: « Ouvrir dans Flore » in ⋯ has one to take there. */
+const SEARCHED = new Set(['search', 'filters', 'results']);
 
 /** A layout as text, read and resolved: what the screen shows. @param {string} text @returns {Shown} */
 function show(text) {
@@ -200,6 +202,7 @@ export class GfLayout extends LitElement {
       font-size: 0.9rem; font-weight: 500; text-align: left; color: var(--gf-text); text-decoration: none; display: flex; align-items: center; }
     .more-menu .menu > a:hover, .more-menu .menu > button:hover { background: var(--gf-surface-2); }
     .more-menu .menu > button[aria-pressed='true'] { color: var(--gf-accent); }
+    .more-menu .menu small { color: var(--gf-text-muted); font-weight: 400; }
     .remarks { flex: none; margin: 0; padding: 6px 14px; font-size: 0.85rem; background: var(--gf-warn-bg); }
     /* Being modified, under the bar: the title, the preview, what is wrong, « Avancé »; never more than part of the height. */
     .edit { flex: none; display: grid; gap: 8px; max-height: 45dvh; overflow-y: auto; padding: 8px 14px; background: var(--gf-bg); border-bottom: 1px solid var(--gf-border); }
@@ -247,6 +250,13 @@ export class GfLayout extends LitElement {
     .cell-head .spacer { flex: 1; }
     .cell-head .cell-acts { flex: none; display: inline-flex; align-items: center; gap: 2px; }
     .cell-head .cell-acts .icon-btn { width: 30px; height: 30px; min-height: 0; padding: 0; font-size: 0.85rem; }
+    /* A finger: each action a 44 px target (the head no taller: its area reaches 7 px past the button — its 1 px border
+       inside —, into the gap between them). */
+    @media (pointer: coarse) {
+      .cell-head .cell-acts { gap: 14px; }
+      .cell-head .cell-acts .icon-btn { position: relative; }
+      .cell-head .cell-acts .icon-btn::before { content: ''; position: absolute; inset: -8px; }
+    }
     /* Its group (several in the layout): its letter in its colour. */
     .cell-head .cell-group { flex: none; min-width: 20px; height: 20px; padding: 0 5px; box-sizing: border-box; display: inline-grid; place-items: center;
       border-radius: var(--gf-radius-pill); font-size: 0.7rem; font-weight: 700; color: var(--gf-accent-contrast); background: var(--gf-accent); }
@@ -498,7 +508,7 @@ export class GfLayout extends LitElement {
 
   /**
    * The groups' (a, b, c): their state and their search, made when a cell of theirs is there — the first always, kept
-   * until the screen goes. @type {Map<string, { state: LayoutState, channel: SearchChannel }>}
+   * until the home or the screen goes. @type {Map<string, { state: LayoutState, channel: SearchChannel }>}
    */
   #made = new Map();
 
@@ -522,7 +532,7 @@ export class GfLayout extends LitElement {
     return had;
   }
 
-  /** A group gone (no cell has it any more; the first, only with the screen): its loads stopped. @param {string} g */
+  /** A group gone (no cell has it any more; the first, only with the home or the screen): its loads stopped. @param {string} g */
   #dropGroup(g) {
     const had = this.#made.get(g);
     if (!had) return;
@@ -545,9 +555,9 @@ export class GfLayout extends LitElement {
 
   /**
    * Every group's search run again, as main.js runs Flore's: « Mes plantes » changed (its facet, its counts), a new
-   * flora. Each stays kept to its zone.
+   * flora. Each stays kept to its zone; one never run (the home's first group) is not searched for nothing.
    */
-  #rerun = () => { for (const { channel } of this.#made.values()) channel.run(); };
+  #rerun = () => { for (const { channel } of this.#made.values()) if (channel.ran) channel.run(); };
 
   /** The flora last seen (store.state.meta). @type {any} */
   #meta = null;
@@ -819,8 +829,9 @@ export class GfLayout extends LitElement {
       // Mes écrans: whatever screen comes next is opened again — kept anew (moved first; taken out by × meanwhile, back).
       this.#kept = null;
       this.#layout = show(''); this.#raw = ''; this._max = null; this.#said.clear();
-      if (!sameLive(EMPTY_LIVE, this.#state.live)) this.#state.set(EMPTY_LIVE, 'none');
-      for (const g of [...this.#made.keys()]) if (g !== 'a') this.#dropGroup(g);
+      // Every group gone, the first too: the next screen starts from its own address — its search never answered by
+      // the last one's (its plants, its count, « nothing found »).
+      for (const g of [...this.#made.keys()]) this.#dropGroup(g);
       this.#namePage();
       return;
     }
@@ -848,7 +859,8 @@ export class GfLayout extends LitElement {
     }
     // Each group, the first too: its state and its search (its own, never Flore's) — the first's keys as they are,
     // another's after its letter (b.p=, b.q=…). A search never run yet (made just now, here or by #defaults) runs;
-    // another one from the address (Back, a link) lets go of the « Filtrer par » suggestions kept from the one before.
+    // another one from the address (Back, a link) lets go of the « Filtrer par » suggestions kept from the one before
+    // — and, another screen's, forgets its answer: nothing is said found, counted or empty before its own.
     const groups = this.#groups(next);
     for (const g of [...this.#made.keys()]) if (!groups.includes(g)) this.#dropGroup(g);
     for (const g of groups) {
@@ -857,7 +869,10 @@ export class GfLayout extends LitElement {
       if (!sameLive(glive, state.live)) state.set(glive, 'none');
       else if (fresh || !had) state.follow();
       const gq = readQuery(route.search, groupPrefix(g));
-      if (toHash(gq) !== toHash(channel.query) || !channel.ran) { letGoSuggestions(channel); channel.query = gq; channel.run(); }
+      if (toHash(gq) !== toHash(channel.query) || !channel.ran) {
+        if (fresh) channel.forget();
+        letGoSuggestions(channel); channel.query = gq; channel.run();
+      }
     }
     this.#namePage();
     // Written as the app writes it (canonical names, its own order of words), unless it could not be read whole.
@@ -1279,10 +1294,11 @@ export class GfLayout extends LitElement {
     const badge = r.known && !r.spec.empty && this.#groups().length > 1
       ? html`<span class="cell-group" data-group=${group} title=${`Groupe ${group.toUpperCase()} : sa zone, sa plante, sa période et sa recherche`}
           aria-label=${'Groupe ' + group.toUpperCase()}>${group.toUpperCase()}</span>` : nothing;
-    // A search cell in use: « Ouvrir dans Flore », its group's search taken there.
+    // A search cell in use: « Ouvrir dans Flore », its group's search taken there (which one, named when there are several).
     const flore = id === 'search' && !editing && head !== 'non';
+    const toFlore = this.#groups().length > 1 ? 'Ouvrir dans Flore : la recherche du groupe ' + group.toUpperCase() : 'Ouvrir dans Flore';
     const actions = acts.length || flore ? html`<span class="cell-acts" role="group" aria-label=${'Actions de « ' + title + ' »'}>
-        ${flore ? html`<button class="icon-btn" type="button" data-act="flore" title=${TO_FLORE} aria-label="Ouvrir dans Flore"
+        ${flore ? html`<button class="icon-btn" type="button" data-act="flore" title=${TO_FLORE} aria-label=${toFlore}
           @click=${() => this.#toFlore(channel)}>${icon('leaf')}</button>` : nothing}
         ${acts.includes('partager') ? html`<button class="icon-btn" type="button" data-act="partager" title=${this._cellCopied === key ? 'Lien copié' : 'Partager cette case seule (le même état)'}
           aria-label=${this._cellCopied === key ? 'Lien copié' : `Partager « ${title} » seule`} @click=${() => this.#shareCell(n, key, r)}>${icon(this._cellCopied === key ? 'check-lg' : 'share')}</button>` : nothing}
@@ -1544,20 +1560,38 @@ export class GfLayout extends LitElement {
   }
 
   /**
-   * « Ouvrir dans Flore »: a group's search taken to Flore, a new entry (Back returns to the screen) — its text, filters
-   * and sort (« Plus observées » is a zone's only: Flore takes its own), never its zone nor its plant.
-   * @param {SearchChannel} channel
+   * Flore's address of a group's search: its text, filters and sort (« Plus observées » is a zone's only: Flore takes
+   * its own), never its zone nor its plant; `#/`: nothing to take. @param {SearchChannel} channel
    */
-  #toFlore(channel) {
+  #floreHash(channel) {
     const q = channel.query;
-    openView(toHash({ ...q, sort: /^-?obs$/.test(q.sort) ? '' : q.sort }));
+    return toHash({ ...q, sort: /^-?obs$/.test(q.sort) ? '' : q.sort });
   }
 
   /**
-   * ⋯, the screen's options: in use, « Composer un écran » (the home), « Ouvrir dans Flore » (the first group's search);
-   * being modified, « Changer de modèle » (the home: Back gives this screen back), « Tailles par défaut », « Avancé :
-   * texte ». Échap closes it, its button focused again; an item closes it, so do the focus leaving it, a touch elsewhere
-   * (the constructor) and the toggle (#follow).
+   * « Ouvrir dans Flore »: a group's search taken to Flore, a new entry (Back returns to the screen) — Flore itself,
+   * even during the first steps (its tab comes: `#/` alone would be Découvrir's). @param {SearchChannel} channel
+   */
+  #toFlore(channel) {
+    arrivedAt('search');
+    openView(this.#floreHash(channel));
+  }
+
+  /**
+   * Whether the first group has a search to take to Flore (⋯ « Ouvrir dans Flore »): a cell that shows it (Recherche,
+   * Filtres, Résultats), or one in the address. None (a deck, a map, photos): ⋯ does not offer it.
+   */
+  #searched() {
+    return [...this.#shown.cells.values()].some(r => r.known && SEARCHED.has(r.spec.id) && this.#groupOf(r) === 'a')
+      || this.#floreHash(this.#group('a').channel) !== '#/';
+  }
+
+  /**
+   * ⋯, the screen's options: in use, « Composer un écran » (the home), « Ouvrir dans Flore » (the first group's search,
+   * when it has one: #searched; « sans la zone » written when it has a zone, a finger never sees the title); being
+   * modified, « Changer de modèle » (the home: Back gives this screen back), « Tailles par défaut », « Avancé : texte ».
+   * Échap closes it, its button focused again; an item closes it, so do the focus leaving it, a touch elsewhere (the
+   * constructor) and the toggle (#follow).
    */
   #more() {
     const close = (/** @type {Event} */ e) => /** @type {HTMLElement} */ (e.currentTarget).closest('details')?.removeAttribute('open');
@@ -1575,7 +1609,8 @@ export class GfLayout extends LitElement {
     return html`<details class="more-menu" @keydown=${esc} @focusout=${away}><summary aria-label="Plus d’options" title="Plus d’options">${icon('three-dots')}</summary>
       <div class="menu" role="group" aria-label="Options de l’écran">${!this.editing
         ? html`<a href=${href.layout('')} @click=${close}>${icon('plus-lg')} Composer un écran</a>
-          <button type="button" data-act="flore" title=${TO_FLORE} @click=${(/** @type {Event} */ e) => { close(e); this.#toFlore(this.#group('a').channel); }}>${icon('leaf')} Ouvrir dans Flore</button>`
+          ${this.#searched() ? html`<button type="button" data-act="flore" title=${TO_FLORE} @click=${(/** @type {Event} */ e) => { close(e); this.#toFlore(this.#group('a').channel); }}>${icon('leaf')}
+            Ouvrir dans Flore${this.#state.live.at ? html` <small>sans la zone</small>` : nothing}</button>` : nothing}`
         : html`<a href=${href.layout('')} title="Partir d’une autre grille ou d’un autre modèle" @click=${close}>${icon('arrow-counterclockwise')} Changer de modèle</a>
           <button type="button" data-act="sizes" @click=${(/** @type {Event} */ e) => {
             close(e); this.#resetSizes();
