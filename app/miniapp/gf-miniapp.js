@@ -163,12 +163,12 @@ export class GfMiniapp extends LitElement {
   /**
    * A plant link in one of its sheets (a sosie, in « Plantes à confondre » or Usages): opened here, as its components
    * open plants (ma-plant) — a new entry, its sheet mark carried, « Fermer la fiche » back past it. False: an activity
-   * that opens no sheet (no `focus`: Parcours) lets it lead to Flore. @param {number} id
+   * that opens no sheet (no `focus`: Parcours) lets it lead to Flore. @param {number} id @returns {'opened' | false}
    */
   #openFromLink = id => {
     if (!this._app || !('focus' in this._app.m.context)) return false;
     this.#plant(id);
-    return true;
+    return 'opened';
   };
 
   /**

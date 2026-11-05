@@ -483,14 +483,15 @@ export class GfLayout extends LitElement {
     this._copied = false;
     // A link to a plant's sheet in a cell: that plant becomes the current one, the layout stays — unless the cell says
     // otherwise (toucher=fiche, ecrit=0: the sheet opens, as a link; toucher=rien: nothing).
-    // Picked from a block over the page (⤢): that dialog closed, Back returns to the plant before.
+    // Picked from a block over the page (⤢): that dialog closed, Back returns to the plant before (toucher=rien: it stays).
     embedLinks(this, { plant: (id, path) => {
       const at = /** @type {HTMLElement | undefined} */ (path.find(n => n instanceof HTMLElement && n.matches('section.cell[data-cell]')));
       const r = at ? this.#shown.cells.get(/** @type {string} */ (at.dataset.cell)) : undefined;
       const touch = r ? touchOf(r) : null;
       if (touch === 'fiche') return false;
-      if (touch !== 'rien') (r ? this.#stateOf(r) : this.#state).pick(id);
-      return true;
+      if (touch === 'rien') return 'kept';
+      (r ? this.#stateOf(r) : this.#state).pick(id);
+      return 'opened';
     } });
     // A cell that has nothing to show, or something again (the deck: its cards), for a cell hidden meanwhile (vide=masque).
     this.addEventListener('cell-empty', e => {

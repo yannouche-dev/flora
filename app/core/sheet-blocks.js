@@ -277,15 +277,17 @@ export function serviceOffNote(key) {
 /**
  * What a block shown alone (gf-sheet-block) says in place of what it cannot show: a word that is no block of the sheet
  * (`unknown`), « Page web » (`web`: a pane of the sheet only), its service off (`off`: Réglages › Modules, the way back
- * to it); null: it shows. « Photos en ligne » off is said by the photos' blocks themselves (Médias, Photos), as in the
- * sheet. @param {string} key @returns {{ kind: 'unknown' | 'web' | 'off', text: string } | null}
+ * to it), « Photos en ligne » off for a block of photos (`photos`: Médias, Photos, Médias GBIF — the sheet's own line,
+ * ui-kit.js#photosOffLine, in every mode; never a source said unavailable for what this device switched off); null: it
+ * shows. @param {string} key @returns {{ kind: 'unknown' | 'web' | 'off' | 'photos', text: string } | null}
  */
 export function aloneNote(key) {
   if (key === 'web') return { kind: 'web', text: `« ${blockTitle('web')} » ne s’ouvre que dans un panneau de la fiche.` };
   const block = blockOf(key);
   if (!block) return { kind: 'unknown', text: `Bloc inconnu : « ${key} » — la fiche n’a pas de bloc de ce nom.` };
   const off = block.module === 'photos' ? null : serviceOffNote(key);
-  return off ? { kind: 'off', text: off.charAt(0).toLocaleUpperCase('fr') + off.slice(1) + ' : rien à montrer ici' } : null;
+  if (off) return { kind: 'off', text: off.charAt(0).toLocaleUpperCase('fr') + off.slice(1) + ' : rien à montrer ici' };
+  return (block.module === 'photos' || key === 'gbifMedia') && !moduleOn('photos') ? { kind: 'photos', text: 'Photos en ligne désactivées' } : null;
 }
 
 /**

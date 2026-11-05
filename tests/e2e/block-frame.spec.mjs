@@ -8,8 +8,8 @@
 // at its end, nor results zone=0 « Aucune plante… », its grid sorted from the keyboard keeping its focus, headers and rows —
 // twice before its answer, reversed; another screen's rows never shown; nor « Aucune plante… » of an empty search said of
 // the next one before its answer), its links (plante=: a plant of its own, whatever the current one; results zone=0: the whole flora whatever the
-// zone; toucher=fiche: a result — or a sosie in the sheet — opens its sheet; toucher=rien: nothing; a sosie chosen over
-// the page, ⤢, closes that dialog), and the editor's « Cadre » writing them in the address. iNaturalist answered as in free-layout.spec.mjs: 12 plants around.
+// zone; toucher=fiche: a result — or a sosie in the sheet — opens its sheet; toucher=rien: nothing, a dialog over the page left
+// open; a sosie chosen over the page, ⤢, closes that dialog), and the editor's « Cadre » writing them in the address. iNaturalist answered as in free-layout.spec.mjs: 12 plants around.
 import { test, expect, plantId, answerAround } from './fixtures.mjs';
 import { layoutOf, screen, screenSearch } from './app.mjs';
 
@@ -438,6 +438,16 @@ test.describe('un grand écran', () => {
     await sosie('plant.lookalikes').click();
     await page.waitForTimeout(300);
     expect(await hash(page)).toBe(still);
+    // Over the page (⤢) in a cell where a tap does nothing: nothing chosen, the block still read there.
+    await app.go(`#/layout/[plant(toucher=rien)]?p=${ail}`);
+    const quiet = cellOf(page, 'plant').locator('gf-plant-detail');
+    await quiet.getByRole('button', { name: 'Ouvrir « Plantes à confondre » en panneau' }).click();
+    await expect(quiet.locator('dialog.pane')).toHaveAttribute('open', '');
+    const kept = await hash(page);
+    await quiet.locator('dialog.pane gf-lookalikes').getByRole('link', { name: 'Muguet' }).click();
+    await page.waitForTimeout(300);
+    expect(await hash(page)).toBe(kept);
+    await expect(quiet.locator('dialog.pane')).toHaveAttribute('open', '');
     // The whole sheet: ⤢ on « Plantes à confondre », over the page; a sosie chosen there closes it.
     await app.go(`#/layout/[plant]?p=${ail}`);
     const sheet = cellOf(page, 'plant').locator('gf-plant-detail');

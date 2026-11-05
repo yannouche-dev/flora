@@ -125,12 +125,11 @@ export class GfSheetBlock extends SheetBase {
     const key = this.key, v = this._view;
     const note = aloneNote(key);
     if (note) {
-      return html`<p class="muted only-pad">${note.kind === 'off'
+      return html`<p class="muted only-pad">${note.kind === 'photos' ? photosOffLine() : note.kind === 'off'
         ? html`${icon('eye-slash')} ${note.text} (<a href=${href.settings()}>Réglages › Modules</a>).` : note.text}</p>`;
     }
     if (key === 'media') {
-      return ctx.photosOff ? html`<p class="muted only-pad">${photosOffLine()}</p>`
-        : html`<gf-media-viewer ?local=${this.local} plant-id=${ctx.plant.id} presentation=${blockStyle(v, 'media')} .index=${this.at ?? 0} .startUrl=${this.startUrl}></gf-media-viewer>`;
+      return html`<gf-media-viewer ?local=${this.local} plant-id=${ctx.plant.id} presentation=${blockStyle(v, 'media')} .index=${this.at ?? 0} .startUrl=${this.startUrl}></gf-media-viewer>`;
     }
     // Never Usages (its box hides itself when empty: never Prudence with it).
     const empty = this.titled && key !== 'uses' && hidesEmpty(v, key);

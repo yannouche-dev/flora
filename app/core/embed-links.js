@@ -94,9 +94,10 @@ function watch(root) {
 /**
  * A host's rules for the links shown in it, once (called again: nothing more). `quiet`: its links out quieted as they
  * come, a click that would still lead out stopped (any button, any key). `plant(id, path)`: a plant link's first-button
- * click, no key held, that no component took — true, the host opened it (the link's own way stopped; from a dialog over
- * the sheet, ⤢, that dialog closed); false, left as any link.
- * @param {HTMLElement} host @param {{ quiet?: boolean, plant?: ((id: number, path: EventTarget[]) => boolean) | null }} [rules]
+ * click, no key held, that no component took — 'opened', the host opened or chose it (the link's own way stopped; from a
+ * dialog over the sheet, ⤢, that dialog closed); 'kept', the host does nothing with it (stopped, the dialog left open:
+ * a cell's toucher=rien); false, left as any link.
+ * @param {HTMLElement} host @param {{ quiet?: boolean, plant?: ((id: number, path: EventTarget[]) => 'opened' | 'kept' | false) | null }} [rules]
  */
 export function embedLinks(host, { quiet: quieted = false, plant = null } = {}) {
   if (hosts.has(host)) return;
@@ -117,9 +118,11 @@ export function embedLinks(host, { quiet: quieted = false, plant = null } = {}) 
     // Marked to leave (the map's current plant ↗) or a download: as any link.
     if (!a || a.hasAttribute('data-open') || a.hasAttribute('download')) return;
     const k = hrefKind(a.getAttribute('href') || '');
-    if (k?.kind !== 'plant' || !plant(k.id, path)) return;
+    const took = k?.kind === 'plant' && plant(k.id, path);
+    if (!took) return;
     e.preventDefault();
-    // Picked from a dialog over the sheet (⤢): closed after the host's new entry (core/history.js keeps it).
-    /** @type {HTMLDialogElement | undefined} */ (path.find(n => n instanceof HTMLDialogElement && n.open))?.close();
+    // Picked from a dialog over the sheet (⤢): closed after the host's new entry (core/history.js keeps it); nothing
+    // picked, the block still read there.
+    if (took === 'opened') /** @type {HTMLDialogElement | undefined} */ (path.find(n => n instanceof HTMLDialogElement && n.open))?.close();
   });
 }
