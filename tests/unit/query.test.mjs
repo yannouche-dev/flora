@@ -36,7 +36,7 @@ test('parse : chaque écran de l’app et ses paramètres', () => {
   assert.deepEqual(parse('#/'), { name: 'search' });
   assert.deepEqual(parse('#/plant/128268'), { name: 'plant', id: 128268, pane: null, at: null });
   assert.deepEqual(parse('#/plant/128268?pane=media&i=2'), { name: 'plant', id: 128268, pane: 'media', at: 2 });
-  assert.deepEqual(parse('#/plant/1?media=3'), { name: 'plant', id: 1, pane: 'media', at: 3 }, 'ancien lien ?media=');
+  assert.deepEqual(parse('#/plant/1?media=3'), { name: 'plant', id: 1, pane: null, at: null }, '?media= : une adresse d’avant, plus lue');
   assert.equal(parse('#/plant/1?pane=<script>').pane, null);
   assert.deepEqual(parse('#/discover'), { name: 'discover' });
   assert.deepEqual(parse('#/discover?s=inconnu'), { name: 'discover' });

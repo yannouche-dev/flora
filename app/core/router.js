@@ -37,10 +37,10 @@ export function parse(hash) {
   if (path === '') return { name: 'search' };
 
   const plant = /^plant\/(\d+)$/.exec(path);
-  // ?pane=<block>: a block of the sheet in a pane beside it (&i=n: the media viewer's n-th image); ?media=n: earlier links.
+  // ?pane=<block>: a block of the sheet in a pane beside it (&i=n: the media viewer's n-th image).
   if (plant) {
-    const pane = params.get('pane') || (params.has('media') ? 'media' : null);
-    return { name: 'plant', id: Number(plant[1]), pane: pane && /^[\w:-]{1,40}$/.test(pane) ? pane : null, at: number('i') ?? number('media') };
+    const pane = params.get('pane');
+    return { name: 'plant', id: Number(plant[1]), pane: pane && /^[\w:-]{1,40}$/.test(pane) ? pane : null, at: number('i') };
   }
 
   if (path === 'map') {
