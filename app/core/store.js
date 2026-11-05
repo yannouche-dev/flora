@@ -40,7 +40,7 @@ import { onStorage } from './sync.js';
  * @property {Results} results
  * @property {boolean} compact
  * @property {Set<number>} favorites    plant ids in the ♥ collection
- * @property {Map<number, string>} placed  plant id → one of my places where it is noted
+ * @property {Map<number, { place: string, entry: string }>} placed  plant id → where it was noted first: one of my lieux and that noting (its entry id)
  * @property {Mode} mode                  display mode of the app: épuré (actions, big photos), standard, scientifique
  * @property {Mode | null} gridView      results grid override of the mode (null: follow the mode)
  * @property {SheetLayout} sheetLayout  the plant sheet as arranged on the sheet, « Personnaliser la fiche » (see sheet-blocks.js)

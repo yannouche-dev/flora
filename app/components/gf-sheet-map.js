@@ -502,7 +502,7 @@ export class GfSheetMap extends LitElement {
           .createPlant=${plant.id}
           ?no-locate=${!c.actions.locate}
           @spot-select=${e => { openView(href.map({ spot: e.detail.id })); }}
-          @plant-select=${e => { openView(href.map({ spot: e.detail.placeId, focus: e.detail.entryId ?? e.detail.plantId })); }}
+          @plant-select=${e => { openView(href.map({ spot: e.detail.placeId, focus: e.detail.entryId })); }}
           @positions-save=${e => this.#savePositions(e.detail)}
           @look-change=${e => this.dispatchEvent(new CustomEvent('map-config', { detail: { look: e.detail.look } }))}
         ></gf-map>

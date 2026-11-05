@@ -64,6 +64,9 @@ test('parse : chaque écran de l’app et ses paramètres', () => {
   assert.deepEqual(parse('#/map?plants=7&plant=12').plants, [7]);
   assert.equal(href.map({ plants: [12, 7], season: true }), '#/map?plants=12,7&season=1');
   assert.equal(href.map({ spot: 'p1', plants: [] }), '#/map?spot=p1');
+  // A noting of the lieu (focus=: its entry id): its marker lit, its details open.
+  assert.equal(href.map({ spot: 'p1', focus: 'e1abc' }), '#/map?spot=p1&focus=e1abc');
+  assert.equal(/** @type {any} */ (parse('#/map?spot=p1&focus=e1abc')).focus, 'e1abc');
   assert.deepEqual(parse('#/shared?d=zABC'), { name: 'shared', data: 'zABC' });
   assert.equal(parse('#/nope').name, 'not-found');
   assert.equal(parse('#/plant/abc').name, 'not-found');

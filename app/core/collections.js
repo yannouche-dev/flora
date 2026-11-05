@@ -466,9 +466,11 @@ export async function refreshMembership() {
     }
   }
   const favorites = new Set(all.find(c => c.id === FAVORITES_ID)?.properties.plantIds || []);
-  // Plant → one place where it is noted (📍 in the results grid opens it on the map).
+  // Plant → where it was noted first: the first lieu holding it and its first noting there (📍 in the results grid
+  // opens that noting on the Carte: focus=, an entry id).
+  /** @type {Map<number, { place: string, entry: string }>} */
   const placed = new Map();
-  for (const c of all) if (isPlace(c)) for (const id of c.properties.plantIds) if (!placed.has(id)) placed.set(id, c.id);
+  for (const c of all) if (isPlace(c)) for (const e of c.properties.plants) if (e.plantId !== null && !placed.has(e.plantId)) placed.set(e.plantId, { place: c.id, entry: e.id });
   const collections = all
     .map(c => ({ id: c.id, name: placeTitle(c), kind: c.properties.kind, count: c.properties.plants.length }))
     .sort((a, b) => (a.kind === 'favorites' ? -1 : b.kind === 'favorites' ? 1 : 0) || a.name.localeCompare(b.name, 'fr'));

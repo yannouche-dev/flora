@@ -25,7 +25,7 @@ import './history.js';
  * @typedef {{ name: 'app', id: string, step: string | null, plant: number | null, view: string | null, media: number | null, sheet: boolean }} AppRoute
  */
 
-/** A plant of a place in an address: an occurrence id, or a plant id (older links). @param {string | null} v */
+/** A noting of a lieu in an address (focus=: its entry id, PlantEntry.id). @param {string | null} v */
 const focusParam = v => v && /^[\w-]{1,48}$/.test(v) ? v : null;
 
 /** @param {string} hash @returns {Route} */
@@ -128,15 +128,15 @@ export const href = {
     return '#/collections' + (search ? '?' + search : '');
   },
   /**
-   * `focus`: a plant of the selected place (its marker highlighted, its details open); `add` pre-adds a plant
+   * `focus`: a noting of the selected place (its entry id: its marker highlighted, its details open); `add` pre-adds a plant
    * to the selected place, `pick` opens its plant picker; `plants` the plant filter (plants=12,34: commas as they are).
    */
-  map: (/** @type {{ spot?: string, plants?: number[], focus?: string | number, season?: boolean, add?: number, pick?: boolean }} */ options = {}) => {
+  map: (/** @type {{ spot?: string, plants?: number[], focus?: string, season?: boolean, add?: number, pick?: boolean }} */ options = {}) => {
     const params = new URLSearchParams();
     if (options.spot) params.set('spot', options.spot);
     if (options.spot && options.add) params.set('add', String(options.add));
     if (options.spot && options.pick) params.set('pick', '1');
-    if (options.focus) params.set('focus', String(options.focus));
+    if (options.focus) params.set('focus', options.focus);
     if (options.plants?.length) params.set('plants', [...new Set(options.plants)].join(','));
     if (options.season) params.set('season', '1');
     const search = params.toString();

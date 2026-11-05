@@ -52,7 +52,7 @@ const shortDate = (/** @type {string} */ iso) =>
  * Places show the IGN map; lists can be given a position, which turns them into places.
  *
  * A saved place lives on the Carte (`embedded`, in its panel): the Carte's map is the place's map. The editor
- * then asks it through events — map-fly {coordinates, zoom}, map-edit (✎ positions), plant-focus {plantId},
+ * then asks it through events — map-fly {coordinates, zoom}, map-edit (✎ positions), plant-focus {entryId, plantId},
  * panel-close — and the Carte hands moves back with `savePositions()`. Opened on its own, a saved place
  * redirects to the Carte.
  *

@@ -457,3 +457,18 @@ test('Exporter (GeoJSON) une collection vers la feuille de partage : demandé ; 
     /** @type {any} */ (globalThis).matchMedia = was.matchMedia;
   }
 });
+
+test('le 📍 de Flore : le premier lieu qui la garde, sa première note, pas la plante', async () => {
+  const twice = C.withPlant(C.withPlant(C.newPlace([2.35, 48.85], { name: 'Talus' }), plant(7001), { coordinates: [2.35, 48.85] }),
+    plant(7001), { coordinates: [2.3504, 48.8502] }, { again: true });
+  const [a, b, list] = [await C.savePlace(twice), await C.savePlace(C.withPlant(C.newPlace([2.36, 48.86], { name: 'Mare' }), plant(7002))),
+    await C.savePlace(C.withPlant(C.newCollection('list', { name: 'À voir' }), plant(7003)))];
+  assert.equal(a.properties.plants.length, 2);
+  await C.refreshMembership();
+  const { store } = await import('../../app/core/store.js');
+  const { placed } = store.state;
+  assert.deepEqual(placed.get(7001), { place: a.id, entry: a.properties.plants[0].id }, 'la première fois notée, pas la plante');
+  assert.deepEqual(placed.get(7002), { place: b.id, entry: b.properties.plants[0].id });
+  assert.equal(placed.has(7003), false, 'une liste : pas un lieu');
+  for (const c of [a, b, list]) await db.remove('spots', c.id);
+});

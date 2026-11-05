@@ -247,7 +247,8 @@ export class GfPlantCard extends LitElement {
   /** Grid row: one cell per visible column, in the order of the header. */
   #gridRow(p, thumb, q, title, fav) {
     const legal = p.legal || [];
-    const placeId = this.#store.state.placed.get(p.id);
+    // Where it was noted first (a lieu and that noting: collections.js refreshMembership); none: « Noter où je la trouve ».
+    const at = this.#store.state.placed.get(p.id);
     const illustrated = this.view === 'epure';
     const cells = {
       photo: () => thumb?.url
@@ -280,11 +281,11 @@ export class GfPlantCard extends LitElement {
         aria-label=${(fav ? 'Retirer des favoris : ' : 'Ajouter aux favoris : ') + title}
         title=${fav ? 'Retirer des favoris' : 'Ajouter aux favoris'}
         @click=${this.#toggleFavorite}>${icon(fav ? 'heart-fill' : 'heart')}</button>` : nothing}
-      ${this.columns.includes('pin') ? html`<a class="pin ${placeId ? 'on' : ''}"
-        href=${placeId ? href.map({ spot: placeId, focus: p.id }) : href.newSpot(p.id)}
-        @click=${placeId ? null : (/** @type {Event} */ e) => { e.preventDefault(); this.dispatchEvent(new CustomEvent('open-capture', { bubbles: true, composed: true, detail: { plant: p } })); }}
-        title=${placeId ? 'Notée dans un de mes lieux : voir sur la carte' : 'Noter où je la trouve'}
-        aria-label=${(placeId ? 'Voir sur la carte : ' : 'Noter où je la trouve : ') + title}>${icon('geo-alt-fill')}</a>` : nothing}`;
+      ${this.columns.includes('pin') ? html`<a class="pin ${at ? 'on' : ''}"
+        href=${at ? href.map({ spot: at.place, focus: at.entry }) : href.newSpot(p.id)}
+        @click=${at ? null : (/** @type {Event} */ e) => { e.preventDefault(); this.dispatchEvent(new CustomEvent('open-capture', { bubbles: true, composed: true, detail: { plant: p } })); }}
+        title=${at ? 'Notée dans un de mes lieux : voir sur la carte' : 'Noter où je la trouve'}
+        aria-label=${(at ? 'Voir sur la carte : ' : 'Noter où je la trouve : ') + title}>${icon('geo-alt-fill')}</a>` : nothing}`;
   }
 
   render() {

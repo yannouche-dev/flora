@@ -131,7 +131,7 @@ export class GfPlantSpots extends LitElement {
           fit
           editable
           @positions-save=${e => this.#savePositions(e.detail.plants)}
-          @plant-select=${e => { openView(href.map({ spot: e.detail.placeId, focus: e.detail.entryId ?? e.detail.plantId })); }}
+          @plant-select=${e => { openView(href.map({ spot: e.detail.placeId, focus: e.detail.entryId })); }}
         ></gf-map>
         <ul>
           ${spots.map((place, i) => {
@@ -144,7 +144,7 @@ export class GfPlantSpots extends LitElement {
             /** @type {import('../core/map-focus.js').PointFocus} */
             const point = { kind: 'point', label: name, coordinates: at };
             const on = isFocused(this.mapFocus, point);
-            return html`<li class=${this.mapLinked ? 'linked' : ''}><a href=${href.map({ spot: place.id, focus: this.plantId })}>
+            return html`<li class=${this.mapLinked ? 'linked' : ''}><a href=${href.map({ spot: place.id, focus: entry?.id })}>
               <span>${place.properties.name || 'Lieu ' + (i + 1)}${others > 0 ? html` <small>· ${plantCount(others + 1)}</small>` : nothing}</span>
               ${this.#store.state.harvestMode ? html`
                 ${entry && entryInSeason(entry) ? html`<span class="badge">En saison</span>` : nothing}

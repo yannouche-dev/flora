@@ -282,3 +282,35 @@ test('♥ ôté d’un favori annoté (sa fiche, sa carte dans Flore) : demandé
   await expect.poll(favourites).toEqual([]);
   await expect(page.getByRole('alertdialog')).toHaveCount(0);
 });
+
+test('Le 📍 de Flore et « Dans mes listes et lieux » ouvrent la plante notée, la première fois', async ({ app, page }) => {
+  await app.open('#/');
+  const ortie = plantId('Urtica dioica');
+  // The lieu « Talus », the nettle noted there twice (the second a step away).
+  const { id, first } = await page.evaluate(async plant => {
+    const c = await import('/app/core/collections.js');
+    const o = await (await import('/app/core/db.js')).get('plants', plant);
+    const twice = c.withPlant(c.withPlant(c.newPlace([2.351, 48.851], { name: 'Talus' }), o), o, { coordinates: [2.3514, 48.8512] }, { again: true });
+    const saved = await c.saveCollection(twice);
+    return { id: saved.id, first: saved.properties.plants[0].id };
+  }, ortie);
+  const opened = async () => {
+    const entry = page.locator('gf-spot-editor li.entry.open');
+    await expect(entry).toHaveCount(1);
+    await expect(entry.locator('.nth')).toHaveText('n° 1');
+  };
+  // The results grid (its 📍 column): the lieu on the Carte, its first noting open.
+  await app.go('#/?q=ortie');
+  const pin = page.getByRole('link', { name: 'Voir sur la carte : Ortie dioïque' });
+  await expect(pin).toHaveAttribute('href', `#/map?spot=${id}&focus=${first}`);
+  await pin.click();
+  await opened();
+  // The sheet's « Dans mes listes et lieux »: the same.
+  await app.go(`#/plant/${ortie}`);
+  const see = page.locator('gf-plant-detail .mine').getByRole('button', { name: 'Voir' });
+  if (await see.count()) await see.first().click();
+  const link = page.locator('gf-plant-spots li a').first();
+  await expect(link).toHaveAttribute('href', `#/map?spot=${id}&focus=${first}`);
+  await link.click();
+  await opened();
+});
