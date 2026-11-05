@@ -13,8 +13,7 @@
 // markAnnounced: gf-app), but those that come at the start, after « Revoir les premiers pas » or a repair's restore:
 // there at once, quietly. Someone who already used the app starts with everything.
 // The games around a place (Rencontres, Cueillette prudente, Mosaïque) keep their own place, distance and cards, each
-// with its mini-app (core/around-sessions.js); the session they shared here before is handed over once, to the one
-// played last.
+// with its mini-app (core/around-sessions.js); the session they shared here before is handed over once, to Rencontres.
 
 import { config } from '../config.js';
 import { AROUND_APPS, clearAroundGames, migrateDiscover } from './around-sessions.js';
@@ -63,7 +62,7 @@ function read() {
   if (saved && typeof saved === 'object') {
     // The session of the games around a place, kept here before: theirs now (once; written back without it).
     if (HANDED.some(k => k in saved)) {
-      migrateDiscover(saved, typeof location === 'object' ? location.hash : '');
+      migrateDiscover(saved);
       for (const k of HANDED) delete saved[k];
       writeJSON(KEY, saved);
     }

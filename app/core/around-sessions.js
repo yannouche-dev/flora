@@ -2,8 +2,8 @@
 // The games around a place — Rencontres, Cueillette prudente, Mosaïque —, each its own: the place chosen, the
 // distance, the cards swiped and the matches are kept by each mini-app with its state (geoflora.app.<id>.state, the
 // `ctx` of runtime.js), so that « Recommencer » in one leaves the others as they were, and « Continuer » is each one's.
-// Before, the three shared one session, in geoflora.discover: core/discover.js hands it over once (migrate) to the one
-// played last (else Rencontres) — nothing is lost, and from then on each goes its own way.
+// Before, the three shared one session, in geoflora.discover: core/discover.js hands it over once (migrate) to
+// Rencontres — nothing is lost, and from then on each goes its own way.
 // Read here for what is not a mini-app: the list of Découvrir (« Continuer »), the place the sheet's map starts from, the
 // privacy page (« Oublier ma dernière position »), the first steps started again (Réglages).
 
@@ -79,11 +79,10 @@ export function clearAroundGames() {
 
 /**
  * The session the three shared before (geoflora.discover: the place, the distance, the cards swiped, the matches),
- * handed over once to the one played last — known when the app opens at its old address (#/discover?s=harvest or
- * ?s=mosaic: Cueillette prudente, Mosaïque), else Rencontres — under what it already keeps (a value it has wins).
- * Nothing to hand over (no place, no swipe): nothing written. @param {AroundCtx} old @param {string} [hash] the address
+ * handed over once to Rencontres — nothing says which one was played last — under what it already keeps (a value it
+ * has wins). Nothing to hand over (no place, no swipe): nothing written. @param {AroundCtx} old
  */
-export function migrateDiscover(old, hash = '') {
+export function migrateDiscover(old) {
   const ctx = {
     point: Array.isArray(old.point) ? old.point : null,
     place: typeof old.place === 'string' ? old.place : null,
@@ -92,10 +91,8 @@ export function migrateDiscover(old, hash = '') {
     passed: Array.isArray(old.passed) ? old.passed : []
   };
   if (!ctx.point && !ctx.matches.length && !ctx.passed.length) return;
-  const s = /[?&]s=([a-z]+)/.exec(hash)?.[1];
-  const id = s === 'harvest' ? 'cueillette' : s === 'mosaic' ? 'mosaique' : 'rencontres';
-  const saved = read(id);
-  write(id, { v: V, path: saved?.path ?? ['start'], finished: saved?.finished ?? false, ctx: { ...ctx, ...withoutEmpty(saved?.ctx ?? {}) } });
+  const saved = read('rencontres');
+  write('rencontres', { v: V, path: saved?.path ?? ['start'], finished: saved?.finished ?? false, ctx: { ...ctx, ...withoutEmpty(saved?.ctx ?? {}) } });
 }
 
 /** The values a state has (an absent or undefined key does not hide the one handed over). @param {Record<string, unknown>} ctx */

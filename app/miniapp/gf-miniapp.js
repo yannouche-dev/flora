@@ -286,7 +286,7 @@ export class GfMiniapp extends LitElement {
     });
   }
 
-  /** The address in step, without a new entry (old addresses of Découvrir too). */
+  /** The address in step, without a new entry. */
   #syncUrl() {
     if (!this._app) return;
     const want = this.#href();

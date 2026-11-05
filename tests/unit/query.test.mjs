@@ -36,34 +36,34 @@ test('parse : chaque écran de l’app et ses paramètres', () => {
   assert.deepEqual(parse('#/'), { name: 'search' });
   assert.deepEqual(parse('#/plant/128268'), { name: 'plant', id: 128268, pane: null, at: null });
   assert.deepEqual(parse('#/plant/128268?pane=media&i=2'), { name: 'plant', id: 128268, pane: 'media', at: 2 });
-  assert.deepEqual(parse('#/plant/1?media=3'), { name: 'plant', id: 1, pane: 'media', at: 3 }, 'ancien lien ?media=');
+  assert.deepEqual(parse('#/plant/1?media=3'), { name: 'plant', id: 1, pane: null, at: null }, '?media= : une adresse d’avant, plus lue');
   assert.equal(parse('#/plant/1?pane=<script>').pane, null);
   assert.deepEqual(parse('#/discover'), { name: 'discover' });
   assert.deepEqual(parse('#/discover?s=inconnu'), { name: 'discover' });
-  // Rencontres, the Parcours, Cueillette prudente and Mosaïque are mini-apps: their old addresses open them (a plant
-  // open there: over the cards).
-  // (Rencontres' plant then was open in its sheet: &fiche=1 now.)
+  // Découvrir's addresses of before (the activities, a plant over them): the list.
+  assert.deepEqual(parse('#/discover?s=harvest'), { name: 'discover' });
+  assert.deepEqual(parse('#/discover?s=meet&p=12'), { name: 'discover' });
+  assert.deepEqual(parse('#/discover?p=12'), { name: 'discover' });
   const none = { view: null, media: null, sheet: false };
-  assert.deepEqual(parse('#/discover?s=trail'), { name: 'app', id: 'parcours', step: null, plant: null, ...none });
-  assert.deepEqual(parse('#/discover?s=meet&p=12'), { name: 'app', id: 'rencontres', step: 'cards', plant: 12, ...none, sheet: true });
-  assert.deepEqual(parse('#/discover?p=12'), { name: 'app', id: 'rencontres', step: 'cards', plant: 12, ...none, sheet: true });
-  assert.deepEqual(parse('#/discover?s=harvest'), { name: 'app', id: 'cueillette', step: null, plant: null, ...none });
-  assert.deepEqual(parse('#/discover?s=mosaic&p=5'), { name: 'app', id: 'mosaique', step: 'cards', plant: 5, ...none });
   assert.deepEqual(parse('#/app/parcours/walk?p=3'), { name: 'app', id: 'parcours', step: 'walk', plant: 3, ...none });
   assert.equal(parse('#/app/Parcours').name, 'not-found');
   assert.equal(href.app('rencontres', 'cards', 7), '#/app/rencontres/cards?p=7');
   assert.deepEqual(parse('#/discover?s=../x'), { name: 'discover' });
   assert.deepEqual(parse('#/collection/new?kind=list'), { name: 'spot-new', plant: null, kind: 'list', at: null });
-  assert.deepEqual(parse('#/spot/new?at=48.85,2.35').at, [2.35, 48.85], 'ancien lien spot/');
-  assert.deepEqual(parse('#/map?plant=12&season=1'), { name: 'map', spot: null, plants: [12], focus: null, season: true, add: null, pick: false });
-  // An older link of Flore's results (« from=flore »): the Carte, on what else it says.
-  assert.deepEqual(parse('#/map?plant=12&from=flore'), parse('#/map?plant=12'));
-  assert.deepEqual(parse('#/map?plant=x').plants, []);
-  // The Carte's plant filter in its address: each plant once, in the order given; plants= over an older plant=.
+  assert.deepEqual(parse('#/collection/new?kind=place&at=48.85,2.35').at, [2.35, 48.85]);
+  assert.deepEqual(parse('#/collection/abc'), { name: 'spot', id: 'abc', add: null, pick: false });
+  assert.equal(parse('#/spot/abc').name, 'not-found', '#/spot/… : une adresse d’avant, plus lue');
+  assert.equal(parse('#/spot/new').name, 'not-found');
+  assert.deepEqual(parse('#/map?plants=12&season=1'), { name: 'map', spot: null, plants: [12], focus: null, season: true, add: null, pick: false });
+  assert.deepEqual(parse('#/map?plants=x').plants, []);
+  assert.deepEqual(parse('#/map?plant=12').plants, [], 'plant= : une adresse d’avant, plus lue');
+  // The Carte's plant filter in its address: each plant once, in the order given.
   assert.deepEqual(parse('#/map?plants=12,7,12,x').plants, [12, 7]);
-  assert.deepEqual(parse('#/map?plants=7&plant=12').plants, [7]);
   assert.equal(href.map({ plants: [12, 7], season: true }), '#/map?plants=12,7&season=1');
   assert.equal(href.map({ spot: 'p1', plants: [] }), '#/map?spot=p1');
+  // A noting of the lieu (focus=: its entry id): its marker lit, its details open.
+  assert.equal(href.map({ spot: 'p1', focus: 'e1abc' }), '#/map?spot=p1&focus=e1abc');
+  assert.equal(/** @type {any} */ (parse('#/map?spot=p1&focus=e1abc')).focus, 'e1abc');
   assert.deepEqual(parse('#/shared?d=zABC'), { name: 'shared', data: 'zABC' });
   assert.equal(parse('#/nope').name, 'not-found');
   assert.equal(parse('#/plant/abc').name, 'not-found');

@@ -412,9 +412,6 @@ test('Carte : le filtre de plantes dans l’adresse', async ({ app, page }) => {
   await tabLink(app, page, 'Carte').click();
   await expect.poll(() => hash(page)).toBe(`#/map?plants=${a},${b}`);
   await expect(plants).toContainText('Plantes · 2');
-  // A link of before (plant=): its plant filtered.
-  await app.go(`#/map?plant=${a}`);
-  await expect(plants).toContainText('Plantes · 1');
 
   // A place open, the filter changed beside it: the place closes onto the Carte filtered as now — never as it was
   // before the place opened; Back does not open the place again.
@@ -431,7 +428,6 @@ test('Carte : le filtre de plantes dans l’adresse', async ({ app, page }) => {
     await expect.poll(() => hash(page)).toBe('#/settings');
   };
   await changedBeside(`#/map?plants=${a},${b}`, () => tick(/Ortie/), `#/map?plants=${a}`);
-  await changedBeside(`#/map?plant=${a}`, () => tick(/Ortie/), `#/map?plants=${a},${b}`);
   // « En saison » (the harvest journal on), the same.
   await page.evaluate(async ([i, p]) => {
     const c = await import('/app/core/collections.js');
@@ -549,6 +545,14 @@ test('Quitter une activité ouverte par un lien, et « Page introuvable », ram�
   await expect(tab.locator('gf-miniapp .missing').getByRole('link', { name: 'Aller à Flore' })).toHaveAttribute('href', '#/?family=Rosaceae');
   await expect(tab.locator('gf-miniapp .quit')).toHaveAccessibleName('Quitter l’activité');
   await tab.close();
+});
+
+test('Les adresses d’avant n’ouvrent plus leur écran : « Page introuvable », Flore à portée', async ({ app, page }) => {
+  await app.open('#/?family=Rosaceae');
+  for (const old of ['#/spot/abc', '#/spot/new', '#/builder', '#/builder/trois']) {
+    await app.go(old);
+    await expect(page.getByText('Page introuvable.').getByRole('link', { name: 'Aller à Flore' }), old).toHaveAttribute('href', '#/?family=Rosaceae');
+  }
 });
 
 test('« Passer » après « Revoir les premiers pas » garde la recherche de Flore', async ({ app, page }) => {

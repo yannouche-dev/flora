@@ -69,7 +69,7 @@ test('holdingsOf : les plantes des favoris, les listes, les lieux (même vides)'
 });
 
 test('arrivedAt : un écran montré fait venir son onglet, à annoncer ; Découvrir, une activité, Réglages et ses écrans aucun', async () => {
-  for (const screen of ['discover', 'app', 'settings', 'legal', 'layout', 'builder', 'not-found']) d.arrivedAt(screen);
+  for (const screen of ['discover', 'app', 'settings', 'legal', 'layout', 'not-found']) d.arrivedAt(screen);
   assert.deepEqual(d.discoverState().unlocked, ['map']);
   // Its tab there: nothing read, nothing written (a search typed calls it at each key).
   assert.equal(await writes(() => d.arrivedAt('map')), 0);

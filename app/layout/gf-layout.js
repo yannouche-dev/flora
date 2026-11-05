@@ -44,8 +44,6 @@
 //    plant or a zone chosen before it rests): modified, what « Terminé » (or Back) gives replaces the record it was
 //    entered from; in use, a gesture that rewrites its layout (folded, a separator moved, a map's layers) replaces the
 //    record it had.
-//  - « Créer une app »'s old addresses (#/builder…, router.js): the screen they name (g=, else their grid), being
-//    modified, in their place (the same entry; neither: the home).
 //  - A title (?title=, state.js): the bar's heading (« Écran sur mesure » without one; on a phone too, cut by « … »), the
 //    page's title (« <title> · GeoFlora », a plant's sheet in a cell not naming it then) and the share's. Typed in
 //    « Titre » while modified: the address replaced as it is typed (no new entry).
@@ -81,7 +79,7 @@ import { groupDefaults, groupNotes, startToFind } from './group-defaults.js';
 import { SearchChannel } from '../core/search-channel.js';
 import { defaultSources } from '../core/observations.js';
 import { forgetShares, savedShares, saveShares } from './sizes.js';
-import { MODELS, modelSpec } from './models.js';
+import { MODELS } from './models.js';
 import { labelOf, rememberScreen, screenEvents, screenKey, screens } from './screens.js';
 import { screenList, screenListStyles } from './screen-list.js';
 import { renderCell, revealFacet, scopeWords } from './cells.js';
@@ -157,7 +155,7 @@ function least(n, cells, path, dir, side = 'w', col = false) {
 
 export class GfLayout extends LitElement {
   static properties = {
-    /** { name: 'layout', spec, search } — or « Créer une app »'s old { name: 'builder', grid, spec, search } (router.js). */
+    /** { name: 'layout', spec, search } (router.js). */
     route: { attribute: false },
     _w: { state: true },
     /** The tab shown, narrow. */
@@ -790,7 +788,7 @@ export class GfLayout extends LitElement {
   updated() {
     if (this.#narrow) { this.#nameRoom(); this.#tabInSight(); }
     // The room the cells have: the stage's (drawn anew with the home and back: observed again). No stage (the home, an
-    // old address replaced): no room either — the next screen waits for its own, never drawn at the last one's.
+    // address replaced): no room either — the next screen waits for its own, never drawn at the last one's.
     const stage = this.renderRoot.querySelector('.stage');
     if (stage !== this.#observed) { this.#size.disconnect(); if (stage) this.#size.observe(stage); else this._w = 0; this.#observed = stage; }
     // « Voir et corriger » landed: the focus where the remarks are (the text unfolded, else their list).
@@ -814,7 +812,7 @@ export class GfLayout extends LitElement {
   #keepTimer = 0;
 
   /**
-   * What Mes écrans may keep now: a screen in use (never the home, an old address being replaced, nor modified), its
+   * What Mes écrans may keep now: a screen in use (never the home, a stray edit=1 on it being replaced, nor modified), its
    * layout read whole with a cell it knows at least (a mistyped link only asks « vouliez-vous dire … ? »).
    */
   #keepable() {
@@ -873,7 +871,7 @@ export class GfLayout extends LitElement {
 
   /** The home (#/layout): no layout, no state, no search, no address written. */
   #home = false;
-  /** An old address of « Créer une app » (or a stray edit=1 on the home) being replaced: nothing drawn nor written meanwhile. */
+  /** A stray edit=1 on the home being replaced: nothing drawn nor written meanwhile. */
   #aliasing = false;
   /** Being modified: where « Terminé » goes back to (history.js#sheetMark, `gfEditFrom` in the entry). @type {import('../core/history.js').SheetMark | null} */
   #editMark = null;
@@ -889,14 +887,6 @@ export class GfLayout extends LitElement {
   #follow() {
     const route = /** @type {any} */ (this.route);
     this.#at = location.hash;
-    // « Créer une app »'s old address: the screen it names (g=, else its grid), being modified, in its place (the same
-    // depth); nothing of it read here — its spec may be null. Neither: the home.
-    if (route.name === 'builder') {
-      this.#aliasing = true;
-      const spec = route.spec || modelSpec(route.grid);
-      replaceView(spec ? href.layout(spec, route.search, true) : href.layout(''));
-      return;
-    }
     const editing = EDITING.test(route.search);
     // The home (#/layout, no text): no state, no search, no address written (a stray edit=1 taken off).
     if (!route.spec) {

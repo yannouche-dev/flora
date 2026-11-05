@@ -11,7 +11,6 @@ import './history.js';
  *   | { name: 'shared', data: string } | { name: 'discover' }
  *   | AppRoute
  *   | { name: 'layout', spec: string, search: string }
- *   | { name: 'builder', grid: string | null, spec: string | null, search: string }
  *   | { name: 'not-found' }} Route
  */
 
@@ -25,7 +24,7 @@ import './history.js';
  * @typedef {{ name: 'app', id: string, step: string | null, plant: number | null, view: string | null, media: number | null, sheet: boolean }} AppRoute
  */
 
-/** A plant of a place in an address: an occurrence id, or a plant id (older links). @param {string | null} v */
+/** A noting of a lieu in an address (focus=: its entry id, PlantEntry.id). @param {string | null} v */
 const focusParam = v => v && /^[\w-]{1,48}$/.test(v) ? v : null;
 
 /** @param {string} hash @returns {Route} */
@@ -37,31 +36,29 @@ export function parse(hash) {
   if (path === '') return { name: 'search' };
 
   const plant = /^plant\/(\d+)$/.exec(path);
-  // ?pane=<block>: a block of the sheet in a pane beside it (&i=n: the media viewer's n-th image); ?media=n: earlier links.
+  // ?pane=<block>: a block of the sheet in a pane beside it (&i=n: the media viewer's n-th image).
   if (plant) {
-    const pane = params.get('pane') || (params.has('media') ? 'media' : null);
-    return { name: 'plant', id: Number(plant[1]), pane: pane && /^[\w:-]{1,40}$/.test(pane) ? pane : null, at: number('i') ?? number('media') };
+    const pane = params.get('pane');
+    return { name: 'plant', id: Number(plant[1]), pane: pane && /^[\w:-]{1,40}$/.test(pane) ? pane : null, at: number('i') };
   }
 
   if (path === 'map') {
-    // The plant filter (plants=12,34; plant=12: older links): each plant once, in the order given.
-    const listed = (params.get('plants') || '').split(',').filter(v => /^\d+$/.test(v)).map(Number);
-    const plants = params.has('plants') ? [...new Set(listed)] : number('plant') !== null ? [/** @type {number} */ (number('plant'))] : [];
+    // The plant filter (plants=12,34): each plant once, in the order given.
+    const plants = [...new Set((params.get('plants') || '').split(',').filter(v => /^\d+$/.test(v)).map(Number))];
     return {
       name: 'map', spot: params.get('spot'), plants, focus: focusParam(params.get('focus')), season: params.get('season') === '1',
       add: number('add'), pick: params.get('pick') === '1'
     };
   }
   if (path === 'collections') return { name: 'collections', open: params.get('c'), plant: number('plant') };
-  // "spot/…" are the links of earlier versions; collections are the same records.
-  if (path === 'collection/new' || path === 'spot/new') {
+  if (path === 'collection/new') {
     const at = (params.get('at') || '').split(',').map(Number);
     return {
       name: 'spot-new', plant: number('plant'), kind: params.get('kind') === 'list' ? 'list' : 'place',
       at: at.length === 2 && at.every(Number.isFinite) ? /** @type {[number, number]} */ ([at[1], at[0]]) : null
     };
   }
-  const spot = /^(?:collection|spot)\/([\w-]+)$/.exec(path);
+  const spot = /^collection\/([\w-]+)$/.exec(path);
   if (spot) return { name: 'spot', id: spot[1], add: number('add'), pick: params.get('pick') === '1' };
   if (path === 'shared') return { name: 'shared', data: params.get('d') || '' };
 
@@ -74,24 +71,11 @@ export function parse(hash) {
     return { name: 'app', id: app[1], step: app[2] ?? null, plant: number('p'), view: view && /^[a-z]{1,16}$/.test(view) ? view : null,
       media: number('m') || null, sheet: params.get('fiche') === '1' };
   }
-  // Rencontres, the Parcours, Cueillette prudente and Mosaïque, scenarios of Découvrir before they were mini-apps: their
-  // old addresses open them (a plant open over Découvrir with no scenario, #/discover?p=<id>, was over Rencontres'
-  // cards); a plant open there, over its cards.
-  const was = path === 'discover' ? { meet: 'rencontres', trail: 'parcours', harvest: 'cueillette', mosaic: 'mosaique' }[params.get('s') || (params.has('p') ? 'meet' : '')] : undefined;
-  // (Rencontres: the plant in its sheet, &fiche=1, as it was then.)
-  if (was) return { name: 'app', id: was, step: was !== 'parcours' && params.has('p') ? 'cards' : null, plant: number('p'), view: null, media: null, sheet: was === 'rencontres' && params.has('p') };
-  // « Découvrir »: the list of the activities (any other old ?s=, Scientifique's ?s=science among them: the list too).
+  // « Découvrir »: the list of the activities (whatever else its address says).
   if (path === 'discover') return { name: 'discover' };
   // « Écran sur mesure » (app/layout/gf-layout.js): #/layout/<layout>?<state>[&edit=1] — the layout as written
   // (grammar.js), its live state (state.js) read by the screen itself; edit=1: being modified, its tools shown. #/layout
-  // alone: the home (« Composer un écran »). « Créer une app »'s old addresses, #/builder[/<grid>][?g=<layout>&<state>],
-  // still parse: gf-layout puts the screen they name in their place, being modified (until 3.1).
-  const builder = /^builder(?:\/([a-z][a-z0-9-]{0,23}))?$/.exec(path);
-  if (builder) {
-    const grid = builder[1] ?? null;
-    const spec = params.get('g');
-    return { name: 'builder', grid, spec, search: search.split('&').filter(p => p && !/^g=/.test(p)).join('&') };
-  }
+  // alone: the home (« Composer un écran »).
   const layout = /^layout(?:\/(.*))?$/s.exec(path);
   if (layout) return { name: 'layout', spec: layout[1] ?? '', search };
   return { name: 'not-found' };
@@ -128,15 +112,15 @@ export const href = {
     return '#/collections' + (search ? '?' + search : '');
   },
   /**
-   * `focus`: a plant of the selected place (its marker highlighted, its details open); `add` pre-adds a plant
+   * `focus`: a noting of the selected place (its entry id: its marker highlighted, its details open); `add` pre-adds a plant
    * to the selected place, `pick` opens its plant picker; `plants` the plant filter (plants=12,34: commas as they are).
    */
-  map: (/** @type {{ spot?: string, plants?: number[], focus?: string | number, season?: boolean, add?: number, pick?: boolean }} */ options = {}) => {
+  map: (/** @type {{ spot?: string, plants?: number[], focus?: string, season?: boolean, add?: number, pick?: boolean }} */ options = {}) => {
     const params = new URLSearchParams();
     if (options.spot) params.set('spot', options.spot);
     if (options.spot && options.add) params.set('add', String(options.add));
     if (options.spot && options.pick) params.set('pick', '1');
-    if (options.focus) params.set('focus', String(options.focus));
+    if (options.focus) params.set('focus', options.focus);
     if (options.plants?.length) params.set('plants', [...new Set(options.plants)].join(','));
     if (options.season) params.set('season', '1');
     const search = params.toString();

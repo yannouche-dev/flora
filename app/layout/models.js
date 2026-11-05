@@ -1,8 +1,8 @@
 // @ts-check
-// What a screen of one's own starts from (gf-layout.js: its home, « Composer un écran »; « Créer une app »'s old
-// addresses): the grids — layouts of empty places (`slot`, registry.js) — then the ready-made screens. Each one is only a
-// layout as written (grammar.js): opened, it is modified like any other; nothing is kept but the sizes given to it
-// on this device (sizes.js). Pure data, read under Node by the unit tests.
+// What a screen of one's own starts from (gf-layout.js: its home, « Composer un écran »): the grids — layouts of empty
+// places (`slot`, registry.js) — then the ready-made screens. Each one is only a layout as written (grammar.js):
+// opened, it is modified like any other; nothing is kept but the sizes given to it on this device (sizes.js). Pure
+// data, read under Node by the unit tests.
 
 /**
  * `kind`: a grid (empty places) or a model (a ready-made screen); `spec`: its layout; `about`: what it suits.
@@ -31,6 +31,3 @@ export const MODELS = [
   { id: 'grille', kind: 'modele', title: 'Grille et photos', about: 'Les résultats en grille aux colonnes triables, la recherche et ses filtres à côté, les photos de la plante choisie.',
     spec: '[[search(list=0)@30,filters]@24,results(view=grid)@46,[media,plant.name]]' }
 ];
-
-/** A model's layout by its id (the old #/builder/<grid>); null: none. @param {string | null | undefined} id */
-export const modelSpec = id => MODELS.find(m => m.id === id)?.spec ?? null;

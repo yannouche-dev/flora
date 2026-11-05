@@ -278,18 +278,12 @@ export const newEntry = plant => normalizeEntry({
 }, new Date().toISOString());
 
 /**
- * An entry of a collection: `ref` an entry id (one occurrence), or a plant id (its first occurrence; a
- * number given as text too, as in an address).
+ * An entry of a collection: `ref` an entry id (one noting), or a plant id (its first noting).
  * @param {Place} place @param {string | number | null} ref
  */
 export function findEntry(place, ref) {
   const plants = place.properties.plants;
-  if (typeof ref === 'string') {
-    const byId = plants.find(e => e.id === ref);
-    if (byId || !/^\d+$/.test(ref)) return byId || null;
-    ref = Number(ref);
-  }
-  return plants.find(e => e.plantId === ref) || null;
+  return (typeof ref === 'string' ? plants.find(e => e.id === ref) : plants.find(e => e.plantId === ref)) || null;
 }
 
 /** All the occurrences of a plant in a collection (a place may hold several, along a walk). @param {Place} place @param {number | null} plantId */
@@ -466,9 +460,11 @@ export async function refreshMembership() {
     }
   }
   const favorites = new Set(all.find(c => c.id === FAVORITES_ID)?.properties.plantIds || []);
-  // Plant → one place where it is noted (📍 in the results grid opens it on the map).
+  // Plant → where it was noted first: the first lieu holding it and its first noting there (📍 in the results grid
+  // opens that noting on the Carte: focus=, an entry id).
+  /** @type {Map<number, { place: string, entry: string }>} */
   const placed = new Map();
-  for (const c of all) if (isPlace(c)) for (const id of c.properties.plantIds) if (!placed.has(id)) placed.set(id, c.id);
+  for (const c of all) if (isPlace(c)) for (const e of c.properties.plants) if (e.plantId !== null && !placed.has(e.plantId)) placed.set(e.plantId, { place: c.id, entry: e.id });
   const collections = all
     .map(c => ({ id: c.id, name: placeTitle(c), kind: c.properties.kind, count: c.properties.plants.length }))
     .sort((a, b) => (a.kind === 'favorites' ? -1 : b.kind === 'favorites' ? 1 : 0) || a.name.localeCompare(b.name, 'fr'));

@@ -1,8 +1,8 @@
 // « Écran sur mesure » (#/layout, app/layout/gf-layout.js): one screen, in use or being modified (« Modifier ⇄ Terminé »,
 // edit=1). Here: the home (« Composer un écran »: three grids and the models, each drawn small, each opened being
-// modified; Back returns to it), « Changer de modèle », « Créer une app »'s old addresses (#/builder…: the screen they
-// name, in their place) and Réglages' card; the cross (cut four ways — the new « Emplacement »'s first tile focused —,
-// moved, taken out; 12 cells at most, the last one stays; Échap); the grips; « Modifier ⇄ Terminé » (one entry, every
+// modified; Back returns to it), « Changer de modèle », a stray edit=1 on the home and Réglages' card; the cross (cut
+// four ways — the new « Emplacement »'s first tile focused —, moved, taken out; 12 cells at most, the last one stays;
+// Échap); the grips; « Modifier ⇄ Terminé » (one entry, every
 // change replacing the address and given to the entry it was entered from: « Terminé » and Back land on the screen as
 // modified; opened modified, « Terminé » replaces it in place); the cells kept across the toggle (the same map, no tile
 // asked again); the picker closed by « Terminé » and by Back; « Avancé » (the text typed, what is wrong said, a
@@ -90,27 +90,12 @@ test.describe('un grand écran', () => {
     expect(await editing(page)).toBe(true);
   });
 
-  test('les anciens liens de « Créer une app » : l’écran qu’ils nomment, en modification, à leur place ; la carte de Réglages', async ({ app, page }) => {
+  test('l’accueil avec un edit=1 de trop : l’accueil ; la carte de Réglages', async ({ app, page }) => {
     await app.open('#/settings');
-    const entries = await page.evaluate(() => history.length);
-    await app.go('#/builder/trois');
-    await expect.poll(() => hash(page)).toBe('#/layout/[slot@30,slot@35,slot]?edit=1');
-    await expect(page.locator('gf-layout section.cell')).toHaveCount(3);
-    // The link's own entry, replaced: none more.
-    expect(await page.evaluate(() => history.length)).toBe(entries + 1);
-    await page.goBack();
-    await expect.poll(() => hash(page)).toBe('#/settings');
-    await app.go('#/builder/tableau?g=[slot,slot]&' + AT);
-    await expect.poll(() => layoutOf(page)).toBe('[slot,slot]');
-    expect(await param(page, 'at')).toBe('48.85000,2.35000');
-    expect(await param(page, 'edit')).toBe('1');
-    await expect(page.locator('gf-layout section.cell')).toHaveCount(2);
-    // Nothing named, a grid unknown, a stray edit=1: the home.
-    for (const old of ['#/builder', '#/builder?g=', '#/builder/inconnue', '#/layout?edit=1']) {
-      await app.go(old);
-      await expect.poll(() => hash(page), old).toBe('#/layout');
-      await expect(page.locator('gf-layout a[data-grid]')).toHaveCount(3);
-    }
+    // A stray edit=1 on the home: taken off.
+    await app.go('#/layout?edit=1');
+    await expect.poll(() => hash(page)).toBe('#/layout');
+    await expect(page.locator('gf-layout a[data-grid]')).toHaveCount(3);
     // Réglages: « Écran sur mesure » first on the page, « Composer un écran » leads to the home.
     await app.go('#/settings');
     const card = page.locator('gf-settings .builder');

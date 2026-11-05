@@ -149,6 +149,12 @@ test('Réglages › Cartes « 3D » : la Carte en MapLibre — relief, bâtiment
   await expect(map.locator('.gf-gl-mk .gf-place')).toHaveCount(2);
   await plants.first().dispatchEvent('click');
   await expect.poll(() => page.evaluate(() => location.hash)).toContain('focus=');
+  // focus=: a noting of the lieu (its entry id), never a plant id.
+  expect(await page.evaluate(async () => {
+    const q = new URLSearchParams(location.hash.split('?')[1]);
+    const place = await (await import('/app/core/collections.js')).getPlace(q.get('spot') || '');
+    return place?.properties.plants.map((/** @type {any} */ e) => e.id).includes(q.get('focus'));
+  })).toBe(true);
 
   // A long press (right click): « Poser un repère ici ? » with its ghost, as in 2D; confirmed, the reference and its card.
   const box = await map.locator('canvas.maplibregl-canvas').boundingBox();
