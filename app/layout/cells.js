@@ -20,8 +20,9 @@
 //    its maps about « Les résultats », those of its group's search; media: the photos' viewer (gf-media-viewer). Each
 //    shows the current plant;
 //  - deck: Rencontres' cards (miniapp/kit/ma-deck.js) for the plants found in the scope, the one on top the current
-//    plant; a heart: a favourite; each choice said aloud, in the activities' words. On the swipe core
-//    (miniapp/kit/swipes.js), its swipes in memory, its favourites without origin, taken back as left (DeckSession).
+//    plant (one passed, then chosen elsewhere: back in the deck); a heart: a favourite; each choice said aloud, in the
+//    activities' words. On the swipe core (miniapp/kit/swipes.js), its swipes in memory, its favourites without
+//    origin, taken back as left (DeckSession).
 // What is done in a cell with its own controls is kept in the layout (`cell-param` {key: value…}, gf-layout.js: the
 // address is the app, sent as it is): a map's 3D, background, layers (their order, IGN's catalogue, their opacity),
 // period, « Seule », legend, binoculars (« Observations autour » in 3D), its points' sources and the current plant's
@@ -1646,7 +1647,9 @@ export class DlDeck extends LitElement {
     const r = ses.core.decide(card, liked);
     if (!r) return;
     if (r.side === 'match') ses.core.heart();
-    ses.top = null;
+    // The card now on top: the deck's next (made the current plant) — ecrit=0: the current plant's, while it is there.
+    this.#undone = null;
+    ses.top = this.#writes ? null : this.state?.live.plant ?? null;
     const next = ses.deck[0];
     this._said = saidOf({ name: nameOf(card.plant), side: r.side, fav: r.fav, next: next ? nameOf(next.plant) : null });
     if (next && this.#writes) this.state?.pick(next.plant.id, { how: 'replace' });
@@ -1654,20 +1657,35 @@ export class DlDeck extends LitElement {
 
   /**
    * ↺: the last card swiped back on top — a heart that made a favourite: out of the favourites again, only that entry
-   * and only as it left it (entryFavourites: a note, a rating, a harvest given since — the user's, kept).
+   * and only as it left it (entryFavourites: a note, a rating, a harvest given since — the user's, kept). The current
+   * plant again; ecrit=0, on top until the current plant changes or the next swipe.
    */
   #undo() {
     const last = this.#session.core.undo();
     if (!last) return;
+    this.#undone = last.id;
     if (this.#writes) this.state?.pick(last.id, { how: 'replace' });
   }
+
+  /** The current plant last seen (undefined: none yet): a new one, chosen elsewhere, comes on top. @type {number | null | undefined} */
+  #plantSeen = undefined;
+  /** The card ↺ brought back: on top until the current plant changes or the next swipe (ecrit=0). @type {number | null} */
+  #undone = null;
 
   willUpdate() {
     const s = this.state;
     if (!s?.live.at) return;
     this.#cards();
-    this.#session.top = s.live.plant;
-    this.#session.radius = s.radius;
+    const ses = this.#session, plant = s.live.plant;
+    if (plant !== this.#plantSeen) {
+      this.#plantSeen = plant;
+      this.#undone = null;
+      // Chosen elsewhere, passed here before: back in the deck, on top — as in Rencontres. One loved stays out (its
+      // heart made it a favourite). The deck's own choices (its next card, its first) are never a card passed.
+      if (plant != null && ses.core.swipes.passed.includes(plant)) ses.core.restore(plant);
+    }
+    ses.top = this.#undone ?? plant;
+    ses.radius = s.radius;
   }
 
   disconnectedCallback() {

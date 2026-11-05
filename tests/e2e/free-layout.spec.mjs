@@ -286,15 +286,30 @@ test.describe('un grand écran', () => {
     await expect.poll(favourite).toBe(4);
   });
 
-  test('les cartes de Rencontres : chaque choix dit, avec les mots des activités', async ({ app, page }) => {
+  test('les cartes de Rencontres : chaque choix dit, avec les mots des activités ; une carte passée puis choisie ailleurs, ou reprise par ↺, sur le dessus', async ({ app, page }) => {
+    const ail = plantId(AIL), cigue = plantId('Conium maculatum');
     await app.open(`#/layout/[map(r=500m),deck,plant.status]?${AT}`);
     const deck = page.locator('dl-deck'), top = deck.locator('ma-deck .swipe-card.top'), said = deck.getByRole('status');
-    await expect(top).toHaveAttribute('data-id', String(plantId(AIL)));
+    await expect(top).toHaveAttribute('data-id', String(ail));
     // A heart, then a pass: each said, with the card now on top.
     await deck.locator('ma-deck .round.like').click();
     await expect(said).toHaveText('Match : Ail des ours, ajoutée aux favoris. Carte suivante : Ciguë maculée.');
     await deck.locator('ma-deck .round.pass').click();
     await expect(said).toHaveText('Passée : Ciguë maculée. Carte suivante : Ortie dioïque.');
+    // The plant passed, chosen elsewhere (a link to it): back in the deck, on top — the one loved stays out.
+    await app.go(`#/layout/[map(r=500m),deck,plant.status]?p=${cigue}&${AT}&r=500m`);
+    await expect(top).toHaveAttribute('data-id', String(cigue));
+    await expect(deck.locator('ma-deck .left')).toHaveText('2 plantes à rencontrer');
+    // ecrit=0 (the deck following the current plant, never changing it): the current plant's card passed, another
+    // plant chosen in the results, ↺ — the card taken back on top, not the current plant.
+    await app.go(`#/layout/[deck(ecrit=0),results(list)]?p=${ail}&${AT}&r=500m`);
+    await expect(top).toHaveAttribute('data-id', String(ail));
+    await deck.locator('ma-deck .round.pass').click();
+    await expect(top).toHaveAttribute('data-id', String(cigue));
+    await page.locator('dl-results gf-plant-card').filter({ hasText: 'Ortie dioïque' }).locator('a.row').click();
+    await expect(top).toHaveAttribute('data-id', String(plantId(ORTIE)));
+    await deck.locator('ma-deck .round.undo').click();
+    await expect(top).toHaveAttribute('data-id', String(ail));
   });
 
   test('les cartes de Rencontres, ← → depuis la page : seulement un paquet visible — replié, rien ; deux à l’écran, celui qui a le focus', async ({ app, page }) => {
