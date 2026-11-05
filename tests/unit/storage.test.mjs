@@ -132,6 +132,18 @@ test('import : fusion par collection, plantes des deux côtés gardées (STO-13)
   assert.equal((await C.importPortable(incoming)).unchanged, 1);
 });
 
+test('relue, la mise en page ne garde que ses parties d’aujourd’hui', async () => {
+  const { store, emptyLayout } = await import('../../app/core/store.js');
+  const key = config.storageKeys.sheetLayout;
+  // Written by a version of before (or another tab): read again, as on a `storage` event.
+  localStorage.setItem(key, JSON.stringify({ order: { standard: ['map'] }, pinned: { standard: ['map'] }, place: {} }));
+  dispatchEvent(Object.assign(new Event('storage'), { key, storageArea: localStorage }));
+  assert.deepEqual(Object.keys(store.state.sheetLayout).sort(), Object.keys(emptyLayout()).sort());
+  assert.deepEqual(store.state.sheetLayout.order.standard, ['map']);
+  localStorage.removeItem(key);
+  dispatchEvent(Object.assign(new Event('storage'), { key, storageArea: localStorage }));
+});
+
 test('markWalks : les parcours d’avant la marque, marqués une fois, la copie de secours suivie, rien d’autre écrit', async () => {
   const at = /** @type {[number, number]} */ ([2.35, 48.85]);
   const old = '2026-06-01T08:00:00.000Z';

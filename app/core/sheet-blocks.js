@@ -13,7 +13,7 @@
 import { config } from '../config.js';
 import { MODULES, moduleOn } from './modules.js';
 import { baseOf, importModes, modeKeys, ownModes } from './modes.js';
-import { emptyLayout, migratePlaces, migrateTree, store } from './store.js';
+import { emptyLayout, store } from './store.js';
 import { deleteNoteTexts, fromPortable, mergeNoteTexts, noteText as storedText, portableNotes, setNoteText as storeText } from './sheet-notes.js';
 import { writeJSON } from './prefs.js';
 import { cleanOwnLook } from './map-settings.js';
@@ -719,8 +719,8 @@ const perBlock = v => v && typeof v === 'object' && !Array.isArray(v) && Object.
 /**
  * Applies a layout file. Throws (and changes nothing) when it is not one. Every Note block of this device stays (after
  * the file's: those it does not have). A file of before carries note texts: they are added to this device's, never over
- * them (a layout shared by someone else does not erase what was written here). The layout is applied at once; the
- * promise resolves once the texts are stored.
+ * them (a layout shared by someone else does not erase what was written here). A file of version 1 is read without its
+ * panes. The layout is applied at once; the promise resolves once the texts are stored.
  * @param {string} text @returns {Promise<number>} how many texts were added
  */
 export function importLayout(text) {
@@ -728,12 +728,8 @@ export function importLayout(text) {
   try { data = JSON.parse(text); } catch { throw new Error('Ce fichier n’est pas du JSON.'); }
   if (data?.app !== 'geoflora' || data?.kind !== 'sheet-layout') throw new Error('Ce fichier n’est pas une mise en page de fiche GeoFlora.');
   if (data.version !== 1 && data.version !== 2) throw new Error('Version de mise en page inconnue : ' + data.version);
-  // Layouts of earlier versions: pinned blocks, their dock and blocks « en volet » became places, then the tree.
-  const old = migratePlaces(data.layout || {});
-  const validOld = perView(old.place || {}, (/** @type {any} */ x) => x && typeof x === 'object' && !Array.isArray(x) && Object.values(x).every(p => ['top', 'bottom', 'left', 'right', 'beside'].includes(/** @type {any} */ (p))))
-    && perView(old.edges || {}, (/** @type {any} */ x) => x && typeof x === 'object' && !Array.isArray(x) && Object.keys(x).every(e => ['top', 'bottom', 'left', 'right'].includes(e)));
-  if (!validOld) throw new Error('Mise en page illisible ou incomplète.');
-  const l = migrateTree(old);
+  // Version 1 (before the tree of panes) is read as it is: its blocks go into the sheet, its panes are left out.
+  const l = data.layout || {};
   const valid = perView(l.order || {}, isKeyList) && perView(l.hidden || {}, isKeyList)
     && perView(l.subOrder || {}, perBlock) && perView(l.subHidden || {}, perBlock)
     && perView(l.titleShown || {}, (/** @type {any} */ x) => x && typeof x === 'object' && Object.values(x).every(v => typeof v === 'boolean'))
@@ -745,9 +741,8 @@ export function importLayout(text) {
     && (!l.mapBlocks || (Array.isArray(l.mapBlocks) && l.mapBlocks.every((/** @type {any} */ m) => typeof m?.id === 'string' && /^[a-z0-9]{1,24}$/.test(m.id) && typeof m.title === 'string' && m.title.length <= 60)))
     && (!l.maps || (typeof l.maps === 'object' && !Array.isArray(l.maps) && Object.keys(l.maps).every(k => k === 'map' || /^map:[a-z0-9]{1,24}$/.test(k))))
     && (!data.notes || (typeof data.notes === 'object' && Object.values(data.notes).every(byPlant => byPlant && typeof byPlant === 'object' && Object.values(byPlant).every(t => typeof t === 'string'))));
-  // `modulesOff` (files of earlier versions: the services folded with their blocks, per mode) is left aside: services
-  // are this device's, chosen in Réglages › Modules, and a layout never switches one. So is `maps3d` (Réglages ›
-  // Cartes, which files of before carried): this device's too.
+  // Any other field is left aside (a file of before: its services, Réglages › Cartes, version 1's panes): a layout never
+  // changes this device's settings.
   if (!valid) throw new Error('Mise en page illisible ou incomplète.');
   importModes(data.modes || []);
   // This device's Note blocks the file has not are kept, after the file's (with or without a text yet).

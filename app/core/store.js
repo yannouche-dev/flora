@@ -4,7 +4,6 @@
 import { config } from '../config.js';
 import { moduleEvents, modulesState } from './modules.js';
 import { baseOf, isMode, modeEvents, modeList } from './modes.js';
-import { treeFromPlaces } from './pane-tree.js';
 import { readJSON, readText, writeText } from './prefs.js';
 import { quotaEvents } from './quota.js';
 import { onStorage } from './sync.js';
@@ -106,48 +105,15 @@ const readObject = key => {
 };
 
 /**
- * Layouts of earlier versions: blocks « pinned » (one dock, on one side) and « en volet » become places —
- * the dock's side ('auto' was on the right) and size go to that edge. Nothing else changes.
- * @param {any} l @returns {any}
+ * The saved layout: its parts of today only (anything else an earlier version kept there is left out, and goes at the
+ * next save). @returns {SheetLayout}
  */
-export function migratePlaces(l) {
-  if (!l || (!l.pinned && !l.paned && !l.dock)) return l;
-  const place = { ...(l.place || {}) }, edges = { ...(l.edges || {}) };
-  const views = new Set([...Object.keys(l.pinned || {}), ...Object.keys(l.paned || {}), ...Object.keys(l.dock || {})]);
-  for (const view of views) {
-    const dock = l.dock?.[view] || {};
-    const edge = ['left', 'right', 'top', 'bottom'].includes(dock.side) ? dock.side : 'right';
-    const mine = { ...(place[view] || {}) };
-    for (const k of l.pinned?.[view] || []) mine[k] ??= edge;
-    for (const k of l.paned?.[view] || []) mine[k] ??= 'beside';
-    if (Object.keys(mine).length) place[view] = mine;
-    if ((l.pinned?.[view] || []).length && (dock.size || dock.folded)) {
-      edges[view] = { ...(edges[view] || {}), [edge]: { size: ['s', 'm', 'l'].includes(dock.size) ? dock.size : 'm', folded: dock.folded === true } };
-    }
-  }
-  const { pinned, paned, dock, ...rest } = l;
-  return { ...rest, place, edges };
-}
-
-/**
- * Layouts of the previous version: blocks stuck to an edge of the plant pane (`place`, `edges`) become the tree
- * of panes (pane-tree.js), mode by mode. Nothing else changes.
- * @param {any} l @returns {any}
- */
-export function migrateTree(l) {
-  if (!l || (!l.place && !l.edges)) return l;
-  const tree = { ...(l.tree || {}) };
-  for (const view of new Set([...Object.keys(l.place || {}), ...Object.keys(l.edges || {})])) {
-    if (tree[view]) continue;
-    const t = treeFromPlaces(l.place?.[view] || {}, l.edges?.[view] || {}, l.order?.[view] || []);
-    if (t) tree[view] = t;
-  }
-  const { place, edges, ...rest } = l;
-  return { ...rest, tree };
-}
-
-/** The saved layout (none: the defaults). @returns {SheetLayout} */
-const readLayout = () => ({ ...emptyLayout(), ...migrateTree(migratePlaces(readObject(config.storageKeys.sheetLayout) || {})) });
+const readLayout = () => {
+  const saved = readObject(config.storageKeys.sheetLayout) || {};
+  const layout = emptyLayout();
+  for (const k of /** @type {(keyof SheetLayout)[]} */ (Object.keys(layout))) if (k in saved) /** @type {any} */ (layout)[k] = saved[k];
+  return layout;
+};
 
 const initialMode = readMode(config.storageKeys.mode) || 'standard';
 /** An override equal to the mode is no override. @param {string} key */

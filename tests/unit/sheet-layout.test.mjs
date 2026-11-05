@@ -70,6 +70,24 @@ test('resetAll retire les volets : la fiche seule', () => {
   assert.equal(SB.treeOf('standard').t, 'sheet');
 });
 
+test('un fichier de la version 1 : ses blocs dans la fiche, leur ordre, leurs titres et ses blocs Note ; ses panneaux d’avant ignorés', () => {
+  SB.resetAll();
+  SB.importLayout(JSON.stringify({ app: 'geoflora', kind: 'sheet-layout', version: 1, modes: [], layout: {
+    order: { standard: ['map', 'uses'] }, hidden: { standard: ['calendar'] }, titles: { map: 'Ma carte' }, notes: [{ id: 'terrain', title: 'Terrain' }],
+    pinned: { standard: ['map'] }, dock: { standard: { side: 'left', size: 'l' } }, place: { standard: { uses: 'beside' } }, edges: { standard: { left: { size: 's' } } }
+  } }));
+  const order = SB.blockOrder('standard');
+  assert.ok(order.indexOf('map') < order.indexOf('uses'), 'son ordre');
+  assert.ok(SB.foldedByHand('standard', 'calendar'));
+  assert.equal(store.state.sheetLayout.titles.map, 'Ma carte');
+  assert.ok(store.state.sheetLayout.notes.some(n => n.id === 'terrain'));
+  assert.equal(SB.isOnEdge('standard', 'map'), false);
+  assert.equal(SB.treeOf('standard').t, 'sheet', 'ses panneaux d’avant : la fiche seule');
+  for (const k of ['pinned', 'dock', 'place', 'edges']) assert.ok(!(k in store.state.sheetLayout), k);
+  assert.equal(JSON.parse(SB.exportLayout()).version, 2);
+  SB.resetAll();
+});
+
 test('undockAlone : les volets que les étapes guidées d’avant avaient posés retournent dans la fiche, ceux que l’utilisateur a changés restent', () => {
   SB.resetAll();
   // As the guided steps of before left them: the photos beside the sheet, the encyclopedia under them, the fork's tabs.
