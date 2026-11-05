@@ -43,9 +43,8 @@ export function parse(hash) {
   }
 
   if (path === 'map') {
-    // The plant filter (plants=12,34; plant=12: older links): each plant once, in the order given.
-    const listed = (params.get('plants') || '').split(',').filter(v => /^\d+$/.test(v)).map(Number);
-    const plants = params.has('plants') ? [...new Set(listed)] : number('plant') !== null ? [/** @type {number} */ (number('plant'))] : [];
+    // The plant filter (plants=12,34): each plant once, in the order given.
+    const plants = [...new Set((params.get('plants') || '').split(',').filter(v => /^\d+$/.test(v)).map(Number))];
     return {
       name: 'map', spot: params.get('spot'), plants, focus: focusParam(params.get('focus')), season: params.get('season') === '1',
       add: number('add'), pick: params.get('pick') === '1'

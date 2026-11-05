@@ -66,7 +66,7 @@ test('la Carte : « Sur cette carte » après « Fond » — la répartition GBI
   page.on('request', r => { if (/^https:\/\/api\.gbif\.org\/v2\/map\/occurrence\//.test(r.url())) asked.push(r.url()); });
   await app.open('#/collections');
   await seedPlace(page, [2.3505, 48.8505]);
-  await app.go(`#/map?plant=${plantId('Urtica dioica')}`);
+  await app.go(`#/map?plants=${plantId('Urtica dioica')}`);
   const carte = page.locator('gf-map-page');
   const map = carte.locator('gf-map');
   const markers = map.locator('.leaflet-marker-pane .leaflet-marker-icon');

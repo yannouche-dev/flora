@@ -412,9 +412,6 @@ test('Carte : le filtre de plantes dans l’adresse', async ({ app, page }) => {
   await tabLink(app, page, 'Carte').click();
   await expect.poll(() => hash(page)).toBe(`#/map?plants=${a},${b}`);
   await expect(plants).toContainText('Plantes · 2');
-  // A link of before (plant=): its plant filtered.
-  await app.go(`#/map?plant=${a}`);
-  await expect(plants).toContainText('Plantes · 1');
 
   // A place open, the filter changed beside it: the place closes onto the Carte filtered as now — never as it was
   // before the place opened; Back does not open the place again.
@@ -431,7 +428,6 @@ test('Carte : le filtre de plantes dans l’adresse', async ({ app, page }) => {
     await expect.poll(() => hash(page)).toBe('#/settings');
   };
   await changedBeside(`#/map?plants=${a},${b}`, () => tick(/Ortie/), `#/map?plants=${a}`);
-  await changedBeside(`#/map?plant=${a}`, () => tick(/Ortie/), `#/map?plants=${a},${b}`);
   // « En saison » (the harvest journal on), the same.
   await page.evaluate(async ([i, p]) => {
     const c = await import('/app/core/collections.js');

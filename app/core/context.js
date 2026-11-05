@@ -38,7 +38,7 @@ function read() {
     query: str(saved.query, '#/'),
     collection: typeof saved.collection === 'string' ? saved.collection : null,
     mine: str(saved.mine, '#/collections'),
-    map: old.length && !/[?&]plants?=/.test(map ?? '') ? (map ?? '#/map') + ((map ?? '').includes('?') ? '&' : '?') + 'plants=' + old.join(',') : map
+    map: old.length && !/[?&]plants=/.test(map ?? '') ? (map ?? '#/map') + ((map ?? '').includes('?') ? '&' : '?') + 'plants=' + old.join(',') : map
   };
 }
 
