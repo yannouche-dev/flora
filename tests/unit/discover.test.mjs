@@ -3,8 +3,8 @@
 // a screen shown brings its tab, `#/` alone none (its caller, context.js, leaves it out). Each tab that comes waits to
 // be announced once (`announced`, pendingUnlocks, markAnnounced: gf-app shows it), in the bar's order; the start, a
 // repair's restore and « Revoir les premiers pas » bring theirs quietly (announced at once), « Passer » and « Tout
-// montrer maintenant » announce nothing. The state of before read again: its tips (never read) dropped, its tabs only
-// those that come and announced then; a state the storage refused keeps its tabs. Against an IndexedDB in memory
+// montrer maintenant » announce nothing. The state read again: its fields only (anything else dropped), its tabs only
+// those that come; a state the storage refused keeps its tabs. Against an IndexedDB in memory
 // (fake-indexeddb). The module reads and writes as it loads, and this file is its own process: the tests run in order,
 // on one state.
 import 'fake-indexeddb/auto';
@@ -19,8 +19,8 @@ globalThis.fetch = /** @type {any} */ (async (/** @type {any} */ input, /** @typ
   String(input instanceof Request ? input.url : input).startsWith('file:') ? nodeFetch(input, init) : new Response('', { status: 503 }));
 
 const KEY = 'geoflora.discover';
-// A device of before: its tips, a tab that no longer exists, two plants met.
-localStorage.setItem(KEY, JSON.stringify({ done: false, unlocked: ['map', 'nope'], tips: ['x'], seen: [1, 2], step: 0 }));
+// A device of before: its tips and the games' session it kept here, a tab that no longer exists, two plants met.
+localStorage.setItem(KEY, JSON.stringify({ done: false, unlocked: ['map', 'nope'], announced: ['map'], tips: ['x'], point: [2.35, 48.85], place: 'Paris', matches: [7], seen: [1, 2], step: 0 }));
 
 const d = await import('../../app/core/discover.js');
 const c = await import('../../app/core/collections.js');
@@ -36,15 +36,17 @@ async function writes(work) {
   return n;
 }
 
-test('l’état d’avant relu : ses astuces oubliées, ses onglets seulement ceux qui viennent, annoncés alors', () => {
+test('l’état relu : ses champs seulement (ni astuces ni partie d’avant), ses onglets seulement ceux qui viennent', () => {
   assert.deepEqual(d.discoverState().unlocked, ['map']);
   assert.deepEqual(d.discoverState().seen, [1, 2]);
   assert.equal('tips' in d.discoverState(), false);
-  // No announcement replayed.
   assert.deepEqual(d.discoverState().announced, ['map']);
   assert.deepEqual(d.pendingUnlocks(), []);
   // Written back once, cleaned.
   assert.equal('tips' in stored(), false);
+  assert.equal('point' in stored(), false);
+  assert.equal('place' in stored(), false);
+  assert.equal(localStorage.getItem('geoflora.app.rencontres.state'), null, 'rien n’est donné à Rencontres');
   assert.deepEqual(stored().unlocked, ['map']);
   assert.deepEqual(stored().announced, ['map']);
 });

@@ -2,9 +2,8 @@
 // session: its start, its map and distance, its cards (#/app/<id>/<step>); Cueillette prudente's safety warnings exactly
 // as before (never pick without a certain identification, the look-alikes, the deadliest first, toxicity) — a deadly
 // plant seen once among more than 120 is in its deck, a toxic look-alike is never a match nor a favourite (« à ne pas
-// cueillir »), an empty list says one thing; Mosaïque's photo grid; the session the three shared before handed over to
-// Rencontres; « Recommencer » in one leaving the others as they were; the parcours of before their mark, marked once
-// (collections.js#markWalks). Rencontres' services answered here.
+// cueillir »), an empty list says one thing; Mosaïque's photo grid; « Recommencer » in one leaving the others as they
+// were; the parcours of before their mark, marked once (collections.js#markWalks). Rencontres' services answered here.
 import { readFileSync } from 'node:fs';
 import { test, expect, plantId, answerAround, fixturePlants } from './fixtures.mjs';
 
@@ -231,47 +230,6 @@ async function toCardsAny(page, id) {
   await toCards(page, id);
   await expect(page.locator('ma-around-list .head')).toBeVisible();
 }
-
-test.describe('la partie partagée d’avant', () => {
-  test('donnée à Rencontres (rien ne dit laquelle a été jouée), une fois ; ses favoris restent à soi', async ({ app, page, context }) => {
-    const ail = plantId('Allium ursinum');
-    await context.addInitScript(id => {
-      if (sessionStorage.getItem('seeded')) return;
-      sessionStorage.setItem('seeded', '1');
-      localStorage.setItem('geoflora.discover', JSON.stringify({ done: true, point: [2.35, 48.85], place: 'Paris', radius: 2000, matches: [id], passed: [] }));
-    }, ail);
-    await app.open('#/discover');
-    expect(await kept(page, 'rencontres')).toEqual({ point: [2.35, 48.85], place: 'Paris', radius: 2000, matches: [ail], passed: [] });
-    expect(await kept(page, 'cueillette')).toBe(null);
-    expect(await kept(page, 'mosaique')).toBe(null);
-    const discover = await page.evaluate(() => JSON.parse(localStorage.getItem('geoflora.discover') || 'null'));
-    expect(discover.point).toBeUndefined();
-    expect(discover.done).toBe(true);
-    const launcher = page.locator('gf-launcher[page]');
-    await expect(launcher.getByRole('button', { name: 'Commencer : Mosaïque', exact: true })).toBeVisible();
-    await expect(launcher.getByRole('button', { name: 'Continuer : Cueillette prudente' })).toHaveCount(0);
-    // A favourite of before (its match then): the user's, never tagged — Recommencer Rencontres keeps it.
-    await page.evaluate(async id => {
-      const db = await import('/app/core/db.js');
-      await (await import('/app/core/collections.js')).toggleFavorite(await db.get('plants', id));
-      await db.remove('meta', 'origins');
-    }, ail);
-    await page.reload();
-    await app.ready();
-    const origin = () => page.evaluate(async id => {
-      const fav = (await (await import('/app/core/collections.js')).listCollections()).find((/** @type {any} */ c) => c.id === 'favorites');
-      const e = fav?.properties.plants.find((/** @type {any} */ x) => x.plantId === id);
-      return e ? e.origin ?? 'none' : 'gone';
-    }, ail);
-    await expect.poll(() => page.evaluate(async () => Boolean(await (await import('/app/core/db.js')).get('meta', 'origins')))).toBe(true);
-    expect(await origin()).toBe('none');
-    await launcher.getByRole('button', { name: 'Recommencer : Rencontres' }).click();
-    await expect(launcher.locator('dialog.ask')).toContainText('Seront supprimés : la partie en cours.');
-    await launcher.locator('dialog.ask').getByRole('button', { name: 'Recommencer' }).click();
-    await expect.poll(() => hash(page)).toBe('#/app/rencontres/start');
-    expect(await origin()).toBe('none');
-  });
-});
 
 test('les parcours d’avant la marque deviennent des parcours, une fois ; la liste de l’appareil oubliée, la copie de secours suivie', async ({ app, page }) => {
   await app.open('#/');
