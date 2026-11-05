@@ -927,7 +927,7 @@ export class GfSpotEditor extends LitElement {
     return html`<div class="gps card" aria-live="polite">
       <span class="dot ${good ? 'good' : 'weak'}"></span>
       Position GPS <strong>± ${Math.round(fix.accuracy)} m</strong>
-      <span class="hint">${good ? 'Précision suffisante.' : 'Précision faible : patientez à découvert, ou ajustez l’épingle.'}</span>
+      <span class="hint">${good ? 'Précision suffisante.' : 'Précision faible : patientez à découvert, ou ajustez le repère.'}</span>
       ${this.#isNew && moduleOn('ignGeo') ? html`<span class="hint">Le point est envoyé à l’IGN pour son adresse et son altitude ; le lieu reste sur cet appareil.</span>` : nothing}
     </div>`;
   }
