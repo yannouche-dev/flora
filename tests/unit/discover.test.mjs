@@ -302,7 +302,7 @@ test('unlock : un onglet donné, à annoncer (les tests s’en servent)', async 
   assert.equal(await writes(() => d.unlock('flore')), 0);
 });
 
-test('un état sans `announced` (d’avant qu’il soit gardé), premiers pas finis ou non : ses onglets annoncés une fois de plus, puis plus jamais', () => {
+test('un état sans `announced` (d’avant qu’il soit gardé), premiers pas finis ou non : ses onglets tenus pour annoncés, jamais annoncés de nouveau', () => {
   /** The state as stored, read again (another tab wrote it). @param {object} s */
   const reread = s => {
     localStorage.setItem(KEY, JSON.stringify(s));
@@ -310,12 +310,8 @@ test('un état sans `announced` (d’avant qu’il soit gardé), premiers pas fi
   };
   // The three tabs come one by one, the first steps over by them.
   reread({ done: true, unlocked: ['mine', 'map', 'flore'], tips: ['x'], seen: [1, 2, 3, 4, 5], step: 2 });
-  assert.deepEqual(d.pendingUnlocks(), ['flore', 'map', 'mine']);
-  d.markAnnounced(d.pendingUnlocks());
   assert.deepEqual(d.pendingUnlocks(), []);
-  assert.deepEqual(stored().announced, ['mine', 'map', 'flore']);
-  // « Passer » after one tab had come: announced too.
+  // « Passer » after one tab had come: none either.
   reread({ done: true, unlocked: ['mine'], seen: [], step: 5 });
-  assert.deepEqual(d.pendingUnlocks(), ['mine']);
-  d.markAnnounced(['mine']);
+  assert.deepEqual(d.pendingUnlocks(), []);
 });

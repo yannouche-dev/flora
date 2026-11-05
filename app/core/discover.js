@@ -59,9 +59,11 @@ function read() {
   const saved = readJSON(KEY, null);
   if (saved && typeof saved === 'object') {
     // Its fields only (anything else a version of before kept here, the games' session or the tips, goes at the write
-    // below); the tabs only those that come.
+    // below); the tabs only those that come. A state from before `announced` was kept (2026-10-30): its tabs, had for
+    // long, taken as announced — never a toast for them on that device's first launch since.
     const kept = Object.fromEntries(Object.keys(fresh).filter(k => k in saved).map(k => [k, saved[k]]));
-    return { ...fresh, ...kept, unlocked: tabsIn(saved.unlocked), announced: tabsIn(saved.announced) };
+    const announced = Array.isArray(saved.announced) ? saved.announced : saved.unlocked;
+    return { ...fresh, ...kept, unlocked: tabsIn(saved.unlocked), announced: tabsIn(announced) };
   }
   return usedBefore() ? { ...fresh, done: true } : fresh;
 }
