@@ -175,9 +175,8 @@ export function cleanOwnLook(value) {
   const out = {};
   // A background exactly (core/backgrounds.js): never a key of another version, nor one an object inherits (« constructor »).
   if (isBaseKey(v.base)) out.base = v.base;
-  // « Noms et réseaux »; a look of before, its names on or off (the usual ones, or none).
+  // « Noms et réseaux ».
   if (Array.isArray(v.landmarks)) out.landmarks = cleanLandmarks(v.landmarks);
-  else if (typeof v.names === 'boolean') out.landmarks = v.names ? [...LANDMARK_DEFAULTS] : [];
   if (Array.isArray(v.overlays)) out.overlays = cleanOverlays(v.overlays);
   if (v.opacities && typeof v.opacities === 'object' && !Array.isArray(v.opacities)) out.opacities = cleanOpacities(v.opacities);
   return Object.keys(out).length ? out : null;
@@ -185,8 +184,7 @@ export function cleanOwnLook(value) {
 
 /**
  * mapLayer as kept: the background, « Noms et réseaux », the overlays, and the GBIF distribution layer of the Carte's
- * panel (not a look: kept beside it, as before). `cadastre: true` from earlier versions becomes an overlay; `names:
- * false`, none of « Noms et réseaux » (anything else there, the usual ones).
+ * panel (not a look: kept beside it). `names: false`: none of « Noms et réseaux » (anything else there, the usual ones).
  * @typedef {{ base: BaseKey, landmarks: string[], overlays: string[], distribution: boolean }} StoredLayers
  * @param {unknown} value @returns {StoredLayers}
  */
@@ -195,7 +193,7 @@ function cleanLayers(value) {
   return {
     base: isBaseKey(v.base) ? v.base : LOOK_DEFAULTS.base,
     landmarks: Array.isArray(v.landmarks) ? cleanLandmarks(v.landmarks) : v.names === false ? [] : [...LANDMARK_DEFAULTS],
-    overlays: cleanOverlays(Array.isArray(v.overlays) ? v.overlays : v.cadastre === true ? ['cadastre'] : []),
+    overlays: cleanOverlays(v.overlays),
     distribution: v.distribution === true
   };
 }

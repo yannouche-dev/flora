@@ -569,17 +569,6 @@ export const MAP_DEFAULTS = {
 
 const MAP_CHOICES = { gbif: ['fr', 'world', 'off'], near: ['off', 'gbif', 'inat', 'both'], frame: ['auto', 'france', 'world', 'content', 'me', 'region'], height: ['s', 'm', 'l'], subject: ['plant', 'results', 'collection'] };
 
-/**
- * The look of a configuration of before (its own background, « plan » unless chosen, and IGN overlays, set in the
- * block's form): carried into its own look when it was not that default (the plan, no overlay) — a block left as it
- * was follows the common look, as every map. @param {any} c @returns {Partial<import('./map-settings.js').MapLook> | null}
- */
-function oldLook(c) {
-  const base = c.base === 'photo' ? 'photo' : 'plan';
-  const overlays = Array.isArray(c.overlays) ? c.overlays : [];
-  return base !== 'plan' || overlays.length ? cleanOwnLook({ base, overlays }) : null;
-}
-
 /** A map's configuration, cleaned (unknown values give the default). @param {any} saved @returns {MapConfig} */
 function cleanMap(saved) {
   const c = saved && typeof saved === 'object' ? saved : {};
@@ -588,8 +577,8 @@ function cleanMap(saved) {
   if (typeof c.places === 'boolean') out.places = c.places;
   if (typeof c.collection === 'string' && c.collection.length < 80) out.collection = c.collection;
   if (out.subject === 'collection' && !out.collection) out.subject = 'plant';
-  // Its look: kept as `look` (null: the common one); a configuration of before, read once from its old fields.
-  out.look = 'look' in c ? cleanOwnLook(c.look) : oldLook(c);
+  // Its look: kept as `look` (null: the common one).
+  out.look = cleanOwnLook(c.look);
   for (const a of Object.keys(MAP_DEFAULTS.actions)) if (typeof c.actions?.[a] === 'boolean') out.actions[a] = c.actions[a];
   return out;
 }
