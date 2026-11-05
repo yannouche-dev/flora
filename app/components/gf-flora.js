@@ -55,20 +55,6 @@ const PANES = {
 /** @typedef {'filters' | 'results' | 'plant'} Pane */
 
 /**
- * The layout as Flore kept it before core/panes.js ({ filters, plant, plantPinned, folded }): its widths and folds.
- * @param {any} raw @returns {import('../core/panes.js').PaneState}
- */
-function legacyLayout(raw) {
-  /** @type {Record<string, number>} */
-  const widths = {};
-  for (const k of ['filters', 'plant', 'plantPinned']) if (Number.isFinite(raw[k]) && raw[k] !== /** @type {any} */ (PANES)[k].width) widths[k] = Math.round(raw[k]);
-  /** @type {Record<string, boolean>} */
-  const folded = {};
-  for (const [k, v] of Object.entries(raw.folded || {})) if (v === true) folded[k] = true;
-  return { widths, folded };
-}
-
-/**
  * The Flore tab. Desktop: Filtres ┃ Résultats ┃ Plante, each pane foldable (vertical rail) and resizable
  * (core/panes.js: drag the separators, or focus one and use ← →, Début / Fin; double-click or Entrée resets; widths
  * and folds kept under floraLayout). Tablet: filters in a bottom sheet,
@@ -637,7 +623,7 @@ export class GfFlora extends LitElement {
   }
 
   /** The panes' widths and folds, kept (floraLayout; the separators: core/panes.js). */
-  #sizer = new PaneSizer(this, config.storageKeys.floraLayout, PANES, { legacy: legacyLayout });
+  #sizer = new PaneSizer(this, config.storageKeys.floraLayout, PANES);
 
   /** @param {Pane} pane @param {boolean} folded */
   #fold(pane, folded) { this.#sizer.fold(pane, folded); }

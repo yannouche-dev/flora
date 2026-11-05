@@ -81,11 +81,11 @@ test.describe('ordinateur', () => {
     expect(await noSideScroll(page)).toBe(true);
   });
 
-  test('Flore : l’ancienne mise en page est reprise ; des largeurs trop grandes ne font jamais défiler de côté', async ({ app, page }) => {
+  test('Flore : des largeurs trop grandes ne font jamais défiler de côté', async ({ app, page }) => {
     await page.addInitScript(() => {
       if (!sessionStorage.getItem('seeded')) {
         sessionStorage.setItem('seeded', '1');
-        localStorage.setItem('geoflora.floraLayout', JSON.stringify({ filters: 300, plant: 3000, plantPinned: 900, folded: { filters: false, results: false, plant: false } }));
+        localStorage.setItem('geoflora.floraLayout', JSON.stringify({ widths: { filters: 300, plant: 3000, plantPinned: 900 }, folded: {} }));
       }
     });
     await app.open(`#/plant/${plantId('Urtica dioica')}`);
