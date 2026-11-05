@@ -28,7 +28,7 @@ import { MAP_CONTROL_ALIASES, MAP_CONTROLS, MAP_INTENT_ALIASES, MAP_INTENTS, MAP
  *   named?: boolean, max?: number, frame?: boolean, own?: boolean, more?: (word: string) => string | undefined, ordered?: boolean,
  *   read?: (text: string) => string | undefined, unset?: string, expects?: string, check?: (v: any, params: Record<string, any>) => string | undefined,
  *   offer?: (params: Record<string, any>) => string[], say?: (v: any, params: Record<string, any>, marked: Set<string>) => string | undefined,
- *   sets?: Record<string, string[]>, alone?: string[], write?: (v: any) => string, none?: string }} ParamSpec
+ *   sets?: Record<string, string[]>, alone?: string[], write?: (v: any) => string, none?: string, shared?: boolean }} ParamSpec
  *   `values`: an enum's (a list's, an intent's) canonical values and their French labels; `aliases`: other spellings of
  *   a value → canonical; `words`: other names of the parameter; `off`: words that, alone, set a yes-or-no one to no
  *   (map(2d)); `group`: its heading in the editor and the README (Où, Fond…); `mark`: its mark in a menu (cellMark),
@@ -55,7 +55,8 @@ import { MAP_CONTROL_ALIASES, MAP_CONTROLS, MAP_INTENT_ALIASES, MAP_INTENTS, MAP
  *   its values, or none (noms=1: the usual ones; noms=off: none); `alone`: its value when named alone (map(noms)), as
  *   a yes-or-no named alone is on; `write`: its value as the address writes it (noms=1 for the usual ones, 0 for none),
  *   else its values joined by « + », « aucune » for none; `none`: its words for none (« sans noms ni réseaux »), else
- *   « ‹label› : aucune ».
+ *   « ‹label› : aucune ». `shared`: it acts on the whole group, not the cell alone (the radius, the period, the
+ *   starting place: group-defaults.js — the first cell that says it wins), said beside its label in the editor.
  * @typedef {'scope' | 'query' | 'results' | 'plant' | 'obs'} StateKey
  * @typedef {{ key: string, title: string }} ViewSpec
  * @typedef {object} ComponentSpec
@@ -100,8 +101,8 @@ export const distanceLabel = m => m < 1000 ? Math.round(m) + ' m' : (Math.round(
 
 const BOOL = { oui: 'true', non: 'false', yes: 'true', no: 'false', on: 'true', off: 'false', vrai: 'true', faux: 'false', 1: 'true', 0: 'false', avec: 'true', sans: 'false', true: 'true', false: 'false' };
 
-/** The radius of the scope: a default, until the address says another one (?r=). @type {ParamSpec} */
-const RADIUS = { kind: 'distance', label: 'Rayon de la zone', def: null, words: ['radius', 'rayon', 'distance', 'zone'] };
+/** The radius of the scope: its group's default, until the address says another one (?r=). @type {ParamSpec} */
+const RADIUS = { kind: 'distance', label: 'Rayon de la zone', def: null, shared: true, words: ['radius', 'rayon', 'distance', 'zone'] };
 
 /** A value of a list, its words: each name's label. @param {Record<string, { label: string }>} o */
 const labels = o => Object.fromEntries(Object.entries(o).map(([k, v]) => [k, v.label]));
@@ -120,16 +121,17 @@ const MAP_PARAMS = {
     bundles: Object.fromEntries(Object.entries(MAP_INTENTS).map(([k, v]) => [k, v.set]))
   },
   // Où: how far it sees — the zone (its circle, the observations of the plants found in it), the whole of France or
-  // the world (the plants found, observed there: iNaturalist's tiles) —; the map's own scope, until the address says
-  // one (no at= nor place=); the address' always wins, and the scope stays the layout's, shared by every cell.
+  // the world (the plants found, observed there: iNaturalist's tiles) —; its group's starting place (the first map's),
+  // until the address says one (no at= nor place=); the address' always wins, and the scope stays the group's, shared
+  // by its cells.
   portee: {
     kind: 'enum', label: 'Étendue', def: 'zone', group: 'Où', values: { zone: 'La zone', france: 'La France', monde: 'Le monde' },
     aliases: { ici: 'zone', cercle: 'zone', pays: 'france', fr: 'france', world: 'monde', terre: 'monde', planete: 'monde', global: 'monde' },
     words: ['etendue', 'echelle', 'scope', 'reach']
   },
   r: { ...RADIUS, group: 'Où' },
-  lieu: { kind: 'text', label: 'Lieu de départ', def: null, group: 'Où', words: ['place', 'commune', 'ville', 'adresse'] },
-  autour: { kind: 'bool', label: 'Autour de moi au départ', def: false, group: 'Où', words: ['around', 'moi', 'gps', 'position'] },
+  lieu: { kind: 'text', label: 'Lieu de départ', def: null, group: 'Où', shared: true, words: ['place', 'commune', 'ville', 'adresse'] },
+  autour: { kind: 'bool', label: 'Autour de moi au départ', def: false, group: 'Où', shared: true, words: ['around', 'moi', 'gps', 'position'] },
   // The view it starts on (its centre, its zoom; in 3D its tilt and turn), the map moved while the screen is
   // modified — in use, the one that leads the list (cells.js): else framed on the zone.
   vue: { kind: 'text', label: 'Cadrage de départ', def: null, group: 'Où', own: true, named: true, max: 60, read: readView, words: ['view', 'cadrage', 'camera'] },
@@ -175,10 +177,10 @@ const MAP_PARAMS = {
   opac: { kind: 'text', label: 'Opacité des couches', def: null, group: 'Couches', own: true, named: true, max: 400, read: readOpacities, words: ['opacite', 'opacity', 'transparence'] },
   // Points.
   // The sources this map draws among its group's (core/observations.js: the zone's observations, merged); none said:
-  // all of them — and the sources a map says are its group's own, unless the address says others (sources=).
+  // all of them. Its own, never its group's (which asks sources=, else both): fewer, a pin on the map says so (cells.js).
   src: { kind: 'list', label: 'Sources des points', def: null, unset: 'toutes celles du groupe', group: 'Points', mark: 'So', values: { inat: 'iNaturalist', gbif: 'GBIF' }, aliases: { inaturalist: 'inat' },
     words: ['sources', 'source', 'donnees'] },
-  when: { kind: 'enum', label: 'Période', def: 'toujours', group: 'Points', values: { toujours: 'Toujours', annee: 'Cette année', mois: 'Ce mois-ci' }, aliases: { tout: 'toujours', always: 'toujours', year: 'annee', an: 'annee', cetteannee: 'annee', month: 'mois', cemois: 'mois' }, words: ['quand', 'periode', 'date', 'dates'] },
+  when: { kind: 'enum', label: 'Période', def: 'toujours', group: 'Points', shared: true, values: { toujours: 'Toujours', annee: 'Cette année', mois: 'Ce mois-ci' }, aliases: { tout: 'toujours', always: 'toujours', year: 'annee', an: 'annee', cetteannee: 'annee', month: 'mois', cemois: 'mois' }, words: ['quand', 'periode', 'date', 'dates'] },
   pts: { kind: 'enum', label: 'Style des points', def: 'photo', group: 'Points', values: { photo: 'Photos', pastille: 'Pastilles' }, aliases: { pastilles: 'pastille', dots: 'pastille', ronds: 'pastille', points: 'pastille' }, words: ['points', 'style', 'marqueurs'] },
   regroupe: { kind: 'bool', label: 'Plante courante en groupes', def: false, group: 'Points', mark: 'G', words: ['cluster', 'groupes', 'grouper', 'regrouper', 'groupe'] },
   // « Observations autour » of the map in 3D (the binoculars): on with its sources (absent: off; aucune: on, none), its radius.

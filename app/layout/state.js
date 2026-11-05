@@ -20,9 +20,9 @@
 //                                      (core/nearby.js periodQuery); not said, the layout's own (a map's when=);
 //   &sources=inat,gbif&qualite=…&taxon=espece&photos=avec|libre&sauvages=1&jeux=…&sansjeux=<GBIF datasets>
 //                                      the zone's observations: their sources and the filters every source applies
-//                                      (core/observations.js); not said, the defaults — the sources a map says (src=),
-//                                      else both (but one switched off in Réglages › Modules: defaultSources), every
-//                                      observation (every quality, every dataset);
+//                                      (core/observations.js); not said, the defaults — both sources (but one switched
+//                                      off in Réglages › Modules: defaultSources; a map's src= is its own, never the
+//                                      group's: cells.js), every observation (every quality, every dataset);
 //   &q=…&family=…&sort=…               the search itself: the screen's own (core/query.js — the same words as #/?q=…),
 //                                      never Flore's.
 // A layout's other groups (a cell's groupe=b: its own zone, plant, period and search, apart from the others) have
@@ -166,7 +166,7 @@ export const sameLive = (a, b) => a.title === b.title && a.plant === b.plant && 
 export class LayoutState extends EventTarget {
   /**
    * @param {{ radius?: number | null, find?: typeof findPlace, channel?: SearchChannel }} [defaults] the
-   *   layout's own default radius (a map or a place cell's r=); `find`: how a place typed is found (the IGN geocoder;
+   *   group's own default radius (a map or a zone cell's r=: group-defaults.js); `find`: how a place typed is found (the IGN geocoder;
    *   tests give their own); `channel`: the search its zone keeps to its plants (core/search-channel.js; none: one of
    *   its own — never Flore's)
    */
@@ -176,13 +176,20 @@ export class LayoutState extends EventTarget {
     /** @type {Live} */
     this.live = EMPTY;
     this.defaultRadius = defaults.radius ?? DEFAULT_RADIUS;
-    /** The layout's own period (a map's when=), until the address says one. @type {Period} */
+    /** The group's own period (a map's when=: group-defaults.js), until the address says one. @type {Period} */
     this.defaultPeriode = 'toujours';
     /**
-     * The layout's own sources of observations (its maps' src=; none said: both, but one whose module is off —
-     * core/observations.js defaultSources), until the address says them. @type {ObsFilters['sources']}
+     * The group's own sources of observations — both, but one whose module is off (core/observations.js
+     * defaultSources) —, until the address says them: never a map's (its src= is its own: what it draws among
+     * them). @type {ObsFilters['sources']}
      */
     this.defaultSources = defaultSources();
+    /**
+     * The place the group starts on (its first map's lieu=: 'lieu:<words>', else its « Autour de moi au départ »:
+     * 'autour'; null: none — group-defaults.js), applied once (applyOnce), the address having no zone.
+     * @type {string | null}
+     */
+    this.defaultStart = null;
     this.find = defaults.find ?? findPlace;
     /** A place to find (place= without at=): being found, or why it was not (in French; null: none to find, or found). */
     /** @type {'idle' | 'finding' | 'failed'} */
@@ -238,8 +245,12 @@ export class LayoutState extends EventTarget {
     this.scopeFor = '';
     this.obsFor = '';
     this.infoFor = 0;
-    /** The map's own scope (its lieu=, its autour), applied once for each (dl-map), the address having none. */
-    this.defaultedFor = '';
+    /**
+     * The starting places already applied (or not, the address having a zone then): each once (applyOnce) — a zone
+     * taken off (✕) stays off, whichever map of the group draws again.
+     * @type {Set<string>}
+     */
+    this.applied = new Set();
     /** The search over the whole flora (wholeOf: a results cell with zone=0), and the search it answers. */
     /** @type {{ key: string, total: number, items: any[] } | null} */
     this.whole = null;
@@ -259,6 +270,16 @@ export class LayoutState extends EventTarget {
     this.view = null;
     /** The plants observed in that view (the search kept to them: workers/search-core.js within); null: the zone's all. @type {number[] | null} */
     this.within = null;
+  }
+
+  /**
+   * A starting place (defaultStart) comes: true the first time only — every map of the group asks, one applies it.
+   * @param {string | null} want
+   */
+  applyOnce(want) {
+    if (!want || this.applied.has(want)) return false;
+    this.applied.add(want);
+    return true;
   }
 
   /** The radius in use: the address', else the layout's default. */

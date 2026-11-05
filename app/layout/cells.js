@@ -5,7 +5,8 @@
 //    plants found in it (those the search keeps), the current plant's own observations lit, the observation chosen.
 //    A point touched: its plant is the current one; a long press: the scope moves there. Over it, the scope: its place,
 //    its radius (a slider), « Autour de moi », « Toute la France » (no scope). Its settings (registry.js, map-options.js)
-//    change each of these: its own scope while the address has none (lieu, autour), its background and 3D, its IGN
+//    change each of these: its group's starting place while the address has none (lieu, autour: the first map's —
+//    group-defaults.js), its background and 3D, its IGN
 //    layers, its points (sources, period, style, the current plant's grouped), how it follows the state (suit, plante,
 //    toucher), its controls (ui: by its width, compact, none; ctl: exactly which — the zone and a handle on the circle's
 //    edge that drags its radius, the address search, « Me localiser », the layers, 2D / 3D, the other background's
@@ -668,9 +669,10 @@ export class DlMap extends LitElement {
 
   /**
    * « Sur cette carte » of its panel ▦: its points, as its address says them (its settings' form says the same) — their
-   * sources (src=: those of the zone's observations it draws, given to its group too; one the address' sources= leaves
-   * out, disabled, why said), the current plant's points (plante=: in large, alone, or not shown). A map of France or
-   * of the world: the current plant's alone (the others are tiles of every source). The same array while the same.
+   * sources (src=: those of the zone's observations it draws, its own — never its group's, which asks its own; one the
+   * address' sources= leaves out, disabled, why said), the current plant's points (plante=: in large, alone, or not
+   * shown). A map of France or of the world: the current plant's alone (the others are iNaturalist's tiles: GBIF has
+   * none here). The same array while the same.
    * @param {LayoutState} s @returns {import('../components/gf-map-options.js').DataRow[]}
    */
   #dataRows(s) {
@@ -698,7 +700,7 @@ export class DlMap extends LitElement {
 
   /**
    * A row of « Sur cette carte » changed (its panel ▦): kept in the layout, as its settings' form writes it — src= the
-   * sources ticked (its group asking them too, unless the address says its own), plante=non or not written.
+   * sources ticked (this map's own: what it draws; its group asks its own), plante=non or not written.
    * @param {{ key: string, value: unknown }} d
    */
   #onData({ key, value }) {
@@ -837,17 +839,16 @@ export class DlMap extends LitElement {
   }
 
   /**
-   * The map's own scope (lieu=, autour), when the address has none: the place found as ?place= is (state.js), or
-   * « Autour de moi » — once for each (a scope taken off afterwards, ✕, stays off). The address' always wins.
+   * The group's starting place (state.js defaultStart: its first map's lieu=, else its autour — group-defaults.js), when
+   * the address has no zone: the place found as ?place= is (state.js), or « Autour de moi » — once for each (applyOnce:
+   * every map of the group asks, one applies it; a zone taken off afterwards, ✕, stays off). The address' always wins.
    */
   #defaultScope() {
     const s = /** @type {LayoutState} */ (this.state);
-    const lieu = this.params?.lieu ?? null, autour = Boolean(this.params?.autour);
-    const want = lieu ? 'lieu:' + lieu : autour ? 'autour' : '';
-    if (!want || s.defaultedFor === want) return;
-    s.defaultedFor = want;
+    const want = s.defaultStart;
+    if (!want || !s.applyOnce(want)) return;
     if (s.live.at || s.live.place) return;
-    if (lieu) s.set({ place: lieu, obs: null }, 'replace');
+    if (want.startsWith('lieu:')) s.set({ place: want.slice('lieu:'.length), obs: null }, 'replace');
     else this.#locate('replace');
   }
 
@@ -878,14 +879,14 @@ export class DlMap extends LitElement {
       if (!this.editing && this.params?.vue) this.#letGo();
     }
     // The zone moved (another place, another radius, none): the view kept was the old zone's — framed on the new one.
-    // Not the zone it opens on (lieu=, autour: found after it is drawn), its view the address' still: that view frames
-    // it (gf-map, the first time). In use, a map of the zone's alone: a map of France or of the world keeps its own
-    // (never framed on the zone).
+    // Not the zone it opens on (its group's starting place, lieu=, autour: found after it is drawn), its view the
+    // address' still: that view frames it (gf-map, the first time). In use, a map of the zone's alone: a map of France
+    // or of the world keeps its own (never framed on the zone).
     const zone = s.live.at ? s.live.at.join(',') + ':' + s.radius : '';
     if (this.#zoneWas === undefined) this.#openedOn = this.params?.vue ?? null;
     // Its place not found (lieu=): a zone given by hand afterwards is not the one its view was written for.
     if (s.placeState === 'failed') this.#openedOn = null;
-    const opens = this.#zoneWas === '' && Boolean(this.params?.lieu || this.params?.autour) && this.params?.vue === this.#openedOn;
+    const opens = this.#zoneWas === '' && Boolean(s.defaultStart) && this.params?.vue === this.#openedOn;
     if (this.params?.vue && (this.editing || this.#p.portee === 'zone') && this.#zoneWas !== undefined && zone !== this.#zoneWas && !opens) this.#set({ vue: null });
     if (zone) this.#openedOn = null;
     this.#zoneWas = zone;

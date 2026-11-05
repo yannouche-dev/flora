@@ -5,8 +5,10 @@
 // « Liens » of its picker, a letter in its colour on each head, the colour down each cell's edge (its letter on its top
 // without a head, its group in its name), its letter on a phone's tabs — never the colour alone, lighter in the dark.
 // A cell talks to its group alone: a plant chosen in b brings a tab of b's; ⤢ on a block of b's sheet, a funnel of b's
-// grid, never a cell of a; a b cell's « Plante » chip and « Fixer la plante courante » take b's plant. iNaturalist
-// answered here: the zone's observations, of 12 plants (their plants the list).
+// grid, never a cell of a; a b cell's « Plante » chip and « Fixer la plante courante » take b's plant. Being modified,
+// a setting of the whole group (its radius): two cells that disagree said, the address against a cell said —
+// « Prendre celui de la case » writes it once —, « pour tout l’écran » beside it in the editor. iNaturalist answered
+// here: the zone's observations, of 12 plants (their plants the list).
 import { test, expect, answerAround, answerZone, plantId } from './fixtures.mjs';
 import { layoutOf, screen, screenSearch } from './app.mjs';
 
@@ -63,6 +65,26 @@ test.describe('un grand écran', () => {
     await picker.locator('[data-param="groupe"] button[data-value="b"]').click();
     await expect.poll(() => layoutOf(page)).toBe('[results,results(groupe=b)]');
     await expect(page.locator('gf-layout section.cell[data-cell="1"] .cell-group')).toHaveText('B');
+  });
+
+  test('en modification, un réglage du groupe : deux cases en désaccord dites ; l’adresse contre la case dite, « Prendre celui de la case » l’écrit une fois', async ({ app, page }) => {
+    // The map's radius against the zone cell's, and against the address' (a link, a reload: r= written from before).
+    await app.open(screen('[map(r=5km),place(r=1km),results]', 'at=48.85,2.35&r=2km', true));
+    const notes = page.locator('gf-layout .edit ul.notes');
+    await expect(notes).toHaveAccessibleName('Réglages du groupe');
+    await expect(notes.locator('li')).toHaveText(['Rayon : 5 km (« Carte », case 1) l’emporte sur 1 km (« Zone », case 2).',
+      'Rayon : l’adresse dit 2 km, la case « Carte » 5 km. Prendre celui de la case']);
+    // Taken: written once, the address replaced (no new entry); said no more.
+    const entries = await page.evaluate(() => history.length);
+    await notes.getByRole('button', { name: 'Prendre celui de la case' }).click();
+    await expect.poll(() => param(page, 'r')).toBe('5km');
+    await expect(notes.locator('li')).toHaveCount(1);
+    expect(await page.evaluate(() => history.length)).toBe(entries);
+    // The editor says the radius is the group's: one group, the whole screen's.
+    await cellOf(page, '0').locator('.cell-head .pick').click();
+    const picker = page.locator('gf-block-picker:not([inline])');
+    await picker.locator('.row[data-group="Où"]').click();
+    await expect(picker.locator('[data-param="r"] .group-wide')).toHaveText('pour tout l’écran');
   });
 
   test('les groupes se voient : une couleur par groupe le long de chaque case, avec ou sans en-tête ; un seul groupe, aucune', async ({ app, page }) => {

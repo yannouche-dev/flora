@@ -25,7 +25,9 @@
 //    a side — a new « Emplacement », `slot` —, moved before or after, taken out — its room to its neighbour; 12 cells at
 //    most, the grammar's depth) —, every head shown (tete=non too), no cell hidden; under the bar, the title, the preview
 //    (computer / phone, 390 px: the layout's own tabs — never a scaled drawing, live maps break under transforms), what
-//    is wrong; in ⋯, « Changer de modèle », « Tailles par défaut », « Avancé : texte ». Entering is one entry
+//    is wrong, the groups' settings (group-defaults.js: two cells that disagree on a radius, a period, a starting place;
+//    the address against a cell, « Prendre celui de la case »); in ⋯, « Changer de modèle », « Tailles par défaut »,
+//    « Avancé : texte ». Entering is one entry
 //    (`gfEditFrom`: the depth it was entered from); every change then replaces the address and is given to that entry
 //    (history.js#renewBehind: Back keeps the changes); « Terminé » goes back there (history.js#closeTo), or, opened being
 //    modified, replaces this entry by the screen in use. Partager always gives the screen in use (no edit=1).
@@ -73,9 +75,10 @@ import { gripStyles, shareGrip } from '../core/split-grip.js';
 import { ui } from '../styles/ui.js';
 import { cell as makeCell, cells as cellsOf, dirAt, moveAt, nodeAt, parse, replaceAt, serialize, setShares, shapeKey, shares } from './grammar.js';
 import { COMPONENTS, CURRENT, LINKS, cellIcon, cellMark, cellName, linksOf, menuLooks, resolveTree, touchOf, withParam } from './registry.js';
-import { cleanText, groupPrefix, LayoutState, liveSearch, readLive, readQuery, sameLive } from './state.js';
+import { cleanText, DEFAULT_RADIUS, groupPrefix, LayoutState, liveSearch, readLive, readQuery, sameLive } from './state.js';
+import { groupDefaults, groupNotes } from './group-defaults.js';
 import { SearchChannel } from '../core/search-channel.js';
-import { SOURCES, defaultSources } from '../core/observations.js';
+import { defaultSources } from '../core/observations.js';
 import { forgetShares, savedShares, saveShares } from './sizes.js';
 import { MODELS, modelSpec } from './models.js';
 import { labelOf, rememberScreen, screenEvents, screenKey, screens } from './screens.js';
@@ -230,6 +233,9 @@ export class GfLayout extends LitElement {
     .problems { margin: 0; padding: 8px 12px; font-size: 0.85rem; color: var(--gf-danger); border-radius: 10px; background: color-mix(in srgb, var(--gf-danger) 8%, var(--gf-surface)); }
     ul.problems { padding-left: 30px; }
     .problems code { color: var(--gf-text); }
+    /* The groups' settings (two cells that disagree, the address against a cell): said, never an error. */
+    .notes { margin: 0; padding: 8px 12px 8px 30px; font-size: 0.85rem; border-radius: 10px; background: var(--gf-warn-bg); }
+    .notes li + li { margin-top: 4px; }
     .advanced { display: grid; gap: 8px; padding: 10px 12px; border: 1px solid var(--gf-border); border-radius: 10px; background: var(--gf-surface); }
     .advanced .head { display: flex; align-items: center; gap: 8px; }
     .advanced h2 { flex: 1; margin: 0; font-size: 0.95rem; }
@@ -1001,22 +1007,23 @@ export class GfLayout extends LitElement {
   }
 
   /**
-   * What the layout gives until the address says otherwise: the radius of a map or a place cell (r=), the period of a
-   * map (when=: this year, this month). Returns whether it changed. @param {Shown} l
+   * What each group's cells give it until the address says otherwise (group-defaults.js): the radius of a map or a
+   * zone cell (r=), the period of a map (when=: this year, this month), the place it starts on (a map's lieu=, autour) —
+   * the first in reading order, where two disagree (said in the edit strip: #notes). Its sources are no cell's: both,
+   * but one whose module is off (core/observations.js defaultSources: never said missing on every map) — a map's src= is
+   * its own (cells.js). Returns whether the radius, the period or the sources changed. @param {Shown} l
    */
   #defaults(l) {
     let changed = false;
+    const paths = [...l.cells.keys()];
+    this.#given.clear();
     for (const g of this.#groups(l)) {
-      const cells = [...l.cells.values()].filter(r => this.#groupOf(r) === g);
-      const first = cells.find(r => r.known && r.params.r != null);
-      const when = cells.find(r => r.known && r.spec.id === 'map' && r.params.when && r.params.when !== 'toujours');
-      const radius = first?.known ? first.params.r : 2000, periode = when?.known ? when.params.when : 'toujours';
-      // The sources its maps say (src=, or their intent: répartition), all of them; none says: iNaturalist and GBIF,
-      // but one whose module is off (core/observations.js defaultSources: never said missing on every map).
-      const said = cells.flatMap(r => r.known && r.spec.id === 'map' && Array.isArray(r.params.src) ? /** @type {string[]} */ (r.params.src) : []);
-      const sources = /** @type {('inat' | 'gbif')[]} */ (SOURCES.filter(x => said.includes(x)));
+      const cells = [...l.cells].filter(([, r]) => this.#groupOf(r) === g).map(([path, r]) => ({ path, n: paths.indexOf(path) + 1, title: r.title, r }));
+      const d = groupDefaults(cells);
+      this.#given.set(g, d);
       const state = this.#group(g).state;
-      const own = sources.length ? sources : defaultSources();
+      const radius = d.radius ?? DEFAULT_RADIUS, periode = /** @type {import('./state.js').Period} */ (d.periode), own = defaultSources();
+      state.defaultStart = d.start;
       if (radius !== state.defaultRadius || periode !== state.defaultPeriode || own.join() !== state.defaultSources.join()) {
         changed = true;
         state.defaultRadius = radius;
@@ -1027,6 +1034,31 @@ export class GfLayout extends LitElement {
       }
     }
     return changed;
+  }
+
+  /** What each group's cells give it (#defaults), as last read: the edit strip's notes. @type {Map<string, import('./group-defaults.js').GroupDefaults>} */
+  #given = new Map();
+
+  /**
+   * Being modified, what the strip says of the groups' settings (group-defaults.js#groupNotes): two cells that
+   * disagree, the address against a cell — each with its group's state, for its button.
+   */
+  #notes() {
+    const groups = this.#groups(), many = groups.length > 1;
+    return groups.flatMap(g => {
+      const d = this.#given.get(g), state = this.#group(g).state;
+      return d ? groupNotes(d, state.live, { letter: many ? g.toUpperCase() : '', zone: scopeWords(state) }).map(n => ({ ...n, state })) : [];
+    });
+  }
+
+  /**
+   * A note's button (« Prendre celui de la case »): the cell's value taken by its group (the address replaced); the focus
+   * to the next button of the notes, else the strip's toggle. @param {LayoutState} state @param {Record<string, unknown>} patch
+   */
+  async #take(state, patch) {
+    state.set(/** @type {any} */ (patch), 'replace');
+    await this.updateComplete;
+    /** @type {HTMLElement | null} */ (this.renderRoot.querySelector('.edit ul.notes button') ?? this.renderRoot.querySelector('.bar .toggle'))?.focus();
   }
 
   /** The address follows the screen: a new entry, the same one, or not at all. @param {import('./state.js').How} how */
@@ -1298,6 +1330,7 @@ export class GfLayout extends LitElement {
     // Docked to the screen's height (under the app's header; a phone: above its bottom bar).
     return html`<gf-block-picker style=${pickerBounds(this)} .cell=${cellText(n)} .label=${'Case ' + (index + 1)} .room=${this.#pickRoom}
       .others=${all.filter(c => c.path.join('.') !== key).map(c => cellText(c.cell))} .plant=${this.#stateOf(r).live.plant}
+      .group=${this.#groups().length > 1 ? this.#groupOf(r).toUpperCase() : ''}
       clear-label="Changer de bloc"
       @change=${(/** @type {CustomEvent} */ e) => {
         const next = cellOf(e.detail.text);
@@ -1735,9 +1768,12 @@ export class GfLayout extends LitElement {
       <button class="link" type="button" @click=${() => this.#modify({ advanced: true })}>Voir et corriger</button></p>`;
   }
 
-  /** Being modified, under the bar: the title (the address replaced as it is typed), the preview, how to build, what is wrong, « Avancé ». */
+  /**
+   * Being modified, under the bar: the title (the address replaced as it is typed), the preview, how to build, what is
+   * wrong, the groups' settings (#notes: never an alert — not errors, and said again at each change otherwise), « Avancé ».
+   */
   #editStrip() {
-    const l = this.#shown, problems = this.#problems(), phone = this._preview;
+    const l = this.#shown, problems = this.#problems(), notes = this.#notes(), phone = this._preview;
     const empty = !l.tree.kids.length;
     return html`<div class="edit" role="region" aria-label="Modifier l’écran">
       <div class="meta">
@@ -1752,6 +1788,8 @@ export class GfLayout extends LitElement {
       <p class="hint">${icon('sliders')} choisit le bloc d’une case et le règle ; ${icon('tools')} la divise, la déplace ou la retire ; les poignées règlent les tailles.</p>
       ${empty ? html`<p class="problems" role="alert">Disposition vide : écrivez au moins une case (par exemple <code>[map,search]</code>), ou partez d’un modèle (⋯ › « Changer de modèle »).</p>` : nothing}
       ${problems.length ? html`<ul class="problems" role="alert" tabindex="-1">${problems.map(p => html`<li>${p}</li>`)}</ul>` : nothing}
+      ${notes.length ? html`<ul class="notes" aria-label="Réglages du groupe">${notes.map(n => html`<li data-note=${n.key}>${n.text}${n.take
+        ? html` <button class="link" type="button" @click=${() => this.#take(n.state, /** @type {{ patch: Record<string, unknown> }} */ (n.take).patch)}>${n.take.label}</button>` : nothing}</li>`)}</ul>` : nothing}
       ${this._advanced ? this.#advanced() : nothing}
     </div>`;
   }

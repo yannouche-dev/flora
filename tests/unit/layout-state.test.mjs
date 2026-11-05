@@ -119,6 +119,23 @@ test('une plante survolée (une ligne, un point) : son propre événement, jamai
   assert.equal(s.hover, null);
 });
 
+test('le lieu de départ du groupe : appliqué une fois chacun — une zone ôtée (✕) reste ôtée quand une autre carte en veut un autre', () => {
+  const s = new LayoutState();
+  // The first map's: applied (the address had no zone); a second map's, while the zone is there: not applied, counted.
+  assert.equal(s.applyOnce('lieu:Mirabel'), true);
+  s.set({ place: 'Mirabel' }, 'none');
+  assert.equal(s.applyOnce('lieu:Riom'), true);
+  // Asked again by each map drawn again: never twice.
+  assert.equal(s.applyOnce('lieu:Mirabel'), false);
+  // ✕: no zone. The maps drawn again, in either order: neither applies — the zone stays off.
+  s.setScope(null);
+  assert.equal(s.applyOnce('lieu:Riom'), false);
+  assert.equal(s.applyOnce('lieu:Mirabel'), false);
+  assert.equal(s.applyOnce(null), false);
+  assert.deepEqual([s.live.at, s.live.place], [null, null]);
+  s.dispose();
+});
+
 test('ce que montre une carte de la zone : la liste gardée à ses plantes, la recherche relancée seulement quand elles changent ; tout le cercle : la zone ; un autre cercle lâche la vue, une autre période la garde ; « Toute la zone » recadre la carte', async t => {
   // The zone's observations (iNaturalist, answered here): the wild garlic east of the centre, the nettle west.
   const fetch = globalThis.fetch;
