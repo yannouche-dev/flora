@@ -82,11 +82,8 @@ export class Store extends EventTarget {
  * @typedef {{ sheet: string, mode: Mode | null }} KingState
  */
 
-/** @param {any} v @returns {Mode | null} */
-const asMode = v => isMode(v) ? v : v === 'illustrated' ? 'epure' : null;
-
-/** @param {string} key */
-const readMode = key => asMode(readText(key));
+/** @param {string} key @returns {Mode | null} */
+const readMode = key => { const v = readText(key); return isMode(v) ? v : null; };
 
 /**
  * The plant sheet layout: per view, block order and folded blocks, sub-block order and hidden sub-blocks;
