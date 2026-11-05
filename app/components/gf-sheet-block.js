@@ -64,6 +64,13 @@ export class GfSheetBlock extends SheetBase {
     this.subheading = true;
   }
 
+  /** @param {Map<string, any>} changed */
+  willUpdate(changed) {
+    super.willUpdate(changed);
+    // Another block in its place (the pane, the block over the page, turned to another one): its data, same plant.
+    if (changed.has('key') && !changed.has('plantId')) this._loadShown();
+  }
+
   // ── SheetBase's hooks: a block alone ──────────────────────────────────────────────────────────────────────
 
   /** Its own block's data only. @param {string} key */
@@ -77,6 +84,9 @@ export class GfSheetBlock extends SheetBase {
 
   /** No article beside it to read in. */
   get _reader() { return false; }
+
+  /** Nothing opens from it. */
+  get _canOpenPane() { return false; }
 
   render() {
     const plant = this._plant;

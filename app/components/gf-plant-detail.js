@@ -30,7 +30,6 @@ import './gf-media-viewer.js';
 import { registerWebPane, unregisterWebPane } from '../core/web-pane.js';
 import { verdictOf } from '../core/alerts.js';
 import { sheetSession, setAnchorLock } from '../core/sheet-session.js';
-import { openModal } from '../core/history.js';
 import { SheetBase, sheetStyles, KEEP_MAX_MS, WIKI_THEMES } from './sheet-base.js';
 import './gf-sheet-block.js';
 
@@ -91,8 +90,6 @@ export class GfPlantDetail extends SheetBase {
     paneAt: { attribute: false },
     /** The block shown in the pane beside this sheet (Flore): only a line here, not twice. */
     inPane: { attribute: false },
-    /** A block opened over the page (outside Flore, where there is no pane): its key and the image it starts at. */
-    _paneDialog: { state: true },
     /** The plant's verdict (core/danger.js, read by alerts.js): the Alertes rubric's badge, its count and colour. */
     _verdict: { state: true },
     /** The sheet is wide enough for its panes beside it (else bands above and under it). */
@@ -444,14 +441,7 @@ export class GfPlantDetail extends SheetBase {
     // region is there before its first message (one born with its text is seldom read out).
     const said = html`<p class="said" aria-live="polite">${this._said}</p>`;
     if (this.panesOnly) return html`${this.#panesOnlyView(ctx)}${said}`;
-    const pane = this._paneDialog;
-    return html`${baseOf(this._view) === 'epure' ? this.#epure(ctx) : this.#full(ctx)}${said}${pane ? html`
-      <dialog class="pane" aria-label=${blockTitle(pane.key)} @close=${() => { this._paneDialog = null; }}>
-        <div class="pane-bar"><h2>${blockTitle(pane.key)} — <i>${plant.scientificName}</i></h2>
-          <button class="icon-btn" type="button" aria-label="Fermer" title="Fermer" @click=${(/** @type {Event} */ e) => /** @type {HTMLElement} */ (e.currentTarget).closest('dialog')?.close()}>${icon('x-lg')}</button></div>
-        <gf-plant-detail embedded only=${pane.key} plant-id=${plant.id} view=${this._view} .paneStart=${pane.url} .channel=${this.channel}
-          @media-close=${(/** @type {Event} */ e) => /** @type {HTMLElement} */ (e.currentTarget).closest('dialog')?.close()}></gf-plant-detail>
-      </dialog>` : nothing}`;
+    return html`${baseOf(this._view) === 'epure' ? this.#epure(ctx) : this.#full(ctx)}${said}${this._paneDialogView(plant)}`;
   }
 
   /** The panes of the tree without the sheet (none yet: what the host slots in). @param {any} ctx */
@@ -493,20 +483,8 @@ export class GfPlantDetail extends SheetBase {
     return html`<div class="only-pad ${isMap(key) ? 'fill' : ''}"><section class="block only ${empty ? 'hide-empty' : ''} ${isMap(key) ? 'map-block' : ''}" data-key=${key}>${title}<div class="content">${this._content(key, ctx)}</div></section></div>`;
   }
 
-  /**
-   * A block in the pane beside the sheet (⤢ on the block, a photo touched for « Médias »). Flore shows it in a
-   * pane in place of the results (a phone: over the sheet); elsewhere (Mes plantes, Carte) it opens over the page.
-   * @param {string} key @param {string | null} [url] the image to open at
-   */
-  _openPane(key, url = null) {
-    const plant = this._plant;
-    if (!plant || this.preview || this.only) return;
-    const asked = new CustomEvent('open-pane', { detail: { plantId: plant.id, key, url }, bubbles: true, composed: true, cancelable: true });
-    if (!this.dispatchEvent(asked)) return;
-    this._paneDialog = { key, url };
-    this.updateComplete.then(() => openModal(/** @type {HTMLDialogElement | null} */ (this.renderRoot.querySelector('dialog.pane'))));
-  }
-
+  /** ⤢ and a photo touched open a block at full size (SheetBase#_openPane): not from the card underneath, nor a block alone. */
+  get _canOpenPane() { return !this.preview && !this.only; }
 
   /** To a theme of the article (its anchor in the Wikipédia block): opened, then reached (#arrive). @param {string} t */
   async #wikiGo(t) {

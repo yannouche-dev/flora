@@ -43,6 +43,7 @@ import './gf-media-viewer.js';
 import './gf-web-pane.js';
 import { notesEvents } from '../core/sheet-notes.js';
 import { sheetSession } from '../core/sheet-session.js';
+import { openModal } from '../core/history.js';
 import { hideImg, dropFigure, showImg } from '../core/img.js';
 import { safeUrl } from '../core/safe-url.js';
 import { forgetFailures } from '../core/cache.js';
@@ -578,7 +579,7 @@ export const sheetStyles = [ui, severityStyles, css`
     .all-media { display: inline-flex; align-items: center; gap: 6px; margin-top: 8px; }
     dialog.pane { width: 100vw; height: 100dvh; max-width: none; max-height: none; margin: 0; padding: 0; border: 0; display: flex; flex-direction: column; background: var(--gf-surface); }
     dialog.pane:not([open]) { display: none; }
-    dialog.pane gf-plant-detail { flex: 1; min-height: 0; }
+    dialog.pane gf-sheet-block { flex: 1; min-height: 0; }
     .pane-bar { display: flex; align-items: center; gap: 8px; padding: 6px 8px 6px 14px; border-bottom: 1px solid var(--gf-border); }
     .pane-bar h2 { flex: 1; margin: 0; font-size: 1rem; }
     /* A block alone, at full size (a pane). */
@@ -964,7 +965,9 @@ export class SheetBase extends LitElement {
     _focus: { state: true },
     /** Open data crossed with the plant: GloBI interactions, climate niche; « here » (pollen and climate of my position). */
     _open: { state: true },
-    _failed: { state: true }
+    _failed: { state: true },
+    /** A block opened over the page (outside Flore, where there is no pane): its key and the image it starts at. */
+    _paneDialog: { state: true }
   };
 
   constructor() {
@@ -1011,6 +1014,8 @@ export class SheetBase extends LitElement {
      * @type {Record<string, any>}
      */
     this._failed = {};
+    /** @type {{ key: string, url: string | null } | null} */
+    this._paneDialog = null;
     // A value touched in a block: the maps show it (touched again, it goes).
     this.addEventListener(FOCUS_EVENT, e => {
       e.stopPropagation();
@@ -1053,7 +1058,12 @@ export class SheetBase extends LitElement {
     if (modulesChanged) this.#refresh();
     // Blocks folded or shown, another view (the card underneath come on top in the mode arranged here too): what it
     // shows now (each load once per plant).
-    else if ((hiddenChanged || viewChanged) && this._plant && this._details !== undefined) this.#loadExtras(this._plant, this._details, this.#abort?.signal);
+    else if (hiddenChanged || viewChanged) this._loadShown();
+  }
+
+  /** What the blocks shown now read, for the plant read (each load once per plant). */
+  _loadShown() {
+    if (this._plant && this._details !== undefined) this.#loadExtras(this._plant, this._details, this.#abort?.signal);
   }
 
   connectedCallback() {
@@ -1101,8 +1111,41 @@ export class SheetBase extends LitElement {
   /** Its « Médias » a showcase, photos first. */
   get _showcase() { return false; }
 
-  /** A block shown at full size, over the sheet or beside it (⤢, a photo touched): none here. @param {string} key @param {string | null} [url] */
-  _openPane(key, url = null) {}
+  /** ⤢ and a photo touched open a block at full size (_openPane). */
+  get _canOpenPane() { return true; }
+
+  /**
+   * A block at full size (⤢ on the block, a photo touched for « Médias »): asked to the host first (open-pane, cancelable)
+   * — Flore shows it in a pane in place of the results (a phone: over the sheet), a screen flashes the cell that shows
+   * it —, else (Mes plantes, an activity's sheet, a screen's whole plant cell where no cell shows that block) it opens
+   * over the page, alone (gf-sheet-block). @param {string} key @param {string | null} [url] the image to open at
+   */
+  _openPane(key, url = null) {
+    const plant = this._plant;
+    if (!plant || !this._canOpenPane) return;
+    const asked = new CustomEvent('open-pane', { detail: { plantId: plant.id, key, url }, bubbles: true, composed: true, cancelable: true });
+    if (!this.dispatchEvent(asked)) return;
+    this._paneDialog = { key, url };
+    this.updateComplete.then(() => openModal(/** @type {HTMLDialogElement | null} */ (this.renderRoot.querySelector('dialog.pane'))));
+  }
+
+  /**
+   * The block opened over the page (_openPane), alone: its bar (its name, the plant, Fermer), then the block. One at a time:
+   * a photo touched in it turns it into « Médias » at that image. Échap or Fermer closes it (its history entry gone too).
+   * @param {any} plant
+   */
+  _paneDialogView(plant) {
+    const pane = this._paneDialog;
+    if (!pane) return nothing;
+    const close = (/** @type {Event} */ e) => /** @type {HTMLElement} */ (e.currentTarget).closest('dialog')?.close();
+    return html`<dialog class="pane" aria-label=${blockTitle(pane.key)} @close=${() => { this._paneDialog = null; }}>
+        <div class="pane-bar"><h2>${blockTitle(pane.key)} — <i>${plant.scientificName}</i></h2>
+          <button class="icon-btn" type="button" aria-label="Fermer" title="Fermer" @click=${close}>${icon('x-lg')}</button></div>
+        <gf-sheet-block key=${pane.key} plant-id=${plant.id} view=${this._view} .startUrl=${pane.url} .channel=${this.channel}
+          @open-pane=${(/** @type {CustomEvent} */ e) => { e.stopPropagation(); e.preventDefault(); this._paneDialog = { key: e.detail.key, url: e.detail.url ?? null }; }}
+          @media-close=${close}></gf-sheet-block>
+      </dialog>`;
+  }
 
   /** To a theme of the article (« wiki:<theme> »): opened. @param {string} key */
   async goTo(key) {
