@@ -1,4 +1,4 @@
-// Inside a mini-app, no way out to another site (app/miniapp/quiet-links.js): on the step « map », a point touched or
+// Inside a mini-app, no way out to another site (app/core/embed-links.js): on the step « map », a point touched or
 // clicked opens nothing — its small card only (hovered with a mouse, touched on a phone, reached with the keyboard;
 // Échap, the mouse gone, a touch on the map hide it). In every screen of the games, each link to another origin left
 // is a credit a licence asks for (rel="license" / "author", in a credit line or the map's attribution) or the
