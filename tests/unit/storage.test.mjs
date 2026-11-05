@@ -144,6 +144,33 @@ test('relue, la mise en page ne garde que ses parties d’aujourd’hui', async 
   dispatchEvent(Object.assign(new Event('storage'), { key, storageArea: localStorage }));
 });
 
+test('un appareil d’une version d’avant : ses lieux, listes et parcours lus tels qu’ils sont gardés (v3 à v5)', async () => {
+  const AT = '2026-10-08T09:00:00.000Z';
+  // As versions 3 to 5 of the base kept them: a lieu without kind, its plant without a position or an id (v3); a list
+  // (v4); a parcours the Parcours made, before its mark (v5).
+  await db.put('spots', { type: 'Feature', id: 'v3-lieu', geometry: { type: 'Point', coordinates: [2.4, 48.9] },
+    properties: { name: 'Bois d’avant', notes: '', accuracy: null, createdAt: AT, updatedAt: AT, plantIds: [70001],
+      plants: [{ plantId: 70001, scientificName: 'Planta 70001', abundance: 'moyen', rating: 0, notes: 'sous les chênes', harvests: [] }] } });
+  await db.put('spots', { type: 'Feature', id: 'v4-liste', geometry: null,
+    properties: { kind: 'list', name: 'Liste d’avant', notes: '', createdAt: AT, updatedAt: AT, plantIds: [70002], plants: [{ plantId: 70002, scientificName: 'Planta 70002', addedAt: AT }] } });
+  await db.put('spots', { type: 'Feature', id: 'v5-parcours', geometry: { type: 'Point', coordinates: [2.41, 48.91] },
+    properties: { kind: 'place', name: 'Parcours d’avant', notes: '', origin: { app: 'parcours' }, createdAt: AT, updatedAt: AT, plantIds: [70003],
+      plants: [{ id: 'e1', plantId: 70003, scientificName: 'Planta 70003', coordinates: [2.411, 48.911], addedAt: AT }] } });
+  const ids = ['v3-lieu', 'v4-liste', 'v5-parcours'];
+  const all = new Map((await C.listCollections()).map(c => [c.id, c]));
+  const [lieu, liste, parcours] = ids.map(id => /** @type {import('../../app/core/place-model.js').Collection} */ (all.get(id)));
+  assert.deepEqual([lieu, liste, parcours].map(c => c.properties.kind), ['place', 'list', 'place']);
+  assert.deepEqual(lieu.properties.plants.map(e => [e.plantId, e.coordinates, e.notes]), [[70001, [2.4, 48.9], 'sous les chênes']], 'au point du lieu');
+  assert.deepEqual(liste.properties.plants.map(e => e.plantId), [70002]);
+  assert.equal(parcours.properties.walk, true, 'fait par le Parcours : un parcours');
+  assert.deepEqual((await C.collectionsForPlant(70001)).map(c => c.id), ['v3-lieu']);
+  // The backup copy holds them, with their plants.
+  assert.equal(await C.writeBackup(), 'saved');
+  const backup = new Map((C.readBackup()?.features || []).map((/** @type {any} */ f) => [f.id, f]));
+  assert.deepEqual(ids.map(id => backup.get(id)?.properties.plants.map((/** @type {any} */ e) => e.plantId)), [[70001], [70002], [70003]]);
+  for (const id of ids) await C.deletePlace(id);
+});
+
 test('sync : un message d’un autre onglet est relayé, ceux de cet onglet partent sur le canal', async () => {
   const other = new BroadcastChannel('geoflora');
   try {

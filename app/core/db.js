@@ -10,13 +10,14 @@ import { isQuotaError, noteStorageError } from './quota.js';
  *  - plants:       the TAXREF dataset (keyPath id) with by_family / by_genus / by_taxon indexes
  *  - plantDetails: remote enrichment cache (keyPath key, e.g. "details:100225", "thumb:100225")
  *  - meta:         key/value (dataset version…)
- *  - spots:        harvest places, stored as GeoJSON Features (keyPath id), added in version 2.
- *                  Version 3: a place holds several plants; `by_plant` indexes properties.plantIds.
- *                  Version 4: collections — `properties.kind` (favorites | list | place); lists have no geometry.
- *                  Version 5: each plant of a place has its own `coordinates` (initially the place's point).
+ *  - spots:        Mes plantes (favourites, lists, places) as GeoJSON Features (keyPath id; place-model.js); by_plant
+ *                  indexes properties.plantIds (multiEntry), by_updated properties.updatedAt.
  *  - sheetNotes:   version 6 — the texts of the plant sheet's « Note » blocks (keyPath key, "<note id>|<plant id>"),
  *                  until then in localStorage (geoflora.plantNotes; moved over once by sheet-notes.js).
- * Every step only adds: a store that exists is never dropped or recreated.
+ * Every step only adds: a store that exists is never dropped or recreated. A base of version 2 (the first day: one plant
+ * per spot, by_plant on properties.plantId) gets its index made again and its records rewritten once (normalizeCollection
+ * reads that format); the records of versions 3 to 5 are read as they are (normalizeCollection at each read,
+ * collections.js).
  * @param {IDBDatabase} db @param {IDBTransaction} tx @param {number} oldVersion
  */
 function upgrade(db, tx, oldVersion) {
@@ -39,14 +40,11 @@ function upgrade(db, tx, oldVersion) {
     const spots = db.createObjectStore('spots', { keyPath: 'id' });
     spots.createIndex('by_plant', 'properties.plantIds', { multiEntry: true });
     spots.createIndex('by_updated', 'properties.updatedAt');
-  } else if (oldVersion < 5) {
+  } else if (oldVersion < 3) {
+    // Version 2: one plant per spot → lieux holding a list of plants, indexed by plant.
     const spots = tx.objectStore('spots');
-    if (oldVersion < 3) {
-      // One plant per spot → places with a list of plants.
-      spots.deleteIndex('by_plant');
-      spots.createIndex('by_plant', 'properties.plantIds', { multiEntry: true });
-    }
-    // → v4: every stored record becomes a collection of kind 'place'; → v5: plants get their own position.
+    spots.deleteIndex('by_plant');
+    spots.createIndex('by_plant', 'properties.plantIds', { multiEntry: true });
     spots.openCursor().onsuccess = event => {
       const cursor = /** @type {IDBCursorWithValue | null} */ (/** @type {IDBRequest} */ (event.target).result);
       if (!cursor) return;

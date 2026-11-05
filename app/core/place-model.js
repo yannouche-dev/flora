@@ -1,7 +1,7 @@
 // @ts-check
 // Shape of a collection of plants (favorites, list or place), shared by the database upgrade,
 // the app and GeoJSON import. A place is a collection with a Point; lists have `geometry: null`.
-// No imports: db.js uses it during schema upgrades.
+// No imports: db.js uses it to upgrade a base of version 2.
 
 /**
  * @typedef {{ date: string, quantity?: string, note?: string }} Harvest

@@ -68,7 +68,7 @@ export class GoneError extends Error {
   }
 }
 
-/** Records are migrated on upgrade; normalizing on read also covers collections imported mid-upgrade. */
+/** Every record read is brought to today's shape (normalizeCollection): those of earlier versions of the base as stored, and those imported. */
 const read = (/** @type {any} */ record) => record ? normalizeCollection(record) : undefined;
 const isPlace = (/** @type {Collection} */ c) => c.properties.kind === 'place' && c.geometry !== null;
 
