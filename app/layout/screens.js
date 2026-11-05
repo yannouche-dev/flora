@@ -17,8 +17,16 @@ const LONGEST = 80;
 /** The address in use: edit=1 taken out. @param {string} href */
 export const usageOf = href => href.replace(/([?&])edit=1(&|$)/, (_, a, b) => b ? a : '').replace(/\?$/, '');
 
-/** A screen's identity: its layout (the path) and its title. @param {{ href: string, title: string | null }} s */
-export const screenKey = s => s.href.split('?')[0] + '\n' + (s.title ?? '');
+/**
+ * A layout's text without its maps' views (vue=: in use, the leading map's, rewritten as it is moved by hand — the same
+ * screen wherever its map was left). @param {string} path
+ */
+const unviewed = path => path
+  .replace(/([(,])vue=[^,;)]*(,?)/g, (_, open, comma) => open === '(' ? '(' : comma)
+  .replace(/\(;/g, '(').replace(/\(\)/g, '');
+
+/** A screen's identity: its layout (the path, its maps' views left out) and its title. @param {{ href: string, title: string | null }} s */
+export const screenKey = s => unviewed(s.href.split('?')[0]) + '\n' + (s.title ?? '');
 
 /**
  * An untitled screen's name: its cells' names, « · » between them — too long, cut after a whole one, « … » saying the

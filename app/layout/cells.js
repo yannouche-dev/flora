@@ -831,7 +831,8 @@ export class DlMap extends LitElement {
     this._busy = true;
     try { const at = await locateOnce(); s.setScope(at, null, how); nameScope(s, /** @type {[number, number]} */ (s.live.at)); }
     // Asked, no position: one brief toast over the map.
-    catch (error) { this.#map?.toast(/** @type {Error} */ (error).message); }
+    // (Its view, written for the zone it was to open on: a zone given by hand afterwards is not that one.)
+    catch (error) { this.#openedOn = null; this.#map?.toast(/** @type {Error} */ (error).message); }
     finally { this._busy = false; }
   }
 
@@ -882,6 +883,8 @@ export class DlMap extends LitElement {
     // (never framed on the zone).
     const zone = s.live.at ? s.live.at.join(',') + ':' + s.radius : '';
     if (this.#zoneWas === undefined) this.#openedOn = this.params?.vue ?? null;
+    // Its place not found (lieu=): a zone given by hand afterwards is not the one its view was written for.
+    if (s.placeState === 'failed') this.#openedOn = null;
     const opens = this.#zoneWas === '' && Boolean(this.params?.lieu || this.params?.autour) && this.params?.vue === this.#openedOn;
     if (this.params?.vue && (this.editing || this.#p.portee === 'zone') && this.#zoneWas !== undefined && zone !== this.#zoneWas && !opens) this.#set({ vue: null });
     if (zone) this.#openedOn = null;
