@@ -129,9 +129,10 @@ test('tools/preload-modules.mjs : le démarrage sans les écrans chargés à la 
   const start = staticGraph(ROOT);
   assert.equal(start[0], 'app/main.js');
   assert.ok(start.includes('app/components/gf-flora.js') && start.includes('vendor/lit.js'));
-  for (const later of ['app/components/gf-plant-detail.js', 'app/components/gf-map-page.js', 'app/components/gf-settings.js', 'app/layout/gf-layout.js']) {
+  for (const later of ['app/components/gf-plant-detail.js', 'app/components/sheet-base.js', 'app/components/gf-map-page.js', 'app/components/gf-settings.js', 'app/layout/gf-layout.js']) {
     assert.ok(!start.includes(later), `${later} n’est pas du démarrage`);
   }
   const sheet = staticGraph(ROOT, 'app/components/gf-plant-detail.js');
   assert.ok(sheet.includes('app/components/gf-media-viewer.js'));
+  assert.ok(sheet.includes('app/components/sheet-base.js'));
 });
