@@ -4,9 +4,9 @@
 // be announced once (`announced`, pendingUnlocks, markAnnounced: gf-app shows it), in the bar's order; the start, a
 // repair's restore and « Revoir les premiers pas » bring theirs quietly (announced at once), « Passer » and « Tout
 // montrer maintenant » announce nothing. The state read again: its fields only (anything else dropped), its tabs only
-// those that come; a state the storage refused keeps its tabs. Against an IndexedDB in memory
-// (fake-indexeddb). The module reads and writes as it loads, and this file is its own process: the tests run in order,
-// on one state.
+// those that come, announced once more without `announced`; a state the storage refused keeps its tabs. Against an
+// IndexedDB in memory (fake-indexeddb). The module reads and writes as it loads, and this file is its own process: the
+// tests run in order, on one state.
 import 'fake-indexeddb/auto';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -300,4 +300,22 @@ test('unlock : un onglet donné, à annoncer (les tests s’en servent)', async 
   assert.equal(d.discoverState().done, true);
   assert.deepEqual(d.pendingUnlocks(), ['flore']);
   assert.equal(await writes(() => d.unlock('flore')), 0);
+});
+
+test('un état sans `announced` (d’avant qu’il soit gardé), premiers pas finis ou non : ses onglets annoncés une fois de plus, puis plus jamais', () => {
+  /** The state as stored, read again (another tab wrote it). @param {object} s */
+  const reread = s => {
+    localStorage.setItem(KEY, JSON.stringify(s));
+    dispatchEvent(Object.assign(new Event('storage'), { key: KEY, storageArea: localStorage }));
+  };
+  // The three tabs come one by one, the first steps over by them.
+  reread({ done: true, unlocked: ['mine', 'map', 'flore'], tips: ['x'], seen: [1, 2, 3, 4, 5], step: 2 });
+  assert.deepEqual(d.pendingUnlocks(), ['flore', 'map', 'mine']);
+  d.markAnnounced(d.pendingUnlocks());
+  assert.deepEqual(d.pendingUnlocks(), []);
+  assert.deepEqual(stored().announced, ['mine', 'map', 'flore']);
+  // « Passer » after one tab had come: announced too.
+  reread({ done: true, unlocked: ['mine'], seen: [], step: 5 });
+  assert.deepEqual(d.pendingUnlocks(), ['mine']);
+  d.markAnnounced(['mine']);
 });
