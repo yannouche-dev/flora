@@ -28,11 +28,11 @@ import { reasonLine } from '../core/danger.js';
 import './gf-sortable-list.js';
 import './gf-media-viewer.js';
 import { registerWebPane, unregisterWebPane } from '../core/web-pane.js';
-import { notesEvents } from '../core/sheet-notes.js';
 import { verdictOf } from '../core/alerts.js';
 import { sheetSession, setAnchorLock } from '../core/sheet-session.js';
 import { openModal } from '../core/history.js';
 import { SheetBase, sheetStyles, KEEP_MAX_MS, WIKI_THEMES } from './sheet-base.js';
+import './gf-sheet-block.js';
 
 /** A block not moved: the layout would have too many panes nested to be exported and read back (pane-tree.js dock). */
 const TOO_DEEP = 'pas déplacé, trop de panneaux imbriqués';
@@ -168,12 +168,8 @@ export class GfPlantDetail extends SheetBase {
     return parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom);
   }
 
-  /** The note texts read (at startup) or changed in another tab: shown. */
-  #onNotes = () => this.requestUpdate();
-
   connectedCallback() {
     super.connectedCallback();
-    notesEvents.addEventListener('change', this.#onNotes);
     this.#resize.observe(this);
     // The hand (wheel, touch, keys, pointer): a place kept for a moment lets go at once; where the sheet stops,
     // once the hand has moved it, is noted for the next plant (#noteRead) — nothing is computed while it scrolls.
@@ -267,7 +263,6 @@ export class GfPlantDetail extends SheetBase {
 
   disconnectedCallback() {
     super.disconnectedCallback();
-    notesEvents.removeEventListener('change', this.#onNotes);
     for (const ev of ['touchend', 'touchcancel', 'pointerup', 'pointercancel']) window.removeEventListener(ev, this.#onLift, { capture: true });
     this.#touching = this.#buttonDown = false;
     unregisterWebPane(this);

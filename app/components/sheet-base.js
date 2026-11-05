@@ -1,7 +1,7 @@
 // @ts-check
 // What a plant's sheet and a block alone share: the plant read and its errors, its data loaded block by block (details,
 // Wikipédia, Wikidata, GBIF, open data, safety files), and each block's content as a view shows it. gf-plant-detail.js
-// lays the blocks out (rubrics, panes, King, the action bar).
+// lays the blocks out (rubrics, panes, King, the action bar); gf-sheet-block.js draws one alone.
 
 import { LitElement, html, css, nothing } from 'lit';
 import { STATUS_LABELS } from '../config.js';
@@ -41,6 +41,7 @@ import { chartStyles, climateChart, groupColor, groupLegend, networkChart, niche
 import { unsafeCSS } from 'lit';
 import './gf-media-viewer.js';
 import './gf-web-pane.js';
+import { notesEvents } from '../core/sheet-notes.js';
 import { sheetSession } from '../core/sheet-session.js';
 import { hideImg, dropFigure, showImg } from '../core/img.js';
 import { safeUrl } from '../core/safe-url.js';
@@ -1055,10 +1056,19 @@ export class SheetBase extends LitElement {
     else if ((hiddenChanged || viewChanged) && this._plant && this._details !== undefined) this.#loadExtras(this._plant, this._details, this.#abort?.signal);
   }
 
+  connectedCallback() {
+    super.connectedCallback();
+    notesEvents.addEventListener('change', this.#onNotes);
+  }
+
   disconnectedCallback() {
     super.disconnectedCallback();
+    notesEvents.removeEventListener('change', this.#onNotes);
     this.#abort?.abort();
   }
+
+  /** The note texts read (at startup) or changed in another tab: shown. */
+  #onNotes = () => this.requestUpdate();
 
   // ── Hooks: what a sheet laid out (gf-plant-detail.js) changes in its blocks; the defaults, a sheet's plain ───────────
 

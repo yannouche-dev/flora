@@ -232,6 +232,7 @@ const SHELL = [
   'app/core/gl-style.js',
   'app/core/maplibre.js',
   'app/styles/map-gl.css',
+  'app/components/gf-sheet-block.js',
   'app/components/gf-sheet-map.js',
   'app/components/gf-map-page.js',
   'app/components/gf-plant-card.js',
