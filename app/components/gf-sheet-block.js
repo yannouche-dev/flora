@@ -20,7 +20,8 @@
 
 import { html, css, nothing } from 'lit';
 import { href } from '../core/router.js';
-import { blockStyle, blockTitle, hidesEmpty, isMap, isTitleShown } from '../core/sheet-blocks.js';
+import { icon } from '../core/icons.js';
+import { aloneNote, blockStyle, blockTitle, hidesEmpty, isMap, isTitleShown } from '../core/sheet-blocks.js';
 import { SheetBase, sheetStyles } from './sheet-base.js';
 
 export class GfSheetBlock extends SheetBase {
@@ -73,8 +74,8 @@ export class GfSheetBlock extends SheetBase {
 
   // ── SheetBase's hooks: a block alone ──────────────────────────────────────────────────────────────────────
 
-  /** Its own block's data only. @param {string} key */
-  _shows(key) { return key === this.key; }
+  /** Its own block's data only — none when it cannot show it (aloneNote). @param {string} key */
+  _shows(key) { return key === this.key && !aloneNote(key); }
 
   /** A map alone fills its room. @param {string} key */
   _fills(key) { return true; }
@@ -85,8 +86,16 @@ export class GfSheetBlock extends SheetBase {
   /** No article beside it to read in. */
   get _reader() { return false; }
 
-  /** Nothing opens from it. */
-  get _canOpenPane() { return false; }
+  /** No map beside it: what the sheet's map would show stays text (Occurrences' areas, months, sources; the sosies). */
+  get _hasMap() { return false; }
+
+  /** To a theme of the article (its menu): opened, then brought to the top of the block. @param {string} key */
+  async goTo(key) {
+    await super.goTo(key);
+    if (!key.startsWith('wiki:')) return;
+    await this.updateComplete;
+    this.renderRoot.querySelector('#wiki-' + CSS.escape(key.slice(5)))?.scrollIntoView({ block: 'start' });
+  }
 
   render() {
     const plant = this._plant;
@@ -99,16 +108,21 @@ export class GfSheetBlock extends SheetBase {
       </article>`;
     }
     if (plant === null) return html`<article>${this._heading('Plante introuvable')}</article>`;
-    return this.#block(this._context(plant));
+    return html`${this.#block(this._context(plant))}${this._paneDialogView(plant)}`;
   }
 
   /**
    * The block at full size: the media viewer fills it (alone in a pane, the keys its at once; among a screen's cells,
    * never the focus), any other block scrolls in it. Titled: its title as the view shows it, nothing when the view
-   * leaves it out empty. @param {any} ctx
+   * leaves it out empty. What it cannot show, it says (aloneNote). @param {any} ctx
    */
   #block(ctx) {
     const key = this.key, v = this._view;
+    const note = aloneNote(key);
+    if (note) {
+      return html`<p class="muted only-pad">${note.kind === 'off'
+        ? html`${icon('eye-slash')} ${note.text} (<a href=${href.settings()}>Réglages › Modules</a>).` : note.text}</p>`;
+    }
     if (key === 'media') {
       return ctx.photosOff ? html`<p class="muted only-pad">Photos en ligne désactivées (<a href=${href.settings()}>Réglages › Modules</a>).</p>`
         : html`<gf-media-viewer ?local=${this.local} plant-id=${ctx.plant.id} presentation=${blockStyle(v, 'media')} .index=${this.at ?? 0} .startUrl=${this.startUrl}></gf-media-viewer>`;

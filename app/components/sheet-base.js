@@ -1399,7 +1399,7 @@ export class SheetBase extends LitElement {
     if (baseOf(v) === 'scientific' && sub('taxonomy', 'gbifSynonyms')) species('synonyms');
     if (baseOf(v) === 'scientific' && sub('status', 'iucn')) species('iucn', 'iucnRedListCategory');
     if (['gbif', 'months', 'years', 'regions', 'basis', 'datasets'].some(k => sub('occurrences', k))) {
-      part('stats', () => sources.gbifStats(plant, key, signal).then(stats => { this.#loadTitles(stats, signal); return stats; }));
+      part('stats', () => sources.gbifStats(plant, key, signal).then(stats => { this.#loadTitles(stats, signal, k => sub('occurrences', k)); return stats; }));
     }
     if (!this._store.state.modules.photos) { if (once('gbif:noPhotos')) { put('photos', []); put('herbarium', []); } }
     else {
@@ -1410,14 +1410,16 @@ export class SheetBase extends LitElement {
     // « Près d’ici » asked on an earlier sheet of this visit: look around again, without asking.
     if (nearAllowed && key && sub('occurrences', 'near') && once('gbif:near')) queueMicrotask(() => this.#findNear());
     // Arrived before the region and source names were shown: name them now.
-    if (this._gbif.stats) this.#loadTitles(this._gbif.stats, signal);
+    if (this._gbif.stats) this.#loadTitles(this._gbif.stats, signal, k => sub('occurrences', k));
   }
 
-  /** Names of the top sources and of the areas the plant is found in (each fetched once, then cached). @param {any} stats @param {AbortSignal} [signal] */
-  #loadTitles(stats, signal) {
+  /**
+   * Names of the top sources and of the areas the plant is found in (each fetched once, then cached), for the parts of
+   * Occurrences shown (`shown`: as #loadGbif reads them — a block alone shows them whatever the mode folds).
+   * @param {any} stats @param {AbortSignal | undefined} signal @param {(k: string) => boolean} shown
+   */
+  #loadTitles(stats, signal, shown) {
     if (!stats) return;
-    const v = this._view;
-    const shown = (/** @type {string} */ k) => !isHidden(v, 'occurrences') && !isSubHidden(v, 'occurrences', k);
     /** @type {[string, Promise<string | null>][]} */
     const wanted = [];
     const titles = this._gbif.titles || {};

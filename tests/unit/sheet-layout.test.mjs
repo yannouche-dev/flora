@@ -231,6 +231,31 @@ test('masquer ou réafficher un bloc ne coupe ni ne rallume jamais son service',
   SB.resetAll();
 });
 
+test('un bloc seul dit ce qu’il ne peut pas montrer : un mot qui n’est pas un bloc, Page web, son service coupé', () => {
+  SB.resetAll();
+  assert.deepEqual(SB.aloneNote('nimporte'), { kind: 'unknown', text: 'Bloc inconnu : « nimporte » — la fiche n’a pas de bloc de ce nom.' });
+  assert.deepEqual(SB.aloneNote('web'), { kind: 'web', text: '« Page web » ne s’ouvre que dans un panneau de la fiche.' });
+  for (const k of ['name', 'occurrences', 'wikipedia', 'calendar', 'media', 'photos']) assert.equal(SB.aloneNote(k), null, k);
+  // A block of one's own: a Note, a Carte; deleted, it is no block any more.
+  const note = SB.createNote('Récolte'), map = SB.createMap('Carte');
+  assert.equal(SB.aloneNote(note), null);
+  assert.equal(SB.aloneNote(map), null);
+  SB.deleteNote(note);
+  assert.equal(SB.aloneNote(note)?.kind, 'unknown');
+  // Its service off: said, the way back to it beside (the component's link); Photos en ligne is said by its own blocks.
+  M.setModule('gbif', false);
+  M.setModule('photos', false);
+  assert.deepEqual(SB.aloneNote('occurrences'), { kind: 'off', text: 'Service GBIF coupé pour tout l’appareil : rien à montrer ici' });
+  assert.equal(SB.aloneNote('gbifMedia')?.kind, 'off');
+  assert.equal(SB.aloneNote('photos'), null);
+  assert.equal(SB.aloneNote('media'), null);
+  M.setModule('wikipedia', false);
+  assert.equal(SB.aloneNote('wikipedia')?.text, 'Service Wikipédia coupé pour tout l’appareil : rien à montrer ici');
+  for (const m of ['gbif', 'photos', 'wikipedia']) M.setModule(/** @type {any} */ (m), true);
+  assert.equal(SB.aloneNote('occurrences'), null);
+  SB.resetAll();
+});
+
 test('« Par défaut » rend Occurrences, Habitat et Publications, et ne touche à aucun service', () => {
   SB.resetAll();
   for (const k of ['descriptions', 'occurrences', 'gbifProfile', 'literature', 'interactions']) SB.setHidden('scientific', k, true);

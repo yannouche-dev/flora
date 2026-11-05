@@ -602,8 +602,9 @@ export class GfFlora extends LitElement {
     // The block as the sheet beside shows it: in the mode arranged there while it is personalised.
     const view = arrangedMode('flore', this.#store.state.mode);
     const route = /** @type {any} */ (this.route);
+    // A photo touched in it (Photos, Médias GBIF): the pane turns to « Médias » at that image.
     return html`<section class=${phone ? 'sheet-pane' : `pane block-pane ${this._paneFull ? 'full' : ''}`} aria-label=${blockTitle(key)}
-        @media-index=${this.#mediaIndex} @media-close=${this.#closePane}>
+        @media-index=${this.#mediaIndex} @media-close=${this.#closePane} @open-pane=${this.#openPane}>
       <div class="pane-head">
         ${phone ? html`<button class="link back" type="button" @click=${this.#closePane}>${icon('arrow-left')} Fiche</button>` : nothing}
         <div class="title">${blockTitle(key)} <span class="pane-plant">${this.#paneName}</span></div>
