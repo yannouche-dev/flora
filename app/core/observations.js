@@ -193,7 +193,7 @@ export function obsParams(f) {
 export const obsKey = f => obsParams(f).map(([k, v]) => k + '=' + v).join('&');
 
 /**
- * The filters given against the defaults (a layout's sources: its maps'): only what differs, null when nothing does —
+ * The filters given against the defaults (a layout's group's: both sources, but one whose module is off): only what differs, null when nothing does —
  * what the address keeps. @param {ObsFilters} f @param {ObsFilters} defaults @returns {Readonly<Partial<ObsFilters>> | null}
  */
 export function obsChanges(f, defaults) {

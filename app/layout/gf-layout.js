@@ -302,6 +302,9 @@ export class GfLayout extends LitElement {
     .cell-head .link-chip[aria-pressed='true'], .cell-head .link-chip[data-on='true'] { border-style: solid; border-color: transparent;
       background: color-mix(in srgb, var(--gf-accent) 18%, transparent); color: var(--gf-accent); }
     .cell-head button.link-chip:focus-visible { outline: none; box-shadow: var(--gf-focus); }
+    /* In use, an axis the cell is detached from (a pin): said, never a switch — dashed, in the warning's tint. */
+    .cell-head .pin-chip { width: 22px; height: 22px; display: inline-grid; place-items: center; border-radius: 50%; font-size: 0.68rem;
+      border: 1px dashed var(--gf-text-muted); color: var(--gf-text-muted); background: var(--gf-warn-bg); }
     /* A results cell's list / grid switch (view=). */
     .cell-head .cell-views { flex: none; display: inline-flex; gap: 2px; padding: 2px; border-radius: 8px; background: var(--gf-surface-2, var(--gf-bg)); }
     .cell-head .cell-views .icon-btn { width: 28px; height: 26px; min-height: 0; padding: 0; font-size: 0.85rem; border-radius: 6px; }
@@ -1421,7 +1424,7 @@ export class GfLayout extends LitElement {
         aria-label=${'Construire : diviser, déplacer ou retirer « ' + title + ' »'} @click=${() => this.#toggleCross(key)}>${icon('tools')}</button>`;
     const empty = r.known && r.spec.empty;
     const views = r.known && r.spec.id === 'results' && head === 'oui' ? this.#viewSwitch(key, r, title) : nothing;
-    const links = editing ? this.#links(key, r, title) : nothing;
+    const links = this.#links(key, r, title);
     // Its group, when the layout has several: a letter in its colour in its head, a line of it down its edge (the cells
     // of one group share zone, plant, search).
     const many = this.#groups().length > 1;
@@ -1456,12 +1459,20 @@ export class GfLayout extends LitElement {
    * How a cell is wired to the others (registry.js#linksOf), in its head being modified: a chip each — the zone, the
    * search, the period, the current plant —, lit when it follows (and changes) it; touched, it detaches the cell or
    * attaches it again (the setting that does it, written: a plant cell fixed on its group's plant). One that cannot be
-   * changed is said, never a switch. @param {string} key @param {Resolved} r @param {string} title
+   * changed is said, never a switch. In use, its pins alone: a chip for each axis it is detached from, said, never a
+   * switch (none: nothing). @param {string} key @param {Resolved} r @param {string} title
    */
   #links(key, r, title) {
+    const ICONS = /** @type {const} */ ({ zone: 'geo-alt', recherche: 'search', periode: 'sun-fill', plante: 'flower1', liste: 'list-ul' });
+    if (!this.editing) {
+      const pins = linksOf(r).filter(l => !l.on);
+      return pins.length ? html`<span class="cell-links" role="group" aria-label=${'Détachée : « ' + title + ' »'}>${pins.map(l => {
+        const words = `${LINKS[l.link]} : détachée — ${l.why}`;
+        return html`<span class="pin-chip" data-link=${l.link} role="img" aria-label=${words} title=${words}>${icon(ICONS[l.link])}</span>`;
+      })}</span>` : nothing;
+    }
     const all = linksOf(r);
     if (!all.length) return nothing;
-    const ICONS = /** @type {const} */ ({ zone: 'geo-alt', recherche: 'search', periode: 'sun-fill', plante: 'flower1', liste: 'list-ul' });
     const plant = this.#stateOf(r).live.plant;
     return html`<span class="cell-links" role="group" aria-label=${'Liens de « ' + title + ' »'}>${all.map(l => {
       const words = `${LINKS[l.link]} : ${l.on ? 'reliée' : 'détachée'} — ${l.why}`;

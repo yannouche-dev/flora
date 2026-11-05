@@ -6,7 +6,7 @@
 // photo_license, captive; GBIF: mediaType, datasetKey, its datasets counted); GBIF's datasets in the zone with their
 // titles and counts (iNaturalist's copy left out), « Tout cocher » (the focus kept); an address of before naming those
 // asked alone (jeux=): those ticked, one ticked more added to them; a plant seen by GBIF alone in the list and on the
-// map; the chosen plant's big points, its own among the zone's (as many as its row says, GBIF's too, nothing asked
+// map — a map pinned to iNaturalist (src=inat) says so, « Afficher » lets its pin go; the chosen plant's big points, its own among the zone's (as many as its row says, GBIF's too, nothing asked
 // more); reloaded, the same; « effacer »: the layout's own again; the plants' origin, the « Statut en France » below; a
 // source that fails said, the other shown; a source whose module is off left out by default (never said missing on
 // the map), said when the address asks it; the zone's only dataset said so; the deck, iNaturalist down, when the search
@@ -14,7 +14,7 @@
 // iNaturalist answered here: 24 observations of the 12 plants of the zone (fixtures answerZone); GBIF: the elder
 // (Sambucus nigra, which iNaturalist did not see) twice, in two datasets, and a copy of iNaturalist's.
 import { test, expect, answerAround, answerZone, plantId } from './fixtures.mjs';
-import { screenSearch } from './app.mjs';
+import { layoutOf, screenSearch } from './app.mjs';
 import { mapState } from './quiet.mjs';
 
 /** @typedef {import('@playwright/test').Page} Page */
@@ -240,10 +240,17 @@ test('fusionnées : une plante vue par GBIF seul dans la liste et sur la carte, 
   await expect.poll(async () => (await mapPoints(page)).filter(p => p.kind === 'gbif').map(p => p.sci)).toEqual(['Sambucus nigra', 'Sambucus nigra']);
   expect((await mapPoints(page)).filter(p => p.kind === 'inat')).toHaveLength(24);
   await expect(page.locator('dl-search dl-results .scope')).toContainText('13 plantes dans les observations de la zone (iNaturalist et GBIF)');
-  // A map of the group that shows iNaturalist's alone (src=inat): its points, the list the same.
+  // A map of the group that shows iNaturalist's alone (src=inat): its points, the list the same — its pin says so, in use
+  // too; « Afficher » lets its src= go, GBIF's points on it again.
   await app.go(`#/layout/[map(src=inat),search(filters=1)]?${AT}&sources=inat,gbif`);
   await expect.poll(async () => (await mapPoints(page)).every(p => p.kind === 'inat') && (await mapPoints(page)).length === 24).toBe(true);
   expect(await names(page)).toContain('Sambucus nigra');
+  const pin = page.locator('dl-map').getByRole('group', { name: 'Sources de cette carte' });
+  await expect(pin).toHaveText('iNaturalist seul GBIF coché : pas sur cette carte · Afficher');
+  await pin.getByRole('button', { name: 'Afficher' }).click();
+  await expect.poll(() => layoutOf(page)).toBe('[map,search(filters=1)]');
+  await expect.poll(async () => (await mapPoints(page)).filter(p => p.kind === 'gbif').length).toBe(2);
+  await expect(pin).toHaveCount(0);
   // The elder touched on the map: its plant chosen.
   await app.go(`${LAYOUT}?${AT}&p=${plantId('Sambucus nigra')}`);
   await expect.poll(() => param(page, 'p')).toBe(String(plantId('Sambucus nigra')));

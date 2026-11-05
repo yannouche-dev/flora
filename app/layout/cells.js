@@ -59,7 +59,7 @@ import { nearestStop } from '../core/distance.js';
 import { cellIcon, distanceLabel } from './registry.js';
 import { COMPACT_WIDTH, MAP_INTENTS, MAP_LANDMARKS, MAP_LAYERS, WIDE_FEW, WIDE_FRAMES, catalogLayers, inatTiles, inWhen, layersOf, mapControls, opacitiesOf, opacText, overlaysOf, snapRadius, uiMode, viewOf, viewText, wideWords, zoneTaxa } from './map-options.js';
 import { periodQuery, plantOfPoint, taxonIdOf } from '../core/nearby.js';
-import { OBS_DEFAULTS, SOURCES, SOURCE_NAMES, defaultSources, failedText, inatQuery, obsNotes, sourcesText } from '../core/observations.js';
+import { OBS_DEFAULTS, SOURCES, SOURCE_NAMES, defaultSources, failedText, inatQuery, obsChanges, obsNotes, sourcesText } from '../core/observations.js';
 import { obsId } from './state.js';
 import { speciesKey } from '../components/map-style.js';
 import '../components/gf-map.js';
@@ -76,6 +76,8 @@ import '../miniapp/kit/ma-deck.js';
  * @typedef {import('./state.js').LayoutState} LayoutState
  * @typedef {import('./registry.js').Resolved} Resolved
  * @typedef {import('../miniapp/kit/cards.js').Card} Card
+ * @typedef {{ tag: string, line: string | null, why?: string, act?: { label: string, run: () => void } }} MapPin  a map's pin
+ *   (DlMap#pin): what it says it is (« iNaturalist seul »), what it leaves out, why (its title), the way back
  */
 
 /**
@@ -321,6 +323,12 @@ export class DlMap extends LitElement {
     /* The current plant no longer found by the search (state.js outside): still chosen, said above its chip. */
     .outside { max-width: 100%; box-sizing: border-box; padding: 3px 10px; border-radius: var(--gf-radius-pill); font-size: 0.78rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
       background: color-mix(in srgb, var(--gf-warn-bg, var(--gf-surface)) 96%, transparent); box-shadow: 0 1px 3px rgb(0 0 0 / 14%); }
+    /* Its pin (an axis of its group it is detached from: its sources): what it shows, what it leaves out, the way back. */
+    .pin { display: grid; gap: 2px; max-width: 100%; box-sizing: border-box; padding: 4px 10px; border-radius: 12px; font-size: 0.78rem;
+      background: color-mix(in srgb, var(--gf-surface) 96%, transparent); box-shadow: 0 1px 3px rgb(0 0 0 / 14%); }
+    .pin .tag { display: inline-flex; align-items: center; gap: 4px; font-weight: 600; color: var(--gf-accent); }
+    .pin .line { color: var(--gf-text-muted); }
+    .pin button.link { min-height: 0; padding: 0; font-size: inherit; }
     /* The legend (legende): its button, its lines once opened. */
     .legend > button { min-height: 32px; padding: 2px 12px; border-radius: var(--gf-radius-pill); font-size: 0.8rem; box-shadow: var(--gf-shadow); background: color-mix(in srgb, var(--gf-surface) 95%, transparent); }
     .legend ul { list-style: none; margin: 6px 0 0; padding: 8px 10px; display: grid; gap: 4px; border-radius: 12px; font-size: 0.8rem;
@@ -679,7 +687,7 @@ export class DlMap extends LitElement {
     const P = this.#p;
     /** @type {import('../components/gf-map-options.js').DataRow[]} */
     const rows = [];
-    // The group's sources the address says (sources=): whatever its maps say, the only ones asked.
+    // The group's sources the address says (sources=): the only ones asked, whatever its maps draw.
     const said = s.live.filtres?.sources ?? null;
     if (P.portee === 'zone') {
       for (const x of SOURCES) {
@@ -1059,15 +1067,54 @@ export class DlMap extends LitElement {
   }
 
   /**
-   * Bottom left, over the zoom: the current plant's chip — and, above it, « hors du résultat » when its group's search
-   * no longer finds it (state.js outside: it stays chosen) —, the legend. @param {LayoutState} s @param {Set<string>} on
+   * Its pin (an axis of its group it is detached from, said on the map itself, in use too — whatever its controls):
+   * its own sources (src=) fewer than its group's — « iNaturalist seul », the others ticked not on this map, « Afficher »
+   * lets src= go —, or only sources its group has unticked — nothing to show, « Cocher » ticks them for the group; a map
+   * of France or of the world, iNaturalist's tiles alone while its group has GBIF's observations (GBIF has no tiles).
+   * null: none. @param {LayoutState} s @returns {MapPin | null}
+   */
+  #pin(s) {
+    const group = s.filters.sources;
+    if (this.#p.portee !== 'zone') {
+      return group.includes('gbif') ? { tag: 'iNaturalist seul (carreaux)', line: null, why: 'GBIF n’a pas de carreaux : ses observations ne sont que sur une carte de la zone' } : null;
+    }
+    const own = /** @type {string[] | null} */ (Array.isArray(this.params?.src) ? this.params.src : null);
+    if (!own) return null;
+    const shown = group.filter(x => own.includes(x)), missing = group.filter(x => !own.includes(x));
+    const unticked = /** @type {('inat' | 'gbif')[]} */ (SOURCES.filter(x => own.includes(x) && !group.includes(x)));
+    const ticked = (/** @type {readonly string[]} */ xs, /** @type {string} */ word) => `${sourcesText(/** @type {any} */ (xs))} ${word}${xs.length > 1 ? 's' : ''}`;
+    if (missing.length && (shown.length || !unticked.length)) {
+      return { tag: shown.length ? sourcesText(shown) + ' seul' : 'Aucune source', line: `${ticked(missing, 'coché')} : pas sur cette carte`,
+        act: { label: 'Afficher', run: () => this.#set({ src: null }) } };
+    }
+    if (!shown.length && unticked.length) {
+      const next = SOURCES.filter(x => group.includes(x) || unticked.includes(x));
+      return { tag: sourcesText(unticked) + ' seul', line: `${ticked(unticked, 'décoché')} : rien à montrer sur cette carte`,
+        act: { label: 'Cocher', run: () => s.set({ filtres: obsChanges({ ...s.filters, sources: next }, { ...OBS_DEFAULTS, sources: s.defaultSources }) }, 'replace') } };
+    }
+    return null;
+  }
+
+  /** The pin drawn (#pin). @param {MapPin} pin */
+  #pinView(pin) {
+    return html`<div class="pin" role="group" aria-label="Sources de cette carte" title=${pin.why ?? nothing}>
+      <span class="tag">${icon('pin-angle-fill')} ${pin.tag}</span>
+      ${pin.line ? html`<span class="line">${pin.line}${pin.act ? html` · <button class="link" type="button" @click=${pin.act.run}>${pin.act.label}</button>` : nothing}</span>` : nothing}
+    </div>`;
+  }
+
+  /**
+   * Bottom left, over the zoom: its pin (#pin), the current plant's chip — and, above it, « hors du résultat » when its
+   * group's search no longer finds it (state.js outside: it stays chosen) —, the legend. @param {LayoutState} s @param {Set<string>} on
    */
   #bottomLeft(s, on) {
     const id = s.live.plant, info = s.plantInfo;
     const chip = on.has('plante') && id != null && info?.id === id;
-    if (!chip && !on.has('legende')) return nothing;
+    const pin = this.#pin(s);
+    if (!chip && !on.has('legende') && !pin) return nothing;
     const name = chip ? /** @type {{ name: string }} */ (info).name : '';
     return html`<div class="ctl bl">
+      ${pin ? this.#pinView(pin) : nothing}
       ${chip && s.outside ? html`<span class="outside" role="note" title="La plante choisie n’est pas parmi les plantes trouvées : elle reste choisie (Retour l’enlève)">${name} : hors du résultat</span>` : nothing}
       ${chip ? this.#chip(id, name) : nothing}
       ${on.has('legende') ? this.#legendView(s) : nothing}
@@ -1293,9 +1340,12 @@ export class DlResults extends LitElement {
     // Kept to what a map shows of the zone (moved by hand: state.js setView): said, with the way back.
     const results = this.#store.state.results;
     const zoneOf = s.live.at && results.inZone ? results.inZone.length : null;
+    // The map that leads it pinned to fewer sources than its group's (its src=): their plants alone, said.
+    const kinds = s.view?.kinds, group = s.filters.sources, kept = group.filter(x => kinds?.includes(x));
+    const pinned = kinds && kept.length < group.length ? ` (${kept.length ? sourcesText(kept) + ' seul' : 'aucune source'})` : '';
     return html`${s.live.at ? html`<div class="scope ${s.speciesState === 'error' ? 'error' : ''}" role="status">${icon('crosshair')}<span title=${note}>${scopeWords(s)} · ${note}</span>
         <button class="link" type="button" @click=${() => s.setScope(null)}>Toute la France</button></div>` : nothing}
-      ${zoneOf !== null ? html`<div class="scope view" role="status">${icon('map')}<span>Dans la vue de la carte : ${counted(results.total, 'plante')} sur ${zoneOf.toLocaleString('fr-FR')}</span>
+      ${zoneOf !== null ? html`<div class="scope view" role="status">${icon('map')}<span>Dans la vue de la carte${pinned} : ${counted(results.total, 'plante')} sur ${zoneOf.toLocaleString('fr-FR')}</span>
         <button class="link" type="button" @click=${() => s.wholeZone()}>Toute la zone</button></div>` : nothing}
       <gf-plant-list ?grid=${grid} .current=${s.live.plant} .channel=${this.channel} .obs=${this.#obs(s)}
         .empty=${zoneOf !== null ? 'Rien d’observé dans ce que montre la carte : déplacez-la, ou voyez toute la zone.' : null}
