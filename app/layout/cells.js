@@ -20,7 +20,8 @@
 //    its maps about « Les résultats », those of its group's search; media: the photos' viewer (gf-media-viewer). Each
 //    shows the current plant;
 //  - deck: Rencontres' cards (miniapp/kit/ma-deck.js) for the plants found in the scope, the one on top the current
-//    plant; a heart: a favourite.
+//    plant; a heart: a favourite. On the swipe core (miniapp/kit/swipes.js), its swipes in memory, its favourites
+//    without origin, taken back as left (DeckSession).
 // What is done in a cell with its own controls is kept in the layout (`cell-param` {key: value…}, gf-layout.js: the
 // address is the app, sent as it is): a map's 3D, background, layers (their order, IGN's catalogue, their opacity),
 // period, « Seule », legend, binoculars (« Observations autour » in 3D), its points' sources and the current plant's

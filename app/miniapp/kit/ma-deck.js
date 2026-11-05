@@ -1,18 +1,20 @@
 // @ts-check
-// The deck of a mini-app around a place: one card at a time, the next under it — its photo and credit, what
-// Wikipédia says of it, a short bio (its safety first: kit/cards.js#bio). Dragged, it leans and shows its stamp
-// (MATCH, BOF); far enough, or thrown, it flies off: right a match, left passed; up (or a touch), its sheet. The three
-// buttons (↺ undo, ✕, ♥, « ⋯ » its sheet unless `guided`, and its photos when asked: `photos`) and the keys (→ ←, ↑) do the same — the keys only when
-// the deck has the focus or nothing has (never a match by mistake from a tab, a slider or the map), and only while
-// `active` (no plant open, no match on screen). Cueillette prudente's toxic look-alikes (kit/session.js#avoids) are never
-// loved: their right says « Je la reconnais : à ne pas cueillir » (stamp À ÉVITER, ⛔ for ♥, a tag on the card).
+// The deck of a mini-app around a place (and of a screen's `deck` cell): one card at a time, the next under it — its
+// photo and credit, what Wikipédia says of it, a short bio (its safety first: kit/cards.js#bio). Dragged, it leans and
+// shows its stamp (MATCH, BOF); far enough, or thrown, it flies off: right a match, left passed; up (or a touch), its
+// sheet. The three buttons (↺ undo, ✕, ♥, « ⋯ » its sheet unless `guided`, and its photos when asked: `photos`) and the
+// keys (→ ←, ↑) do the same — the keys only when the deck has the focus or nothing has (never a match by mistake from a
+// tab, a slider or the map), and only while `active` (no plant open, no match on screen). Cueillette prudente's toxic
+// look-alikes (kit/session.js#avoids) are never loved: their right says « Je la reconnais : à ne pas cueillir » (stamp
+// À ÉVITER, ⛔ for ♥, a tag on the card).
 // The first time, the top card leans right then left: it can be swiped.
 // The hint once per app open (and again after « Recommencer »: kit/session.js#forgetGame). No more cards: further (« Chercher jusqu’à … »), or the ones passed again
 // (and those recognised to avoid, counted apart from the matches). A deck cut short (a screen's: its cards the first
 // ones of more) says so instead (`endTitle`, `endNote`), without « Chercher jusqu’à … » (further, its cards would
 // still be the first ones).
 // It decides nothing itself: the card flown off, the event `deck-decide` (detail { card, liked }); `deck-open`
-// (detail { id }), `deck-undo`, `deck-photos` (detail { id }). The session (kit/session.js) gives the rest.
+// (detail { id }), `deck-undo`, `deck-photos` (detail { id }). Its host (`session`, DeckHost: an activity's game,
+// kit/session.js, or a screen's deck, layout/cells.js — both on the swipe core, kit/swipes.js) gives the rest.
 
 import { LitElement, html, css, nothing, repeat } from 'lit';
 import { icon } from '../../core/icons.js';

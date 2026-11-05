@@ -5,10 +5,10 @@
 // Cueillette prudente: avoided — persist keys of the manifest, under geoflora.app.<id>.state), written only through
 // app.set. The rest lives while the app is open: the cards found (iNaturalist, matched to the flora; Cueillette
 // prudente: only the plants of a dangerous confusion, the deadliest first, its toxic look-alikes never a match but
-// recognised, to avoid), the observations in the circle (the map), what Wikipédia says of each
-// card, the swipes to undo, how many of the list's cards are shown. The view of the list is the context's (`view`,
-// the address's &v=). Rencontres: the plant of the screen, chosen (chosenId: kit/around.js#chosenContext). Fires
-// `change`.
+// recognised, to avoid), the observations in the circle (the map), what Wikipédia says of each card, the swipes on
+// the swipe core (kit/swipes.js: ↺, the hearts' favourites — this game's, by origin), how many of the list's cards are
+// shown. The view of the list is the context's (`view`, the address's &v=). Rencontres: the plant of the screen,
+// chosen (chosenId: kit/around.js#chosenContext). Fires `change`.
 
 import { getPlant } from '../../core/plants.js';
 import { speciesAround, observationPointsAround } from '../../core/nearby.js';
