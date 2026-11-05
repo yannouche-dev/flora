@@ -26,7 +26,6 @@ import { CATEGORIES, blockCategory, categoryOf } from '../core/categories.js';
 import { isFocused } from '../core/map-focus.js';
 import { reasonLine } from '../core/danger.js';
 import './gf-sortable-list.js';
-import './gf-media-viewer.js';
 import { registerWebPane, unregisterWebPane } from '../core/web-pane.js';
 import { verdictOf } from '../core/alerts.js';
 import { sheetSession, setAnchorLock } from '../core/sheet-session.js';
@@ -46,11 +45,6 @@ export class GfPlantDetail extends SheetBase {
   static properties = {
     /** Shown in the Flore tab's plant pane: compact padding, the pane has its own close / back controls. */
     embedded: { type: Boolean, reflect: true },
-    /**
-     * Among the cells of a screen (layout/cells.js), never alone in a pane: its block of its own (only=media) drawn by
-     * itself never takes the focus from where it is, and has nothing to close (gf-media-viewer local).
-     */
-    local: { type: Boolean },
     /** The plant waiting under the swiped card (Flore): not the page's plant yet, so it leaves the title alone. */
     preview: { type: Boolean },
     /**
@@ -72,22 +66,10 @@ export class GfPlantDetail extends SheetBase {
     tree: { attribute: false },
     /**
      * The host's sheet (`flore`, `collections`): « Personnaliser la fiche » (its crown, at the end of the action bar)
-     * opens there only — never on a card underneath, a block alone, panes alone, a host's own tree, an activity.
+     * opens there only — never on a card underneath, panes alone, a host's own tree, an activity (a block alone is
+     * gf-sheet-block).
      */
     sheet: {},
-    /**
-     * Only this block, at full size: the sheet's block shown in a pane beside it (Flore), or over the page.
-     * Only its data is loaded.
-     */
-    only: {},
-    /**
-     * `only`, a block among others (Orchidées de Mirabel's simple sheet, kit/ma-plant-sheet.js): as the sheet reads it
-     * — its title when the view shows it (an h3, under the rubric's), left out when the view leaves it out empty.
-     */
-    titled: { type: Boolean },
-    /** In a pane (`only` media): the image to open at, by URL (a photo touched) or by place (the address). */
-    paneStart: { attribute: false },
-    paneAt: { attribute: false },
     /** The block shown in the pane beside this sheet (Flore): only a line here, not twice. */
     inPane: { attribute: false },
     /** The plant's verdict (core/danger.js, read by alerts.js): the Alertes rubric's badge, its count and colour. */
@@ -121,8 +103,6 @@ export class GfPlantDetail extends SheetBase {
     this.sheet = null;
     this.preview = false;
     this.scoped = false;
-    /** @type {string | null} */
-    this.only = null;
     /** Block being dragged, and the order shown meanwhile (else the saved one). @type {string | null} */
     this._dragKey = null;
     /** @type {string[] | null} */
@@ -143,8 +123,6 @@ export class GfPlantDetail extends SheetBase {
     /** @type {import('../core/danger.js').Verdict | null} */
     this._verdict = null;
     this.panesOnly = false;
-    this.local = false;
-    this.titled = false;
     /** @type {string[] | null} */
     this.paneKeys = null;
     /** @type {import('../core/pane-tree.js').PaneNode | null} */
@@ -237,14 +215,14 @@ export class GfPlantDetail extends SheetBase {
     // read now is reached again once drawn (#placeAgain).
     const king = this.#kingHere, view = this._view;
     const viewChanged = view !== this.#lastView;
-    if (this.#placed && this._plant && !this.preview && !this.only && !this.panesOnly && ((viewChanged && this.#lastView !== null) || king !== this.#king)) {
+    if (this.#placed && this._plant && !this.preview && !this.panesOnly && ((viewChanged && this.#lastView !== null) || king !== this.#king)) {
       const { cat, block, wiki } = this.#readPlace();
       if (cat || block) this.#rePlace = { cat, block, wiki };
     }
     this.#king = king;
     this.#lastView = view;
     // The panels opened follow to the next plant (not from a preview card, which is not read).
-    if (!this.preview && !this.only) {
+    if (!this.preview) {
       if (changed.has('_subsOpen')) sheetSession.subsOpen = this._subsOpen;
       if (changed.has('_mapsOpen')) sheetSession.mapsOpen = this._mapsOpen;
       // (A pane of a host's own tree made bigger is that host's: not the next sheet's.)
@@ -277,21 +255,10 @@ export class GfPlantDetail extends SheetBase {
     let host = this;
     while (host && host.nodeName !== 'GF-LAYOUT') { const root = host.getRootNode(); host = root instanceof ShadowRoot ? root.host : null; }
     if (/** @type {any} */ (host)?.pageTitle) return;
-    if (!this.preview && !this.only && plant && !plant.failed) document.title = nameOf(plant) + ' — GeoFlora';
+    if (!this.preview && plant && !plant.failed) document.title = nameOf(plant) + ' — GeoFlora';
   }
 
   // ── SheetBase's hooks: what the sheet's layout changes in its blocks ─────────────────────────────────────────
-
-  /** In a pane: that block's data only. @param {string} key */
-  _shows(key) { return this.only ? key === this.only : super._shows(key); }
-
-  /** Pinned, or alone in a pane. @param {string} key */
-  _fills(key) { return super._fills(key) || this.only === key; }
-
-  /** @param {string} theme */
-  _wikiHost(theme) { return this.only ? null : super._wikiHost(theme); }
-
-  get _reader() { return !this.only && super._reader; }
 
   /** The card under a swiped one: a placeholder rather than a second map. */
   get _drawsMaps() { return !this.preview; }
@@ -322,7 +289,7 @@ export class GfPlantDetail extends SheetBase {
   }
 
   /** A host's sheet, read as such: « Personnaliser la fiche » can open here (its crown). */
-  get #crownable() { return Boolean(this.sheet) && !this.preview && !this.only && !this.panesOnly && !this.tree && !this.scoped; }
+  get #crownable() { return Boolean(this.sheet) && !this.preview && !this.panesOnly && !this.tree && !this.scoped; }
 
   /** « Personnaliser la fiche » (code name: King) open on this sheet. */
   get #kingHere() { return this.#crownable && this._store.state.king?.sheet === this.sheet; }
@@ -334,7 +301,7 @@ export class GfPlantDetail extends SheetBase {
    */
   get _view() {
     const arranged = this.#kingHere || (this.preview && this._store.state.king?.sheet === this.sheet && Boolean(this.sheet)
-      && !this.only && !this.panesOnly && !this.tree && !this.scoped);
+      && !this.panesOnly && !this.tree && !this.scoped);
     return arranged ? arrangedMode(/** @type {string} */ (this.sheet), this.view) : this.view;
   }
 
@@ -436,7 +403,6 @@ export class GfPlantDetail extends SheetBase {
     }
 
     const ctx = this._context(plant);
-    if (this.only) return this.#onlyBlock(this.only, ctx);
     // What a move did (King: « Déplacer vers… », a drag, « Par défaut »), said — in the panes alone too (Découvrir). The
     // region is there before its first message (one born with its text is seldom read out).
     const said = html`<p class="said" aria-live="polite">${this._said}</p>`;
@@ -467,24 +433,8 @@ export class GfPlantDetail extends SheetBase {
     return html`<div class="frame edged panes-only" data-drop-node="root">${this.#node(ctx, tree, nothing)}</div>`;
   }
 
-  /**
-   * One block at full size (a pane, a screen's cell): the media viewer fills it — alone in a pane, the keys its at once;
-   * among a screen's cells (local), never the focus —, any other block scrolls in it. Titled (a block among others): its
-   * title as the view shows it, nothing when the view leaves it out empty. @param {string} key @param {any} ctx
-   */
-  #onlyBlock(key, ctx) {
-    if (key === 'media') {
-      return ctx.photosOff ? html`<p class="muted only-pad">Photos en ligne désactivées (<a href=${href.settings()}>Réglages › Modules</a>).</p>`
-        : html`<gf-media-viewer ?local=${this.local} plant-id=${ctx.plant.id} presentation=${blockStyle(this._view, 'media')} .index=${this.paneAt ?? 0} .startUrl=${this.paneStart ?? null}></gf-media-viewer>`;
-    }
-    const empty = this.titled && hidesEmpty(this._view, key);
-    if (empty && this._emptyHere(key, ctx)) return nothing;
-    const title = this.titled && isTitleShown(this._view, key) ? html`<h3 class="block-title"><span class="name">${blockTitle(key)}</span></h3>` : nothing;
-    return html`<div class="only-pad ${isMap(key) ? 'fill' : ''}"><section class="block only ${empty ? 'hide-empty' : ''} ${isMap(key) ? 'map-block' : ''}" data-key=${key}>${title}<div class="content">${this._content(key, ctx)}</div></section></div>`;
-  }
-
-  /** ⤢ and a photo touched open a block at full size (SheetBase#_openPane): not from the card underneath, nor a block alone. */
-  get _canOpenPane() { return !this.preview && !this.only; }
+  /** ⤢ and a photo touched open a block at full size (SheetBase#_openPane): not from the card underneath. */
+  get _canOpenPane() { return !this.preview; }
 
   /** To a theme of the article (its anchor in the Wikipédia block): opened, then reached (#arrive). @param {string} t */
   async #wikiGo(t) {
@@ -998,7 +948,7 @@ export class GfPlantDetail extends SheetBase {
 
   /** The place noted for the next plant (in memory: sheet-session.js). @param {string | null} cat @param {string | null} block @param {string | null} wiki */
   #noteAnchor(cat, block, wiki) {
-    if (this.preview || this.only) return;
+    if (this.preview) return;
     sheetSession.anchor = cat;
     sheetSession.anchorBlock = block;
     sheetSession.anchorOffset = 0;
@@ -1272,7 +1222,7 @@ export class GfPlantDetail extends SheetBase {
    * theme likewise. @param {boolean} [force]
    */
   #noteRead(force = false) {
-    if (this.preview || this.only || (sheetSession.anchorLock && !force)) return;
+    if (this.preview || (sheetSession.anchorLock && !force)) return;
     const { cat, block, wiki, el } = this.#readPlace();
     this.#noteAnchor(cat, block, wiki);
     if (el) this.#padTo(el); else this.#padBase();
@@ -1308,7 +1258,7 @@ export class GfPlantDetail extends SheetBase {
    * as soon as it comes, unless the hand moves the sheet first.
    */
   async #place() {
-    if (this.only || this.panesOnly) return;
+    if (this.panesOnly) return;
     await this.updateComplete;
     const scroller = this.#sheetScroller;
     const cat = sheetSession.anchor;
@@ -1359,7 +1309,7 @@ export class GfPlantDetail extends SheetBase {
     if (this.style.getPropertyValue('--kb-h') === kb + 'px' && this.#padKing === this.#kingBarH()) return;
     this.style.setProperty('--kb-h', kb + 'px');
     this.#padKing = this.#kingBarH();
-    if (this._plant && !this.only && !this.panesOnly) { const read = this.#readPlace().el; if (read) this.#padTo(read); else this.#padBase(); }
+    if (this._plant && !this.panesOnly) { const read = this.#readPlace().el; if (read) this.#padTo(read); else this.#padBase(); }
   }
 
   /**
@@ -1467,7 +1417,7 @@ export class GfPlantDetail extends SheetBase {
 
   updated() {
     // A « Page web » pane in this layout: the app's links to other sites come to it.
-    if (this._paneOf('web') && !this.only) registerWebPane(this); else unregisterWebPane(this);
+    if (this._paneOf('web')) registerWebPane(this); else unregisterWebPane(this);
     // The sheet scrolls in its middle when it has edges: the host itself does not.
     this.toggleAttribute('edged', Boolean(this.renderRoot.querySelector('.frame.edged')));
     // The action bar's height: the rubrics stacked at the bottom wait above it.
@@ -1489,7 +1439,7 @@ export class GfPlantDetail extends SheetBase {
     // The plant is drawn: at the place read on the previous one. The card underneath (a preview) is put there too,
     // ready to come on top; on top, it is put there again (the place read may have changed meanwhile) — already
     // there, nothing moves.
-    if (!this.#placed && this._plant && !this._plant.failed && !this.only) { this.#placed = true; this.#place(); }
+    if (!this.#placed && this._plant && !this._plant.failed) { this.#placed = true; this.#place(); }
     else if (this.#promoted && this._plant && !this._plant.failed) this.#place();
     else if (this.#rePlace) this.#placeAgain(this.#rePlace);
     this.#rePlace = null;

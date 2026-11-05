@@ -1737,5 +1737,5 @@ export function renderCell(r, ctx) {
   // Among the cells (local): its photos block (plant.media) drawn by itself never takes the focus either.
   return r.view
     ? html`<gf-sheet-block local key=${r.view.key} plant-id=${plant} view=${view} .channel=${channel}></gf-sheet-block>`
-    : html`<gf-plant-detail embedded subheading local plant-id=${plant} view=${view} .channel=${channel}></gf-plant-detail>`;
+    : html`<gf-plant-detail embedded subheading plant-id=${plant} view=${view} .channel=${channel}></gf-plant-detail>`;
 }

@@ -392,13 +392,13 @@ test('une observation touchée : sa fiche simple, le focus dedans — « Médias
   await app.go(`#/app/orchidees?p=${plantId('Ophrys holosericea')}`);
   await expect.poll(() => hash(page)).toBe(`#/app/orchidees/map?p=${plantId('Ophrys holosericea')}`);
   await expect(sheet.locator('.sheet-head strong')).toHaveText('Ophrys bourdon');
-  await expect(sheet.locator('gf-plant-detail:not([only])')).toHaveCount(0);
+  await expect(sheet.locator('gf-plant-detail')).toHaveCount(0);
   // The start named with a plant (« Départ » from the steps bar, its sheet open): the start screen, the same simple sheet.
   await app.go(`#/app/orchidees/start?p=${id}`);
   const over = page.locator('gf-miniapp .body > ma-plant-sheet .sheet');
   await expect(over.locator('.sheet-head strong')).toHaveText('Traunsteinère globuleuse');
   await expect(over.locator('.simple gf-media-viewer')).toHaveCount(1);
-  await expect(over.locator('gf-plant-detail:not([only])')).toHaveCount(0);
+  await expect(over.locator('gf-plant-detail')).toHaveCount(0);
   await over.getByRole('button', { name: 'Fermer la fiche' }).click();
   await expect(over).toHaveCount(0);
   await expect.poll(() => hash(page)).toBe('#/app/orchidees/start');

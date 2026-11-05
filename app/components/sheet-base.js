@@ -582,15 +582,6 @@ export const sheetStyles = [ui, severityStyles, css`
     dialog.pane gf-sheet-block { flex: 1; min-height: 0; }
     .pane-bar { display: flex; align-items: center; gap: 8px; padding: 6px 8px 6px 14px; border-bottom: 1px solid var(--gf-border); }
     .pane-bar h2 { flex: 1; margin: 0; font-size: 1rem; }
-    /* A block alone, at full size (a pane). */
-    :host([only]) { display: flex; flex-direction: column; min-height: 0; overflow: hidden auto; }
-    :host([only='media']) { overflow: hidden; }
-    :host([only]) gf-media-viewer { flex: 1; min-height: 0; }
-    .only-pad { padding: 12px 16px; }
-    .block.only { margin: 0; }
-    /* Titled (a block among others): its title as the sheet's (an h3 there). */
-    .block.only > h3.block-title { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--gf-text-muted); font-weight: 600; }
-    .only-pad.fill, .only-pad.fill > .block, .only-pad.fill > .block > .content { flex: 1; display: flex; flex-direction: column; min-height: 0; }
     /* ⤢: a block in the pane beside the sheet. */
     .block { position: relative; }
     .to-pane { width: 30px; height: 30px; min-height: 0; font-size: 0.85rem; flex: none; opacity: 0; transition: opacity 0.15s; color: var(--gf-text-muted); }
