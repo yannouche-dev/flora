@@ -260,7 +260,7 @@ test.describe('un grand écran', () => {
     await app.open(screen('[map(r=1km),results,plant.wikipedia]', `${AT}&p=${ortie}`, true));
     const grid = () => layoutOf(page);
     const chips = (/** @type {string} */ comp) => page.locator(`gf-layout section.cell[data-comp="${comp}"] .cell-links`);
-    await expect(chips('map').locator('.link-chip')).toHaveCount(5);
+    await expect(chips('map').locator('.link-chip')).toHaveCount(6);
     // The map's points: every plant of the zone, not only the search's.
     await chips('map').locator('[data-link="recherche"]').click();
     await expect.poll(grid).toBe('[map(r=1km,suit=0),results,plant.wikipedia]');

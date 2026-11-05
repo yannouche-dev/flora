@@ -158,10 +158,10 @@ export function fitReason(spec, room) {
   return null;
 }
 
-/** A component that chooses the current plant among others (the results, the map, the deck…): it writes it and reads more than it. @param {ComponentSpec} c */
-const chooser = c => c.writes.includes('plant') && c.reads.some(k => k !== 'plant');
+/** A component that chooses the current plant among those of its group's search (the results, the map, the deck…): it writes it and reads the search. @param {ComponentSpec} c */
+const chooser = c => c.writes.includes('plante') && c.reads.includes('recherche');
 /** A component that shows the current plant only (the sheet, its blocks, the photos). @param {ComponentSpec} c */
-const shower = c => c.reads.includes('plant') && !chooser(c);
+const shower = c => c.reads.includes('plante') && !chooser(c);
 
 /**
  * The components to suggest for a cell, given the others (by what they read and write of the shared state): nothing

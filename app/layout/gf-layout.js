@@ -1457,13 +1457,13 @@ export class GfLayout extends LitElement {
 
   /**
    * How a cell is wired to the others (registry.js#linksOf), in its head being modified: a chip each — the zone, the
-   * search, the period, the current plant —, lit when it follows (and changes) it; touched, it detaches the cell or
+   * search, the period, the observations, the current plant, the list —, lit when it follows (and changes) it; touched, it detaches the cell or
    * attaches it again (the setting that does it, written: a plant cell fixed on its group's plant). One that cannot be
    * changed is said, never a switch. In use, its pins alone: a chip for each axis it is detached from, said, never a
    * switch (none: nothing). @param {string} key @param {Resolved} r @param {string} title
    */
   #links(key, r, title) {
-    const ICONS = /** @type {const} */ ({ zone: 'geo-alt', recherche: 'search', periode: 'sun-fill', plante: 'flower1', liste: 'list-ul' });
+    const ICONS = /** @type {const} */ ({ zone: 'geo-alt', recherche: 'search', periode: 'sun-fill', observations: 'binoculars', plante: 'flower1', liste: 'list-ul' });
     if (!this.editing) {
       const pins = linksOf(r).filter(l => !l.on);
       return pins.length ? html`<span class="cell-links" role="group" aria-label=${'Détachée : « ' + title + ' »'}>${pins.map(l => {

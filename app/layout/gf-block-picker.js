@@ -3,7 +3,8 @@
 // « Emplacement »'s tiles) — its component, its block, its intent, its settings. Everything it offers comes from the registry's schema (registry.js; picker-model.js,
 // summary.js), never from a component by name. Three levels, a breadcrumb (« Case 3 › Carte › Couches ») and Back:
 //  - « Contenu »: a tile per component (its icon, title, sentence), those to suggest first (what the other cells
-//    read and write: nothing chooses a plant → the results, the map…), those too large for the cell greyed with why
+//    read and write of their group's selection, registry.js StateKey: nothing writes the plant from the search → the
+//    results, the map…; nothing shows it → the sheet, the photos), those too large for the cell greyed with why
 //    (« « Carte » demande 240 px de large »); the sheet's tile opens its blocks; never the « Emplacement » itself (what
 //    « Vider la case » leaves, when the host offers it: `clear-label`).
 //  - « Que montre-t-il ? » (a component with intents: the map): a card per intent, what it sets drawn as chips; a tap

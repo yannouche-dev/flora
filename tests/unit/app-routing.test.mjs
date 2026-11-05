@@ -123,10 +123,14 @@ test('ce que règlent les commandes de la case n’est pas dans « Affiner » du
 test('les liens d’une case (en modification) : ce qu’elle suit et change, et le réglage qui l’en détache', async () => {
   const { linksOf, CURRENT } = await import('../../app/layout/registry.js');
   const links = (/** @type {string} */ text) => linksOf(resolve(cellOf(text))).map(l => [l.link, l.on, l.toggle]);
-  assert.deepEqual(links('map'), [['zone', true, { portee: 'france' }], ['recherche', true, { suit: false }], ['periode', true, null], ['plante', true, { plante: 'non' }],
-    ['liste', true, { liste: 'zone' }]]);
-  assert.deepEqual(links('map(france,suit=0,plante=non)'), [['zone', false, { portee: null }], ['recherche', false, { suit: null }], ['periode', true, null], ['plante', false, { plante: null }],
-    ['liste', false, null]]);
+  assert.deepEqual(links('map'), [['zone', true, { portee: 'france' }], ['recherche', true, { suit: false }], ['periode', true, null], ['observations', true, null],
+    ['plante', true, { plante: 'non' }], ['liste', true, { liste: 'zone' }]]);
+  assert.deepEqual(links('map(france,suit=0,plante=non)'), [['zone', false, { portee: null }], ['recherche', false, { suit: null }], ['periode', true, null],
+    ['observations', true, null], ['plante', false, { plante: null }], ['liste', false, null]]);
+  // Its observations: some sources only (src=), a pin — let go, every source of its group; both (an intent's), none.
+  assert.deepEqual(links('map(src=inat)')[3], ['observations', false, { src: null }]);
+  assert.equal(linksOf(resolve(cellOf('map(src=gbif)')))[3].why, 'GBIF seul : les autres sources du groupe ne sont pas sur cette carte');
+  assert.deepEqual(links('map(repartition)')[3], ['observations', true, null]);
   // The list: the zone's all (liste=zone), then what the map shows again; a map of France never leads it, said.
   assert.deepEqual(links('map(liste=zone)').at(-1), ['liste', false, { liste: null }]);
   // A map of the current plant alone never leads it: said, neither lit nor a switch.

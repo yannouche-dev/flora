@@ -9,9 +9,11 @@
 // offers the closest name; an unknown view, parameter or value is said, and left out (the default holds). What is
 // kept is written back in canonical form (canonical()): the address then reads the same for everyone.
 //
-// The shared state (state.js): `scope` (the place's centre and the radius), `query` (the Flore search: its text, its
-// filters, its sort), `results` (the plants it finds, in the scope), `plant` (the current plant), `obs` (an observation
-// lit on the map). reads / writes below say which a component follows and which it changes.
+// The selection a group's cells share (state.js, one per group): `zone` (the place's centre and the radius), `periode`
+// (the period of the zone's observations), `observations` (their sources and filters: sources=, qualite=…),
+// `recherche` (the group's search: its text, its filters, its sort — never Flore's), `plante` (the current plant),
+// `regard` (what a map shows of the zone, moved by hand: the list kept to it, vue=). reads / writes below say which
+// a component follows and which it changes.
 
 import { fold } from '../core/fold.js';
 import { ALL_WHENS, LATEST_SPOT, PHOTO_HISTORIC, PHOTO_PERIODS, PHOTO_YEARS, SPOT_YEARS, baseKeyOf, baseLabel, whenLabel } from '../core/backgrounds.js';
@@ -57,7 +59,7 @@ import { MAP_CONTROL_ALIASES, MAP_CONTROLS, MAP_INTENT_ALIASES, MAP_INTENTS, MAP
  *   else its values joined by « + », « aucune » for none; `none`: its words for none (« sans noms ni réseaux »), else
  *   « ‹label› : aucune ». `shared`: it acts on the whole group, not the cell alone (the radius, the period, the
  *   starting place: group-defaults.js — the first cell that says it wins), said beside its label in the editor.
- * @typedef {'scope' | 'query' | 'results' | 'plant' | 'obs'} StateKey
+ * @typedef {'zone' | 'periode' | 'observations' | 'recherche' | 'plante' | 'regard'} StateKey
  * @typedef {{ key: string, title: string }} ViewSpec
  * @typedef {object} ComponentSpec
  * @property {string} id
@@ -304,7 +306,7 @@ export const COMPONENTS = [
     id: 'map', title: 'Carte', icon: 'map', aliases: ['carte'],
     about: 'La zone (cercle autour d’un lieu), les observations des plantes trouvées, celles de la plante courante en grand. Toucher un point : sa plante devient la plante courante ; appui long : la zone s’y centre.',
     params: MAP_PARAMS,
-    main: 'r', reads: ['scope', 'results', 'plant', 'obs'], writes: ['scope', 'plant', 'obs'], min: { w: 240, h: 180 }
+    main: 'r', reads: ['zone', 'periode', 'observations', 'recherche', 'plante', 'regard'], writes: ['zone', 'periode', 'regard', 'plante'], min: { w: 240, h: 180 }
   },
   {
     id: 'search', title: 'Recherche', icon: 'search', aliases: ['recherche', 'chercher', 'flore'],
@@ -317,12 +319,12 @@ export const COMPONENTS = [
     // cell's head, its longest words cut short as on a phone; the chips wrapped), every control inside the cell — and a
     // bar taller than its cell scrolls in it (cells.js); at 280 px its field still shows about eleven letters beside its
     // ✕ and its microphone — narrower, too few to read what is typed (measured: 86 px at 280, 67 at 260).
-    main: 'filters', reads: ['query', 'results', 'plant'], writes: ['query', 'plant'], min: { w: 280, h: 160 }
+    main: 'filters', reads: ['recherche', 'observations', 'plante'], writes: ['recherche', 'observations', 'plante'], min: { w: 280, h: 160 }
   },
   {
     id: 'filters', title: 'Filtres', icon: 'funnel', aliases: ['filtres', 'facettes'],
     about: 'Les filtres de la recherche seuls : familles, genres, statuts, protection, photo, nom français, Mes plantes.',
-    params: {}, reads: ['query', 'results'], writes: ['query'], min: { w: 220, h: 160 }
+    params: {}, reads: ['recherche', 'observations'], writes: ['recherche', 'observations'], min: { w: 220, h: 160 }
   },
   {
     id: 'results', title: 'Résultats', icon: 'list-ul', aliases: ['resultats', 'liste', 'list'],
@@ -330,7 +332,7 @@ export const COMPONENTS = [
     params: {
       view: { kind: 'enum', label: 'Présentation', def: 'auto', values: { auto: 'Selon la largeur', list: 'Liste', grid: 'Grille' }, aliases: { liste: 'list', grille: 'grid', table: 'grid', tableau: 'grid' }, words: ['vue', 'affichage'] }
     },
-    main: 'view', reads: ['query', 'results', 'plant'], writes: ['query', 'plant'], min: { w: 240, h: 140 }
+    main: 'view', reads: ['recherche', 'zone', 'regard', 'plante'], writes: ['recherche', 'plante', 'zone', 'regard'], min: { w: 240, h: 140 }
   },
   {
     id: 'plant', title: 'Fiche', icon: 'card-text', aliases: ['fiche', 'plante', 'sheet'],
@@ -338,7 +340,7 @@ export const COMPONENTS = [
     params: {
       mode: { kind: 'enum', label: 'Mode d’affichage', def: null, values: { epure: 'Épuré', standard: 'Standard', scientific: 'Scientifique' }, aliases: { scientifique: 'scientific', science: 'scientific', simple: 'epure' }, words: ['vue', 'view'] }
     },
-    main: 'mode', views: blockViews, viewAliases: BLOCK_ALIASES, reads: ['plant'], writes: ['plant'], min: { w: 260, h: 140 }
+    main: 'mode', views: blockViews, viewAliases: BLOCK_ALIASES, reads: ['plante'], writes: ['plante'], min: { w: 260, h: 140 }
   },
   {
     id: 'media', title: 'Photos', icon: 'images', aliases: ['medias', 'photos', 'photo', 'images', 'galerie'],
@@ -346,17 +348,17 @@ export const COMPONENTS = [
     params: {
       style: { kind: 'enum', label: 'Présentation', def: 'scene', values: { scene: 'Scène', mosaic: 'Mosaïque', slideshow: 'Diaporama' }, aliases: { mosaique: 'mosaic', diaporama: 'slideshow' }, words: ['presentation', 'vue'] }
     },
-    main: 'style', reads: ['plant'], writes: [], min: { w: 260, h: 220 }
+    main: 'style', reads: ['plante'], writes: [], min: { w: 260, h: 220 }
   },
   {
     id: 'deck', title: 'Rencontres', icon: 'heart-fill', aliases: ['cartes', 'rencontres', 'swipe', 'paquet'],
     about: 'Les plantes trouvées en cartes, une à la fois : la carte du dessus est la plante courante ; à droite, un coup de cœur (vos favoris), à gauche, la suivante.',
-    params: {}, reads: ['results', 'plant', 'scope'], writes: ['plant'], min: { w: 280, h: 360 }
+    params: {}, reads: ['zone', 'recherche', 'plante'], writes: ['plante', 'zone'], min: { w: 280, h: 360 }
   },
   {
     id: 'place', title: 'Zone', icon: 'geo-alt', aliases: ['lieu', 'zone', 'scope', 'autour'],
     about: 'Choisir la zone : autour de moi, une commune, et le rayon. Sans zone, toute la flore de France.',
-    params: { r: RADIUS }, main: 'r', reads: ['scope'], writes: ['scope'], min: { w: 220, h: 170 }
+    params: { r: RADIUS }, main: 'r', reads: ['zone'], writes: ['zone'], min: { w: 220, h: 170 }
   },
   {
     // A place of a layout to build a component in (a starting grid's places, a cell cut in two, « Changer de bloc »):
@@ -791,7 +793,7 @@ export function menuLooks(columns) {
 }
 
 /**
- * @typedef {'zone' | 'recherche' | 'periode' | 'plante' | 'liste'} LinkKey
+ * @typedef {'zone' | 'recherche' | 'periode' | 'observations' | 'plante' | 'liste'} LinkKey
  * @typedef {{ link: LinkKey, on: boolean, why: string, toggle: Record<string, unknown> | null }} Link
  *   `on`: the cell follows (and changes) that shared state; `toggle`: its settings detached or attached again (null:
  *   always so — said, never a switch); `why`: what it does, in French
@@ -801,12 +803,13 @@ export function menuLooks(columns) {
 export const CURRENT = 'courante';
 
 /** The links, in their order, and their words. @type {Record<LinkKey, string>} */
-export const LINKS = { zone: 'Zone', recherche: 'Recherche', periode: 'Période', plante: 'Plante', liste: 'Liste' };
+export const LINKS = { zone: 'Zone', recherche: 'Recherche', periode: 'Période', observations: 'Observations', plante: 'Plante', liste: 'Liste' };
 
 /**
- * How a cell is wired to the others — what of the layout's shared state it follows and changes (the zone, the
- * search, the period, the current plant), and the setting that detaches it from one, or attaches it again: the
- * chips in each cell's head, being modified. A place to build in, an unknown component: none.
+ * How a cell is wired to the others — what of its group's selection it follows and changes (the zone, the search, the
+ * period, the observations, the current plant, the list), and the setting that detaches it from one, or attaches it
+ * again: the chips in each cell's head, being modified; in use, those it is detached from (its pins). A place to
+ * build in, an unknown component: none.
  * @param {Resolved} r @returns {Link[]}
  */
 export function linksOf(r) {
@@ -824,6 +827,14 @@ export function linksOf(r) {
       { portee: zone ? 'france' : null });
     add('recherche', p.suit !== false, p.suit !== false ? 'Ses points : les plantes que garde la recherche' : 'Ses points : toutes les plantes de la zone', { suit: p.suit === false ? null : false });
     add('periode', true, 'Ses points : ceux de la période de toutes les cases');
+    // Its observations: its group's, every source of it — or some only (src=: a pin, « iNaturalist seul »), let go.
+    const src = Array.isArray(p.src) ? /** @type {string[]} */ (p.src) : null;
+    const all = Object.keys(MAP_PARAMS.src.values ?? {});
+    const pinned = src !== null && !all.every(x => src.includes(x));
+    const names = (src ?? []).map(x => MAP_PARAMS.src.values?.[x] ?? x).join(' et ');
+    add('observations', !pinned, !pinned ? 'Ses points : les observations de son groupe, de toutes ses sources'
+      : names ? `${names} seul : les autres sources du groupe ne sont pas sur cette carte` : 'Aucune source : aucun point sur cette carte',
+    pinned ? { src: null } : null);
     add('plante', p.plante !== 'non', p.plante === 'non' ? 'La plante courante n’y est pas montrée' : 'La plante courante en grand ; toucher un point la choisit',
       { plante: p.plante === 'non' ? null : 'non' });
     // The list: what it shows of the zone, once moved by hand — never a map of France or the world's, nor one that
