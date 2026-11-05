@@ -2,9 +2,10 @@
 // The deck of a mini-app around a place (and of a screen's `deck` cell): one card at a time, the next under it — its
 // photo and credit, what Wikipédia says of it, a short bio (its safety first: kit/cards.js#bio). Dragged, it leans and
 // shows its stamp (MATCH, BOF); far enough, or thrown, it flies off: right a match, left passed; up (or a touch), its
-// sheet — one decision at a time (another while the card flies, a double click: none), and none by a gesture the
+// sheet (unless its host's touch opens none: `opens`) — one decision at a time (another while the card flies, a double click: none), and none by a gesture the
 // browser takes over (pointercancel: a scroll, a pinch — the card back in place). The three buttons (↺ undo, ✕, ♥,
-// « ⋯ » its sheet unless `guided`, and its photos when asked: `photos`) and the keys (→ ←, ↑) do the same — the keys
+// « ⋯ » its sheet unless `guided` or not `opens`, and its photos when asked: `photos`) and the keys (→ ←, ↑) do the
+// same — the keys
 // only on a deck shown (none folded away, nor in a tab not shown), when it has the focus, or when nothing has and it is
 // the only deck shown with cards (never a match by mistake from a tab, a slider, the map or another deck), and only
 // while `active` (no plant open, no match on screen). Cueillette prudente's toxic look-alikes (kit/session.js#avoids)
@@ -72,6 +73,11 @@ export class MaDeck extends LitElement {
     guided: { type: Boolean, reflect: true },
     /** The keys act on the deck (no plant open, no match on screen). */
     active: { type: Boolean },
+    /**
+     * A card opens its sheet (`deck-open`: a touch, a swipe up, ↑, « ⋯ ») — not on a screen's deck whose touch opens
+     * none (layout/cells.js: its card on top is the current plant already, or a touch does nothing).
+     */
+    opens: { type: Boolean },
     /** A button for the photos of the card on top (Rencontres, once they were shown: kit/ma-meet-media.js). */
     photos: { type: Boolean },
     /**
@@ -175,6 +181,7 @@ export class MaDeck extends LitElement {
     this.c = null;
     this.guided = false;
     this.active = false;
+    this.opens = true;
     this.photos = false;
     /** @type {DeckEnd | null} */
     this.end = null;
@@ -246,11 +253,14 @@ export class MaDeck extends LitElement {
     const top = this.cards[0];
     if (!top) return;
     if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') { e.preventDefault(); this.decide(top, e.key === 'ArrowRight'); }
-    else if (e.key === 'ArrowUp' && !this.guided) { e.preventDefault(); this.#open(top); }
+    else if (e.key === 'ArrowUp' && !this.guided && this.opens) { e.preventDefault(); this.#open(top); }
   };
 
-  /** @param {Card} card */
-  #open(card) { this.dispatchEvent(new CustomEvent('deck-open', { detail: { id: card.plant.id }, bubbles: true, composed: true })); }
+  /** Its sheet asked for (none when the deck opens none: `opens`). @param {Card} card */
+  #open(card) {
+    if (!this.opens) return;
+    this.dispatchEvent(new CustomEvent('deck-open', { detail: { id: card.plant.id }, bubbles: true, composed: true }));
+  }
 
   /** The cards just there: the one on top leans a little right, then left — they can be swiped (once). */
   #hintSwipe() {
@@ -402,7 +412,7 @@ export class MaDeck extends LitElement {
     // The deck takes the focus (a Tab), and ← → ↑ then act on its top card — only there (#onKey): on a tab, a
     // button or the map, the arrows keep their own meaning.
     return html`<div class="deck-wrap">
-      <div class="deck" tabindex="0" role="group" aria-label=${`Carte : ${name}. Flèche droite : ${avoid ? 'je la reconnais, à ne pas cueillir' : 'match'}, flèche gauche : passer${this.guided ? '' : ', flèche haut : sa fiche'}`}>
+      <div class="deck" tabindex="0" role="group" aria-label=${`Carte : ${name}. Flèche droite : ${avoid ? 'je la reconnais, à ne pas cueillir' : 'match'}, flèche gauche : passer${this.guided || !this.opens ? '' : ', flèche haut : sa fiche'}`}>
         ${repeat(under ? [under, top] : [top], x => x.plant.id, x => this.#card(x, x === top))}
         ${s.burst ? html`<span class="burst" aria-hidden="true">${icon('heart-fill')}</span>` : nothing}
       </div>
@@ -412,7 +422,7 @@ export class MaDeck extends LitElement {
         <button class="round pass" type="button" aria-label=${'Passer : ' + name} title="Passer (←)" @click=${() => this.decide(top, false)}>${icon('x-lg')}</button>
         ${this.photos ? html`<button class="round info photos" type="button" aria-label=${'Ses photos : ' + name} title="Ses photos"
           @click=${() => this.dispatchEvent(new CustomEvent('deck-photos', { detail: { id: top.plant.id }, bubbles: true, composed: true }))}>${icon('images')}</button>` : nothing}
-        ${this.guided ? nothing : html`<button class="round info" type="button" aria-label=${'Voir sa fiche : ' + name} title="Sa fiche (↑)" @click=${() => this.#open(top)}>${icon('three-dots')}</button>`}
+        ${this.guided || !this.opens ? nothing : html`<button class="round info" type="button" aria-label=${'Voir sa fiche : ' + name} title="Sa fiche (↑)" @click=${() => this.#open(top)}>${icon('three-dots')}</button>`}
         <button class="round like ${avoid ? 'avoid' : ''}" type="button" aria-label=${avoid ? `Je reconnais ${name} : à ne pas cueillir` : `J’aime ${name} : c’est un match`}
           title=${avoid ? 'Je la reconnais : à ne pas cueillir (→)' : 'Match (→)'} @click=${() => this.decide(top, true)}>${icon(avoid ? 'exclamation-octagon-fill' : 'heart-fill')}</button>
       </div>

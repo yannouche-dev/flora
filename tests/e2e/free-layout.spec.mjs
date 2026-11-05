@@ -286,11 +286,14 @@ test.describe('un grand écran', () => {
     await expect.poll(favourite).toBe(4);
   });
 
-  test('les cartes de Rencontres : chaque choix dit, avec les mots des activités ; une carte passée puis choisie ailleurs, ou reprise par ↺, sur le dessus ; la fin compte les coups de cœur', async ({ app, page }) => {
+  test('les cartes de Rencontres : chaque choix dit, avec les mots des activités ; une carte passée puis choisie ailleurs, ou reprise par ↺, sur le dessus ; la fin compte les coups de cœur ; ⋯ et ↑ seulement quand toucher ouvre la fiche', async ({ app, page }) => {
     const ail = plantId(AIL), cigue = plantId('Conium maculatum');
     await app.open(`#/layout/[map(r=500m),deck,plant.status]?${AT}`);
     const deck = page.locator('dl-deck'), top = deck.locator('ma-deck .swipe-card.top'), said = deck.getByRole('status');
     await expect(top).toHaveAttribute('data-id', String(ail));
+    // Its card on top the current plant already (toucher=plante): no « ⋯ », no ↑.
+    await expect(deck.getByRole('button', { name: /^Voir sa fiche/ })).toHaveCount(0);
+    await expect(deck.locator('ma-deck .deck')).toHaveAttribute('aria-label', 'Carte : Ail des ours. Flèche droite : match, flèche gauche : passer');
     // A heart, then a pass: each said, with the card now on top.
     await deck.locator('ma-deck .round.like').click();
     await expect(said).toHaveText('Match : Ail des ours, ajoutée aux favoris. Carte suivante : Ciguë maculée.');
@@ -317,6 +320,12 @@ test.describe('un grand écran', () => {
     await expect(top).toHaveAttribute('data-id', String(plantId(ORTIE)));
     await deck.locator('ma-deck .round.undo').click();
     await expect(top).toHaveAttribute('data-id', String(ail));
+    // toucher=fiche: « ⋯ » and ↑ said, « ⋯ » opens its sheet.
+    await app.go(`#/layout/[deck(toucher=fiche),plant.status]?${AT}&r=500m`);
+    await expect(deck.locator('ma-deck .deck')).toHaveAttribute('aria-label', /, flèche haut : sa fiche$/);
+    const id = await top.getAttribute('data-id');
+    await deck.getByRole('button', { name: /^Voir sa fiche : / }).click();
+    await expect.poll(() => hash(page)).toBe(`#/plant/${id}`);
   });
 
   test('les cartes de Rencontres, ← → depuis la page : seulement un paquet visible — replié, rien ; deux à l’écran, celui qui a le focus', async ({ app, page }) => {

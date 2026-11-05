@@ -1570,19 +1570,26 @@ export class DlDeck extends LitElement {
     this.#session.widen = m => this.state?.set({ r: m }, 'replace');
     this.#session.addEventListener('change', () => this.requestUpdate());
     this.addEventListener('deck-decide', e => { e.stopPropagation(); this.#decide(/** @type {CustomEvent} */ (e).detail); });
-    // A card touched, as the cell says (toucher, ecrit: registry.js#touchOf): the current plant, its sheet, or nothing.
+    // A card's sheet asked for (a touch, a swipe up, ↑, « ⋯ »): only when touching opens it (ma-deck `opens`).
     this.addEventListener('deck-open', e => {
       e.stopPropagation();
-      const id = /** @type {CustomEvent} */ (e).detail.id;
-      const touch = this.params?.toucher === 'rien' ? 'rien' : this.params?.toucher === 'fiche' || !this.#writes ? 'fiche' : 'plante';
-      if (touch === 'plante') this.state?.pick(id);
-      else if (touch === 'fiche') pushHash(href.plant(id));
+      if (this.#touch === 'fiche') pushHash(href.plant(/** @type {CustomEvent} */ (e).detail.id));
     });
     this.addEventListener('deck-undo', e => { e.stopPropagation(); this.#undo(); });
   }
 
   /** The deck changes the current plant (its swipes, its first card): not with ecrit=0 — its cards then go their own way. */
   get #writes() { return this.params?.ecrit !== false; }
+
+  /**
+   * What touching a card does, as the cell says (toucher, ecrit: registry.js#touchOf): its sheet, or nothing — the
+   * current plant (toucher=plante) is the card on top already: its touch, ↑ and « ⋯ » are no use, none shown.
+   * @returns {'plante' | 'fiche' | 'rien'}
+   */
+  get #touch() {
+    const t = this.params?.toucher;
+    return t === 'rien' ? 'rien' : t === 'fiche' || !this.#writes ? 'fiche' : 'plante';
+  }
 
   /** Nothing to show (registry.js#FRAME, vide): told to the layout (gf-layout.js: a cell vide=masque hidden meanwhile). */
   #empty = /** @type {boolean | null} */ (null);
@@ -1714,7 +1721,7 @@ export class DlDeck extends LitElement {
     // A source failing, no card from the others (no plant — GBIF's own, often none where iNaturalist's are —, or none
     // the search keeps): said as a failure, never the deck's end (« toutes les plantes du coin »).
     if (s.speciesState === 'ready' && s.failed.length && !ses.cards.length) return this.#failed(s);
-    return html`<ma-deck active .session=${ses} .cards=${ses.deck} .c=${ses.c} .end=${this.#end()}></ma-deck>
+    return html`<ma-deck active .session=${ses} .cards=${ses.deck} .c=${ses.c} .end=${this.#end()} .opens=${this.#touch === 'fiche'}></ma-deck>
       <p class="visually-hidden" role="status">${this._said}</p>`;
   }
 
