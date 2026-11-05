@@ -266,6 +266,15 @@ export class GfPlantDetail extends SheetBase {
   /** The panes alone (Découvrir): its « Médias » a showcase, photos first. */
   get _showcase() { return this.panesOnly; }
 
+  /**
+   * The panes alone (Rencontres' guided way): a map only when one of its panes holds one — none in the picking pane,
+   * whose sosies' « Comparer sur la carte » would lead nowhere (plain text there, as in a block alone).
+   */
+  get _hasMap() {
+    if (!this.panesOnly) return super._hasMap;
+    return (this.paneKeys ?? blockOrder(this._view)).some((/** @type {string} */ k) => isMap(k) && Boolean(this._paneOf(k)));
+  }
+
   /** A plant to read: the place read on the one before noted, nothing kept, nothing placed yet, no verdict. */
   _willLoad() {
     // The hand had just stopped on the previous plant: its place is noted now, before it goes.
