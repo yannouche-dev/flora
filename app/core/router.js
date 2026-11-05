@@ -53,15 +53,14 @@ export function parse(hash) {
     };
   }
   if (path === 'collections') return { name: 'collections', open: params.get('c'), plant: number('plant') };
-  // "spot/…" are the links of earlier versions; collections are the same records.
-  if (path === 'collection/new' || path === 'spot/new') {
+  if (path === 'collection/new') {
     const at = (params.get('at') || '').split(',').map(Number);
     return {
       name: 'spot-new', plant: number('plant'), kind: params.get('kind') === 'list' ? 'list' : 'place',
       at: at.length === 2 && at.every(Number.isFinite) ? /** @type {[number, number]} */ ([at[1], at[0]]) : null
     };
   }
-  const spot = /^(?:collection|spot)\/([\w-]+)$/.exec(path);
+  const spot = /^collection\/([\w-]+)$/.exec(path);
   if (spot) return { name: 'spot', id: spot[1], add: number('add'), pick: params.get('pick') === '1' };
   if (path === 'shared') return { name: 'shared', data: params.get('d') || '' };
 

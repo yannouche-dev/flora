@@ -551,6 +551,14 @@ test('Quitter une activité ouverte par un lien, et « Page introuvable », ram�
   await tab.close();
 });
 
+test('Les adresses d’avant n’ouvrent plus leur écran : « Page introuvable », Flore à portée', async ({ app, page }) => {
+  await app.open('#/?family=Rosaceae');
+  for (const old of ['#/spot/abc', '#/spot/new']) {
+    await app.go(old);
+    await expect(page.getByText('Page introuvable.').getByRole('link', { name: 'Aller à Flore' }), old).toHaveAttribute('href', '#/?family=Rosaceae');
+  }
+});
+
 test('« Passer » après « Revoir les premiers pas » garde la recherche de Flore', async ({ app, page }) => {
   await app.open('#/?family=Rosaceae');
   await app.go('#/settings');

@@ -245,7 +245,7 @@ test('module « Vue 3D (relief) » désactivé, photos coupées : le bouton l’
     setModule('relief3d', true);
   });
   const id = await page.evaluate(() => JSON.parse(localStorage.getItem('geoflora.trailDone') || 'null'));
-  await app.go(`#/spot/${id}`);
+  await app.go(`#/collection/${id}`);
   const open3d = page.locator('gf-spot-editor button.map3d');
   await expect(open3d).toBeVisible();
   await open3d.click();
@@ -263,7 +263,7 @@ test('module « Vue 3D (relief) » désactivé, photos coupées : le bouton l’
     for (const s of steps) p = c.withPlant(p, { id: s.id, scientificName: s.name }, { coordinates: s.at, accuracy: 5 }, { again: true });
     return (await c.savePlace(p)).id;
   }, { start: START, steps: STEPS.slice(0, 2).map(s => ({ ...s, id: plantId(s.name) })) });
-  await app.go(`#/spot/${plain}`);
+  await app.go(`#/collection/${plain}`);
   await expect(open3d).toBeVisible();
   await open3d.click();
   await expect(map).toHaveAttribute('data-renderer', '3d', { timeout: 30_000 });
