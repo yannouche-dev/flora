@@ -2,8 +2,8 @@
 // (app/miniapp/kit/cards.js — Cueillette prudente's order and its toxic look-alikes, never a match but recognised to
 // avoid, the safety lines of a card's bio, the swipes, the slider of
 // the distances: a distance between two stops shown between them, its keys from stop to stop), each game's
-// own session and its hand-over from the shared one of before (core/around-sessions.js), and what a mini-app made in
-// Mes plantes, taken away by « Recommencer » (place-model.js#madeBy, withoutMadeBy, tagLegacy; runtime.js#replayItems).
+// own session (core/around-sessions.js), and what a mini-app made in
+// Mes plantes, taken away by « Recommencer » (place-model.js#madeBy, withoutMadeBy; runtime.js#replayItems).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
@@ -11,7 +11,7 @@ import { avoid, bio, deckOf, distanceAt, distanceEvents, distanceKey, distanceNe
 import { lookalikesOf } from '../../app/core/lookalikes.js';
 import { UNREAD, dangerLevel, rank } from '../../app/core/danger.js';
 import { verdictOf } from '../../app/core/alerts.js';
-import { keptCtx, forgetPlaces, keptPlace, leftAt, migrateDiscover, clearAroundGames } from '../../app/core/around-sessions.js';
+import { keptCtx, forgetPlaces, keptPlace, leftAt, clearAroundGames } from '../../app/core/around-sessions.js';
 import * as M from '../../app/core/place-model.js';
 import { toPortable } from '../../app/core/portable.js';
 import { defineMiniApp } from '../../app/miniapp/define.js';
@@ -199,27 +199,18 @@ test('le curseur des distances : une distance entre deux crans montrée entre eu
   assert.equal(target.value, '6');
 });
 
-test('sessions : la partie partagée d’avant donnée à Rencontres, une fois ; « Oublier ma position »', () => {
+test('sessions : chacune la sienne ; « Oublier ma dernière position » efface le lieu, garde le reste', () => {
   localStorage.clear();
-  const old = { point: [2.35, 48.85], place: 'Paris', radius: 2000, matches: [7], passed: [8] };
-  localStorage.setItem('geoflora.app.rencontres.state', JSON.stringify({ v: 1, path: ['start', 'map', 'cards'], ctx: {}, finished: false }));
-  migrateDiscover(old);
-  assert.deepEqual(keptCtx('rencontres'), old, 'rien ne dit laquelle : Rencontres');
-  assert.deepEqual([keptCtx('cueillette'), keptCtx('mosaique')], [{}, {}], 'les autres : rien, pas de « Continuer »');
-  assert.equal(leftAt('rencontres'), 'cards', 'l’étape où on l’a laissée, gardée');
-  assert.equal(leftAt('cueillette'), null);
-  // Nothing kept by Rencontres: its start.
-  clearAroundGames();
-  migrateDiscover(old);
-  assert.equal(leftAt('rencontres'), 'start');
+  const key = 'geoflora.app.cueillette.state';
+  localStorage.setItem(key, JSON.stringify({ v: 1, path: ['start', 'cards'], finished: false, ctx: { point: [2.35, 48.85], place: 'Paris', radius: 2000, matches: [7], passed: [8] } }));
+  assert.deepEqual([keptCtx('rencontres'), keptCtx('mosaique')], [{}, {}], 'les autres : rien, pas de « Continuer »');
+  assert.equal(leftAt('cueillette'), 'cards', 'l’étape où on l’a laissée, gardée');
   assert.deepEqual(keptPlace(), { point: [2.35, 48.85], place: 'Paris' });
   forgetPlaces();
   assert.equal(keptPlace(), null);
-  assert.deepEqual(keptCtx('rencontres').matches, [7], 'le reste de la partie gardé');
-  // Nothing to hand over: nothing written.
+  assert.deepEqual(keptCtx('cueillette').matches, [7], 'le reste de la partie gardé');
   clearAroundGames();
-  migrateDiscover({ point: null, matches: [], passed: [] });
-  assert.equal(localStorage.getItem('geoflora.app.rencontres.state'), null);
+  assert.equal(localStorage.getItem(key), null);
 });
 
 /** Every key kept on the device, with its value. */
@@ -317,21 +308,6 @@ test('à vous : un parcours fait sien garde toutes ses plantes ; un favori annot
     ['Votre favori venu de Rencontres, devenu le vôtre, est conservé.']);
   assert.deepEqual(replayItems(meet, { favorites: [], collections: [], kept: { favorites: 3, collections: 0 } }).kept,
     ['Vos 3 favoris venus de Rencontres, devenus les vôtres, sont conservés.']);
-});
-
-test('avant les origines : le parcours en cours et les vides tagués ; les parcours terminés et tous les favoris, déjà à soi', () => {
-  const mine = col({ type: 'Feature', id: 'm', geometry: { type: 'Point', coordinates: [2, 48] }, properties: { name: 'Jardin', plants: [{ plantId: 6, scientificName: 'F' }] } });
-  const old = col({ type: 'Feature', id: 'favorites', geometry: null, properties: { plants: [{ plantId: 1, scientificName: 'A' }, { plantId: 2, scientificName: 'B' }, { plantId: 9, scientificName: 'Z' }] } });
-  const empty = col({ type: 'Feature', id: 'e', geometry: { type: 'Point', coordinates: [2, 48] }, properties: { name: 'Vide', startedHere: true, plants: [] } });
-  const finished = col({ type: 'Feature', id: 'f', geometry: { type: 'Point', coordinates: [2, 48] }, properties: { name: 'Fini', plants: [{ plantId: 4, scientificName: 'D' }] } });
-  const current = col({ type: 'Feature', id: 'c', geometry: { type: 'Point', coordinates: [2, 48] }, properties: { name: 'En cours', plants: [{ plantId: 5, scientificName: 'E' }] } });
-  const tagged = M.tagLegacy([old, empty, finished, current, mine], { walks: ['f'], walk: 'c' });
-  const by = Object.fromEntries(tagged.map(c => [c.id, c]));
-  assert.equal(by.favorites, undefined, 'les favoris d’avant sont à soi : jamais tagués');
-  assert.deepEqual(by.e.properties.origin, { app: 'parcours' });
-  assert.deepEqual(by.c.properties.origin, { app: 'parcours' });
-  assert.deepEqual([by.f.properties.origin, by.f.properties.from], [undefined, { app: 'parcours' }], 'terminé avec ses plantes : gardé');
-  assert.equal(by.m, undefined, 'un lieu à soi n’est pas tagué');
 });
 
 test('runtime : « Recommencer » ne laisse rien derrière lui, comme jamais ouverte', async () => {

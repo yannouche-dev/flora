@@ -70,22 +70,21 @@ test('resetAll retire les volets : la fiche seule', () => {
   assert.equal(SB.treeOf('standard').t, 'sheet');
 });
 
-test('undockAlone : les volets que les étapes guidées d’avant avaient posés retournent dans la fiche, ceux que l’utilisateur a changés restent', () => {
+test('un fichier de la version 1 : ses blocs dans la fiche, leur ordre, leurs titres et ses blocs Note ; ses panneaux d’avant ignorés', () => {
   SB.resetAll();
-  // As the guided steps of before left them: the photos beside the sheet, the encyclopedia under them, the fork's tabs.
-  SB.dockBlock('standard', 'media', 'sheet', 'right');
-  SB.dockBlock('standard', 'wikipedia', /** @type {any} */ (SB.paneOf('standard', 'media')).id, 'bottom');
-  SB.dockBlock('standard', 'uses', 'root', 'right');
-  SB.dockBlock('standard', 'lookalikes', /** @type {any} */ (SB.paneOf('standard', 'uses')).id, 'center');
-  SB.dockBlock('standard', 'calendar', /** @type {any} */ (SB.paneOf('standard', 'uses')).id, 'center');
-  // … one the user then gave another block.
-  SB.dockBlock('standard', 'names', /** @type {any} */ (SB.paneOf('standard', 'wikipedia')).id, 'center');
-  // (Usages is always shown: a block of the fork's that can be folded.)
-  SB.setHidden('standard', 'calendar', true);
-  SB.undockAlone('standard', [['media'], ['wikipedia'], ['uses', 'lookalikes', 'calendar']]);
-  assert.deepEqual(['media', 'uses', 'lookalikes', 'calendar'].map(k => SB.isOnEdge('standard', k)), [false, false, false, false]);
-  assert.deepEqual(SB.paneOf('standard', 'wikipedia')?.tabs, ['wikipedia', 'names'], 'with a block of the user’s: kept');
-  assert.ok(SB.foldedByHand('standard', 'calendar'), 'a block folded stays folded');
+  SB.importLayout(JSON.stringify({ app: 'geoflora', kind: 'sheet-layout', version: 1, modes: [], layout: {
+    order: { standard: ['map', 'uses'] }, hidden: { standard: ['calendar'] }, titles: { map: 'Ma carte' }, notes: [{ id: 'terrain', title: 'Terrain' }],
+    pinned: { standard: ['map'] }, dock: { standard: { side: 'left', size: 'l' } }, place: { standard: { uses: 'beside' } }, edges: { standard: { left: { size: 's' } } }
+  } }));
+  const order = SB.blockOrder('standard');
+  assert.ok(order.indexOf('map') < order.indexOf('uses'), 'son ordre');
+  assert.ok(SB.foldedByHand('standard', 'calendar'));
+  assert.equal(store.state.sheetLayout.titles.map, 'Ma carte');
+  assert.ok(store.state.sheetLayout.notes.some(n => n.id === 'terrain'));
+  assert.equal(SB.isOnEdge('standard', 'map'), false);
+  assert.equal(SB.treeOf('standard').t, 'sheet', 'ses panneaux d’avant : la fiche seule');
+  for (const k of ['pinned', 'dock', 'place', 'edges']) assert.ok(!(k in store.state.sheetLayout), k);
+  assert.equal(JSON.parse(SB.exportLayout()).version, 2);
   SB.resetAll();
 });
 
@@ -150,20 +149,19 @@ test('Plantes à confondre et Usages (Prudence) toujours affichés : ni masqués
   SB.resetAll();
 });
 
-test('les blocs Carte : leur propre fond (MapConfig.look) ; ceux d’avant, leur fond et leurs couches IGN repris une fois', () => {
+test('les blocs Carte : leur propre fond (MapConfig.look), importé tel quel ; des champs d’avant (base, overlays), le fond commun', () => {
   SB.resetAll();
   // A new block: the maps' common look (none of its own).
   assert.equal(SB.mapConfig('map').look, null);
-  // A file of before: the main map set to the photos and the cadastre, an added map left on the plan with its height
-  // changed — the first keeps them as its own look, the second follows the common one (the plan was only the default).
+  // The main map with its own look; an added map with the fields of before (its background and overlays outside `look`).
   const file = JSON.parse(SB.exportLayout());
   file.layout.mapBlocks = [{ id: 'abc', title: 'Ma carte' }];
-  file.layout.maps = { map: { base: 'photo', overlays: ['cadastre', 'lune'], height: 'l' }, 'map:abc': { base: 'plan', overlays: [], height: 's' } };
+  file.layout.maps = { map: { look: { base: 'photo', overlays: ['cadastre'] }, height: 'l' }, 'map:abc': { base: 'photo', overlays: ['cadastre'], height: 's' } };
   SB.importLayout(JSON.stringify(file));
   assert.deepEqual(SB.mapConfig('map').look, { base: 'photo', overlays: ['cadastre'] });
   assert.equal(SB.mapConfig('map').height, 'l');
   assert.ok(!('base' in SB.mapConfig('map')) && !('overlays' in SB.mapConfig('map')), 'les champs d’avant ne restent pas');
-  assert.equal(SB.mapConfig('map:abc').look, null);
+  assert.equal(SB.mapConfig('map:abc').look, null, 'des champs d’avant : plus lus');
   // Changed in its panel ▦ (gf-sheet-map `map-config` {look}), kept; « Revenir aux réglages communs »: none again.
   SB.setMapConfig('map:abc', { look: { base: 'plan', overlays: ['forets'], opacities: { forets: 0.5 } } });
   assert.deepEqual(SB.mapConfig('map:abc').look, { base: 'plan', overlays: ['forets'], opacities: { forets: 0.5 } });

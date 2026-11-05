@@ -13,10 +13,10 @@
 // markAnnounced: gf-app), but those that come at the start, after « Revoir les premiers pas » or a repair's restore:
 // there at once, quietly. Someone who already used the app starts with everything.
 // The games around a place (Rencontres, Cueillette prudente, Mosaïque) keep their own place, distance and cards, each
-// with its mini-app (core/around-sessions.js); the session they shared here before is handed over once, to Rencontres.
+// with its mini-app (core/around-sessions.js).
 
 import { config } from '../config.js';
-import { AROUND_APPS, clearAroundGames, migrateDiscover } from './around-sessions.js';
+import { AROUND_APPS, clearAroundGames } from './around-sessions.js';
 import { adoptMadeBy, backupSummary, getMembership, listCollections, spotEvents } from './collections.js';
 import { onStorage, publish } from './sync.js';
 import { readJSON, storedKeys, writeJSON } from './prefs.js';
@@ -41,8 +41,6 @@ const tabsIn = v => Array.isArray(v) ? TABS.filter(t => v.includes(t)) : [];
  * @typedef {{ done: boolean, unlocked: Unlockable[], announced: Unlockable[], seen: number[],
  *   step: number, firstMatch: boolean, branch: 'harvest' | 'science' | null }} DiscoverState
  */
-/** What the games around a place kept here before (handed over to them: around-sessions.js#migrateDiscover). */
-const HANDED = ['point', 'place', 'radius', 'matches', 'passed'];
 
 /** Someone who already used the app (any setting of it): no first steps. */
 function usedBefore() {
@@ -60,17 +58,12 @@ function read() {
   const fresh = { done: false, unlocked: [], announced: [], seen: [], step: 0, firstMatch: false, branch: null };
   const saved = readJSON(KEY, null);
   if (saved && typeof saved === 'object') {
-    // The session of the games around a place, kept here before: theirs now (once; written back without it).
-    if (HANDED.some(k => k in saved)) {
-      migrateDiscover(saved);
-      for (const k of HANDED) delete saved[k];
-      writeJSON(KEY, saved);
-    }
-    // The tips of before (never read) dropped; the tabs only those that come. No `announced` (before this version):
-    // the tabs of before were announced then.
-    const kept = { ...saved };
-    delete kept.tips;
-    return { ...fresh, ...kept, unlocked: tabsIn(saved.unlocked), announced: tabsIn(Array.isArray(saved.announced) ? saved.announced : saved.unlocked) };
+    // Its fields only (anything else a version of before kept here, the games' session or the tips, goes at the write
+    // below); the tabs only those that come. A state from before `announced` was kept (2026-10-30): its tabs, had for
+    // long, taken as announced — never a toast for them on that device's first launch since.
+    const kept = Object.fromEntries(Object.keys(fresh).filter(k => k in saved).map(k => [k, saved[k]]));
+    const announced = Array.isArray(saved.announced) ? saved.announced : saved.unlocked;
+    return { ...fresh, ...kept, unlocked: tabsIn(saved.unlocked), announced: tabsIn(announced) };
   }
   return usedBefore() ? { ...fresh, done: true } : fresh;
 }

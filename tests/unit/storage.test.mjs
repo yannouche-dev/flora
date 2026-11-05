@@ -132,49 +132,43 @@ test('import : fusion par collection, plantes des deux côtés gardées (STO-13)
   assert.equal((await C.importPortable(incoming)).unchanged, 1);
 });
 
-test('markWalks : les parcours d’avant la marque, marqués une fois, la copie de secours suivie, rien d’autre écrit', async () => {
-  const at = /** @type {[number, number]} */ ([2.35, 48.85]);
-  const old = '2026-06-01T08:00:00.000Z';
-  // As an older version stored them: no mark (savePlace stamps the date: put back as it was).
-  const store = async (/** @type {any} */ c) => {
-    const saved = await C.savePlace(c);
-    await db.put('spots', { ...saved, properties: { ...saved.properties, updatedAt: old } });
-    return c.id;
-  };
-  const here = await store(C.withPlant(C.newPlace(at, { name: 'Départ ici', startedHere: true }), plant(11)));
-  const listed = await store(C.withPlant(C.newPlace(at, { name: 'Dans la liste' }), plant(12)));
-  const made = await store(C.newPlace(at, { name: 'En cours', origin: { app: 'parcours' } }));
-  const own = await store(C.withPlant(C.newPlace(at, { name: 'Jardin à moi' }), plant(13)));
-  const list = await store(C.withPlant(C.newCollection('list', { name: 'Liste listée' }), plant(14)));
-  await db.remove('meta', 'walks');
-  const known = { walks: [listed, list], walk: null };
-  const raw = async (/** @type {string} */ id) => (await db.get('spots', id)).properties;
+test('relue, la mise en page ne garde que ses parties d’aujourd’hui', async () => {
+  const { store, emptyLayout } = await import('../../app/core/store.js');
+  const key = config.storageKeys.sheetLayout;
+  // Written by a version of before (or another tab): read again, as on a `storage` event.
+  localStorage.setItem(key, JSON.stringify({ order: { standard: ['map'] }, pinned: { standard: ['map'] }, place: {} }));
+  dispatchEvent(Object.assign(new Event('storage'), { key, storageArea: localStorage }));
+  assert.deepEqual(Object.keys(store.state.sheetLayout).sort(), Object.keys(emptyLayout()).sort());
+  assert.deepEqual(store.state.sheetLayout.order.standard, ['map']);
+  localStorage.removeItem(key);
+  dispatchEvent(Object.assign(new Event('storage'), { key, storageArea: localStorage }));
+});
 
-  assert.equal(await C.markWalks(known), 3);
-  for (const id of [here, listed, made]) {
-    assert.equal((await raw(id)).walk, true, 'marqué dans la base');
-    assert.equal((await raw(id)).updatedAt, old, 'sa date de modification gardée');
-  }
-  for (const id of [own, list]) assert.equal((await raw(id)).walk, undefined, 'ni un lieu à soi, ni une liste');
-  assert.ok(await db.get('meta', 'walks'));
-  // The backup copy follows.
-  const backup = new Map(C.readBackup()?.features.map(f => [f.id, f.properties]));
-  assert.deepEqual([here, listed, made, own].map(id => backup.get(id)?.walk ?? null), [true, true, true, null]);
-  // Run again: nothing written (done), even with its mark gone.
-  assert.equal(await C.markWalks(known), 0);
-  await db.remove('meta', 'walks');
-  assert.equal(await C.markWalks(known), 0, 'tous déjà marqués : rien à écrire');
-  assert.equal((await raw(here)).updatedAt, old);
-  // Done once: a lieu started « ici » stored since (imported from a format-5 file, say) is not marked by a later start.
-  const since = await store(C.withPlant(C.newPlace(at, { name: 'Commencé ici depuis', startedHere: true }), plant(15)));
-  const at0 = (await db.get('meta', 'walks')).at;
-  assert.equal(await C.markWalks({ walks: [since], walk: since }), 0, 'déjà fait : rien n’est relu');
-  assert.equal((await raw(since)).walk, undefined);
-  assert.equal((await db.get('meta', 'walks')).at, at0);
-  // Only its mark gone (never in the app): marked then.
-  await db.remove('meta', 'walks');
-  assert.equal(await C.markWalks(known), 1);
-  assert.equal((await raw(since)).walk, true);
+test('un appareil d’une version d’avant : ses lieux, listes et parcours lus tels qu’ils sont gardés (v3 à v5)', async () => {
+  const AT = '2026-10-08T09:00:00.000Z';
+  // As versions 3 to 5 of the base kept them: a lieu without kind, its plant without a position or an id (v3); a list
+  // (v4); a parcours the Parcours made, before its mark (v5).
+  await db.put('spots', { type: 'Feature', id: 'v3-lieu', geometry: { type: 'Point', coordinates: [2.4, 48.9] },
+    properties: { name: 'Bois d’avant', notes: '', accuracy: null, createdAt: AT, updatedAt: AT, plantIds: [70001],
+      plants: [{ plantId: 70001, scientificName: 'Planta 70001', abundance: 'moyen', rating: 0, notes: 'sous les chênes', harvests: [] }] } });
+  await db.put('spots', { type: 'Feature', id: 'v4-liste', geometry: null,
+    properties: { kind: 'list', name: 'Liste d’avant', notes: '', createdAt: AT, updatedAt: AT, plantIds: [70002], plants: [{ plantId: 70002, scientificName: 'Planta 70002', addedAt: AT }] } });
+  await db.put('spots', { type: 'Feature', id: 'v5-parcours', geometry: { type: 'Point', coordinates: [2.41, 48.91] },
+    properties: { kind: 'place', name: 'Parcours d’avant', notes: '', origin: { app: 'parcours' }, createdAt: AT, updatedAt: AT, plantIds: [70003],
+      plants: [{ id: 'e1', plantId: 70003, scientificName: 'Planta 70003', coordinates: [2.411, 48.911], addedAt: AT }] } });
+  const ids = ['v3-lieu', 'v4-liste', 'v5-parcours'];
+  const all = new Map((await C.listCollections()).map(c => [c.id, c]));
+  const [lieu, liste, parcours] = ids.map(id => /** @type {import('../../app/core/place-model.js').Collection} */ (all.get(id)));
+  assert.deepEqual([lieu, liste, parcours].map(c => c.properties.kind), ['place', 'list', 'place']);
+  assert.deepEqual(lieu.properties.plants.map(e => [e.plantId, e.coordinates, e.notes]), [[70001, [2.4, 48.9], 'sous les chênes']], 'au point du lieu');
+  assert.deepEqual(liste.properties.plants.map(e => e.plantId), [70002]);
+  assert.equal(parcours.properties.walk, true, 'fait par le Parcours : un parcours');
+  assert.deepEqual((await C.collectionsForPlant(70001)).map(c => c.id), ['v3-lieu']);
+  // The backup copy holds them, with their plants.
+  assert.equal(await C.writeBackup(), 'saved');
+  const backup = new Map((C.readBackup()?.features || []).map((/** @type {any} */ f) => [f.id, f]));
+  assert.deepEqual(ids.map(id => backup.get(id)?.properties.plants.map((/** @type {any} */ e) => e.plantId)), [[70001], [70002], [70003]]);
+  for (const id of ids) await C.deletePlace(id);
 });
 
 test('sync : un message d’un autre onglet est relayé, ceux de cet onglet partent sur le canal', async () => {
@@ -265,23 +259,24 @@ test('modules : un choix pour tout l’appareil, parti de ce qui est stocké (un
   assert.equal(localStorage.getItem(key), null, 'tout allumé : rien de gardé');
 });
 
-test('modules : l’ancien format, mode par mode, repris au plus strict — coupé dans un mode, coupé partout', async () => {
+test('modules : toute clé gardée est un module coupé, pour tout l’appareil — jamais rallumé sans le dire ; illisible : tout allumé', async () => {
   const modules = await import('../../app/core/modules.js');
   const key = config.storageKeys.modules;
-  /** Written by the version before (or another tab): this one reads it again, as on a `storage` event. @param {unknown} value */
+  /** Written by another tab (or a version of before): this one reads it again, as on a `storage` event. @param {unknown} value */
   const stored = value => {
     if (value === null) localStorage.removeItem(key); else localStorage.setItem(key, JSON.stringify(value));
     dispatchEvent(Object.assign(new Event('storage'), { key, storageArea: localStorage }));
   };
-  stored({ gbif: { epure: false }, photos: { standard: true, scientific: false }, wikidata: false, globi: { epure: true }, openmeteo: {} });
-  const state = modules.modulesState();
-  assert.deepEqual(['gbif', 'photos', 'wikidata', 'globi', 'openmeteo', 'inaturalist'].map(k => state[/** @type {any} */ (k)]), [false, false, false, true, true, true]);
-  assert.equal(modules.modulesSignature(), 'gbif,wikidata,photos');
-  // The next change writes the new format, from the strictest reading.
+  stored({ gbif: false, wikidata: false });
+  assert.equal(modules.modulesSignature(), 'gbif,wikidata');
+  // A module kept per display mode (a version of before): off, whatever its value.
+  stored({ photos: { epure: false } });
+  assert.equal(modules.moduleOn('photos'), false, 'une valeur d’une autre forme : coupé');
   modules.setModule('globi', false);
-  assert.deepEqual(JSON.parse(localStorage.getItem(key) || '{}'), { gbif: false, photos: false, wikidata: false, globi: false });
-  modules.setModule('gbif', true);
-  assert.equal(modules.moduleOn('gbif'), true, 'rallumé une fois : partout');
+  assert.deepEqual(JSON.parse(localStorage.getItem(key) || '{}'), { photos: false, globi: false });
+  modules.setModule('photos', true);
+  assert.equal(modules.moduleOn('photos'), true, 'rallumé par l’utilisateur');
+  modules.setModule('globi', true);
   // Unreadable: everything on.
   stored(['gbif']);
   assert.equal(modules.modulesSignature(), '');
@@ -309,4 +304,19 @@ test('les largeurs des volets : chaque clé de mise en page est dans config.pane
   // sheetLayout is the plant sheet's whole layout (its blocks, its panes), the user's own: not widths only.
   const layouts = keys.filter(k => /Layout$/.test(k) && k !== config.storageKeys.sheetLayout);
   assert.deepEqual([...layouts].sort(), [...config.paneLayouts].sort());
+});
+
+test('prefs : les clés que l’app n’a plus, oubliées au lancement — jamais les notes de fiche d’avant', () => {
+  const gone = ['geoflora.sheetBlocks', 'geoflora.sheetHidden', 'geoflora.trails', 'geoflora.zoomPanel', 'geoflora.contextBar'];
+  for (const key of gone) {
+    assert.ok(config.obsoleteKeys.includes(key), key);
+    assert.ok(!Object.values(config.storageKeys).includes(key), key);
+    localStorage.setItem(key, '{"standard":["map"]}');
+  }
+  localStorage.setItem(config.storageKeys.plantNotes, '{}');
+  prefs.forgetObsolete(config.obsoleteKeys);
+  assert.deepEqual(gone.map(k => localStorage.getItem(k)), gone.map(() => null));
+  assert.equal(localStorage.getItem(config.storageKeys.plantNotes), '{}', 'les notes d’avant : déplacées par sheet-notes.js, jamais effacées ici');
+  assert.ok(!config.obsoleteKeys.includes(config.storageKeys.plantNotes));
+  localStorage.removeItem(config.storageKeys.plantNotes);
 });

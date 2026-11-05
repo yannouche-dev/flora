@@ -47,7 +47,7 @@ test('les onglets, dans le même ordre sur téléphone et sur ordinateur : Déco
 
 test.describe('premiers pas : les onglets venus, dans l’ordre', () => {
   test.use({ firstVisit: true });
-  test.beforeEach(({ context }) => context.addInitScript(() => localStorage.setItem('geoflora.discover', JSON.stringify({ done: false, unlocked: ['mine', 'map'] }))));
+  test.beforeEach(({ context }) => context.addInitScript(() => localStorage.setItem('geoflora.discover', JSON.stringify({ done: false, unlocked: ['mine', 'map'], announced: ['mine', 'map'] }))));
 
   test('Mes plantes venue avant la Carte : Découvrir · Carte · Mes plantes', async ({ app }) => {
     await app.open('#/');

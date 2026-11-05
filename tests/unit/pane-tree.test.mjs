@@ -112,11 +112,3 @@ test('propriété : 400 suites aléatoires de dock/undock gardent un arbre valid
     assert.deepEqual([...stacked(tree)].sort(), [...docked].sort(), `run ${run} : blocs empilés ≠ blocs attendus`);
   }
 });
-
-test('treeFromPlaces : les anciennes positions deviennent un arbre (haut, bas, côtés, à côté replié)', () => {
-  const tree = T.treeFromPlaces({ map: 'right', calendar: 'top', uses: 'beside' }, { right: { size: 's' } }, ['calendar', 'map', 'uses']);
-  assert.ok(tree && T.validTree(tree));
-  assert.deepEqual(panes(/** @type {T.PaneNode} */ (tree)), ['calendar', 'sheet', 'map', 'uses']);
-  assert.equal(T.stackOf(/** @type {T.PaneNode} */ (tree), 'uses')?.folded, true);
-  assert.equal(T.treeFromPlaces({}, {}, []), null);
-});

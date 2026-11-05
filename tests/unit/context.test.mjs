@@ -5,10 +5,10 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 // What a visit before kept (read as the module loads): the first steps under way, no tab come yet; a plant open in
-// Flore over its search, the Carte on a place (with an older plant=, no longer read) and its plant filter kept apart
-// (mapPlants, before it was in its address), Mes plantes never opened. Read from Réglages (no view recorded).
+// Flore over its search, the Carte on a place (and `mapPlants`, its filter kept apart before 2.9: no longer read), Mes
+// plantes never opened. Read from Réglages (no view recorded).
 localStorage.setItem('geoflora.discover', JSON.stringify({ done: false, unlocked: [] }));
-localStorage.setItem('geoflora.context', JSON.stringify({ flore: '#/plant/12', query: '#/?family=Rosaceae', mine: null, map: '#/map?spot=p1&plant=9', mapPlants: [3, 4] }));
+localStorage.setItem('geoflora.context', JSON.stringify({ flore: '#/plant/12', query: '#/?family=Rosaceae', mine: null, map: '#/map?spot=p1', mapPlants: [3, 4] }));
 location.hash = '#/settings';
 const { context, floreHref, floreName, tabHref } = await import('../../app/core/context.js');
 const { unlock } = await import('../../app/core/discover.js');
@@ -26,8 +26,8 @@ test('chaque onglet ramène là où on l’avait laissé, son départ s’il n�
   assert.equal(tabHref('mine'), '#/collections');
 });
 
-test('le filtre de plantes de la Carte, gardé à part avant, passe dans son adresse', () => {
-  assert.equal(context().map, '#/map?spot=p1&plant=9&plants=3,4', 'plant= d’avant ne compte plus : le filtre gardé à part y passe');
-  assert.equal(tabHref('map'), '#/map?spot=p1&plant=9&plants=3,4');
+test('la Carte là où on l’avait laissée ; son filtre gardé à part d’avant 2.9, plus lu', () => {
+  assert.equal(context().map, '#/map?spot=p1');
+  assert.equal(tabHref('map'), '#/map?spot=p1');
   assert.equal('mapPlants' in context(), false);
 });

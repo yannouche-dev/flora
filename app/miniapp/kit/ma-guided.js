@@ -21,7 +21,7 @@
 import { LitElement, html, css, nothing } from 'lit';
 import { icon } from '../../core/icons.js';
 import { chooseBranch, discoverEvents, discoverState, firstMatchShown, LAST_STEP, setStep, stepBack } from '../../core/discover.js';
-import { blockOf, modulesOffFor, serviceOff, undockAlone } from '../../core/sheet-blocks.js';
+import { blockOf, modulesOffFor, serviceOff } from '../../core/sheet-blocks.js';
 import { dock, normalize, patchStack, SHEET, stackOf, undock } from '../../core/pane-tree.js';
 import { MODULES, moduleEvents } from '../../core/modules.js';
 import { PaneSizer } from '../../core/panes.js';
@@ -282,15 +282,6 @@ export class MaGuided extends LitElement {
   updated() {
     if (!this.app) return;
     const { step, branch } = discoverState();
-    // A game kept from before its panes were its own (kit/session.js#keptFromBefore): the panes its steps had docked
-    // then into the layout of the mode taken back, once — as they left them (core/sheet-blocks.js#undockAlone) —, and
-    // docked into the game's own, as its steps do.
-    if (this.#s.keptFromBefore) {
-      this.#s.keptFromBefore = false;
-      undockAlone(this.#view, stepPanes(step, branch));
-      this.#dockSteps(this.#tree, this.#stepKeys, step, branch);
-      return;
-    }
     // A module switched back on (Réglages, another tab): the blocks its steps had left out docked now. Nothing else is
     // docked on an update: a block moved in an earlier version stays where it was put.
     const back = /** @type {string[]} */ (this.app.c.leftOut ?? []).filter(k => this.#stepKeys.includes(k) && !serviceOff(k));

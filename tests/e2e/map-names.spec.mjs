@@ -431,7 +431,7 @@ test('une case de disposition : noms=0 les cache, son panneau ▦ les montre (no
 test('fiche plante : un bloc Carte qui n’a que ses noms et réseaux à lui le dit, dans son ⚙ comme dans son panneau ▦', async ({ app, page }) => {
   test.slow();
   await app.open('#/');
-  await page.evaluate(async () => { (await import('/app/core/sheet-blocks.js')).setMapConfig('map', { look: { names: false } }); });
+  await page.evaluate(async () => { (await import('/app/core/sheet-blocks.js')).setMapConfig('map', { look: { landmarks: [] } }); });
   await app.go(`#/plant/${plantId('Urtica dioica')}`);
   const map = page.locator('gf-sheet-map gf-map').first();
   await map.scrollIntoViewIfNeeded();

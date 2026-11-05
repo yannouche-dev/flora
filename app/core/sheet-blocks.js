@@ -13,9 +13,9 @@
 import { config } from '../config.js';
 import { MODULES, moduleOn } from './modules.js';
 import { baseOf, importModes, modeKeys, ownModes } from './modes.js';
-import { emptyLayout, migratePlaces, migrateTree, store } from './store.js';
+import { emptyLayout, store } from './store.js';
 import { deleteNoteTexts, fromPortable, mergeNoteTexts, noteText as storedText, portableNotes, setNoteText as storeText } from './sheet-notes.js';
-import { writeJSON, writeText } from './prefs.js';
+import { writeJSON } from './prefs.js';
 import { cleanOwnLook } from './map-settings.js';
 import { SHEET, dock, normalize, patchStack, setSizes, sheetInRow, stackOf, undock, validTree } from './pane-tree.js';
 
@@ -150,9 +150,6 @@ const hiddenList = view => (layout().hidden[view] ?? DEFAULT_HIDDEN[baseOf(view)
  */
 export const foldedByHand = (view, key) => hiddenList(view).includes(key);
 
-/** Keys of earlier versions (one list per mode) → today's block. */
-const RENAMED = { photo: 'photos', about: 'taxonomy', statuses: 'status', description: 'wikipedia' };
-
 const layout = () => store.state.sheetLayout;
 
 /** Note blocks created by hand. @returns {SheetBlock[]} */
@@ -211,8 +208,7 @@ function merge(saved, keys) {
 }
 
 /** The block keys of a view, in the order chosen on this device. @param {Mode} view @returns {string[]} */
-export const blockOrder = view =>
-  merge((layout().order[view] || []).map(k => RENAMED[/** @type {keyof typeof RENAMED} */ (k)] || k), defaults(view));
+export const blockOrder = view => merge(layout().order[view] || [], defaults(view));
 
 /** Has this view been arranged by hand? @param {Mode} view */
 export function isCustom(view) {
@@ -232,11 +228,7 @@ function save(patch) {
   const isEmpty = !next.notes.length && !Object.keys(next.titles).length && !next.mapBlocks?.length && !Object.keys(next.maps || {}).length
     && ['order', 'hidden', 'subOrder', 'subHidden', 'styles', 'titleShown', 'hideEmpty', 'tree'].every(p => !Object.keys(/** @type {any} */ (next)[p] || {}).length);
   // A refusal for lack of room is said on screen (quota.js); the layout still applies to this session.
-  if (writeJSON(config.storageKeys.sheetLayout, isEmpty ? null : next)) {
-    // Earlier versions' keys: carried over once, then gone.
-    writeText(config.storageKeys.sheetBlocks, null);
-    writeText(config.storageKeys.sheetHidden, null);
-  }
+  writeJSON(config.storageKeys.sheetLayout, isEmpty ? null : next);
   store.set({ sheetLayout: next });
 }
 
@@ -451,21 +443,6 @@ export function toSheet(view, key, beforeKey = null) {
   }
 }
 
-/**
- * Panes the app once docked by itself into a mode's layout (Rencontres' guided steps, before their panes were the
- * game's: kit/ma-guided.js) back in the sheet: each group of blocks only while a pane holds nothing else, as the
- * steps left it (a pane the user gave another block stays; a block folded stays folded).
- * @param {Mode} view @param {string[][]} groups
- */
-export function undockAlone(view, groups) {
-  let t = treeOf(view);
-  for (const keys of groups) {
-    const pane = keys.map(k => stackOf(t, k)).find(Boolean);
-    if (pane && pane.tabs.every(k => keys.includes(k))) for (const k of pane.tabs) t = undock(t, k);
-  }
-  if (t !== treeOf(view)) setTree(view, t);
-}
-
 /** New shares for a split's children. @param {Mode} view @param {string} id @param {number[]} sizes */
 export const setPaneSizes = (view, id, sizes) => setTree(view, setSizes(treeOf(view), id, sizes));
 
@@ -577,17 +554,6 @@ export const MAP_DEFAULTS = {
 
 const MAP_CHOICES = { gbif: ['fr', 'world', 'off'], near: ['off', 'gbif', 'inat', 'both'], frame: ['auto', 'france', 'world', 'content', 'me', 'region'], height: ['s', 'm', 'l'], subject: ['plant', 'results', 'collection'] };
 
-/**
- * The look of a configuration of before (its own background, « plan » unless chosen, and IGN overlays, set in the
- * block's form): carried into its own look when it was not that default (the plan, no overlay) — a block left as it
- * was follows the common look, as every map. @param {any} c @returns {Partial<import('./map-settings.js').MapLook> | null}
- */
-function oldLook(c) {
-  const base = c.base === 'photo' ? 'photo' : 'plan';
-  const overlays = Array.isArray(c.overlays) ? c.overlays : [];
-  return base !== 'plan' || overlays.length ? cleanOwnLook({ base, overlays }) : null;
-}
-
 /** A map's configuration, cleaned (unknown values give the default). @param {any} saved @returns {MapConfig} */
 function cleanMap(saved) {
   const c = saved && typeof saved === 'object' ? saved : {};
@@ -596,8 +562,8 @@ function cleanMap(saved) {
   if (typeof c.places === 'boolean') out.places = c.places;
   if (typeof c.collection === 'string' && c.collection.length < 80) out.collection = c.collection;
   if (out.subject === 'collection' && !out.collection) out.subject = 'plant';
-  // Its look: kept as `look` (null: the common one); a configuration of before, read once from its old fields.
-  out.look = 'look' in c ? cleanOwnLook(c.look) : oldLook(c);
+  // Its look: kept as `look` (null: the common one).
+  out.look = cleanOwnLook(c.look);
   for (const a of Object.keys(MAP_DEFAULTS.actions)) if (typeof c.actions?.[a] === 'boolean') out.actions[a] = c.actions[a];
   return out;
 }
@@ -727,8 +693,8 @@ const perBlock = v => v && typeof v === 'object' && !Array.isArray(v) && Object.
 /**
  * Applies a layout file. Throws (and changes nothing) when it is not one. Every Note block of this device stays (after
  * the file's: those it does not have). A file of before carries note texts: they are added to this device's, never over
- * them (a layout shared by someone else does not erase what was written here). The layout is applied at once; the
- * promise resolves once the texts are stored.
+ * them (a layout shared by someone else does not erase what was written here). A file of version 1 is read without its
+ * panes. The layout is applied at once; the promise resolves once the texts are stored.
  * @param {string} text @returns {Promise<number>} how many texts were added
  */
 export function importLayout(text) {
@@ -736,12 +702,8 @@ export function importLayout(text) {
   try { data = JSON.parse(text); } catch { throw new Error('Ce fichier n’est pas du JSON.'); }
   if (data?.app !== 'geoflora' || data?.kind !== 'sheet-layout') throw new Error('Ce fichier n’est pas une mise en page de fiche GeoFlora.');
   if (data.version !== 1 && data.version !== 2) throw new Error('Version de mise en page inconnue : ' + data.version);
-  // Layouts of earlier versions: pinned blocks, their dock and blocks « en volet » became places, then the tree.
-  const old = migratePlaces(data.layout || {});
-  const validOld = perView(old.place || {}, (/** @type {any} */ x) => x && typeof x === 'object' && !Array.isArray(x) && Object.values(x).every(p => ['top', 'bottom', 'left', 'right', 'beside'].includes(/** @type {any} */ (p))))
-    && perView(old.edges || {}, (/** @type {any} */ x) => x && typeof x === 'object' && !Array.isArray(x) && Object.keys(x).every(e => ['top', 'bottom', 'left', 'right'].includes(e)));
-  if (!validOld) throw new Error('Mise en page illisible ou incomplète.');
-  const l = migrateTree(old);
+  // Version 1 (before the tree of panes) is read as it is: its blocks go into the sheet, its panes are left out.
+  const l = data.layout || {};
   const valid = perView(l.order || {}, isKeyList) && perView(l.hidden || {}, isKeyList)
     && perView(l.subOrder || {}, perBlock) && perView(l.subHidden || {}, perBlock)
     && perView(l.titleShown || {}, (/** @type {any} */ x) => x && typeof x === 'object' && Object.values(x).every(v => typeof v === 'boolean'))
@@ -753,9 +715,8 @@ export function importLayout(text) {
     && (!l.mapBlocks || (Array.isArray(l.mapBlocks) && l.mapBlocks.every((/** @type {any} */ m) => typeof m?.id === 'string' && /^[a-z0-9]{1,24}$/.test(m.id) && typeof m.title === 'string' && m.title.length <= 60)))
     && (!l.maps || (typeof l.maps === 'object' && !Array.isArray(l.maps) && Object.keys(l.maps).every(k => k === 'map' || /^map:[a-z0-9]{1,24}$/.test(k))))
     && (!data.notes || (typeof data.notes === 'object' && Object.values(data.notes).every(byPlant => byPlant && typeof byPlant === 'object' && Object.values(byPlant).every(t => typeof t === 'string'))));
-  // `modulesOff` (files of earlier versions: the services folded with their blocks, per mode) is left aside: services
-  // are this device's, chosen in Réglages › Modules, and a layout never switches one. So is `maps3d` (Réglages ›
-  // Cartes, which files of before carried): this device's too.
+  // Any other field is left aside (a file of before: its services, Réglages › Cartes, version 1's panes): a layout never
+  // changes this device's settings.
   if (!valid) throw new Error('Mise en page illisible ou incomplète.');
   importModes(data.modes || []);
   // This device's Note blocks the file has not are kept, after the file's (with or without a text yet).

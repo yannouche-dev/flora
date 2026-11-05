@@ -68,8 +68,7 @@ export class PaneSizer {
    * @param {import('lit').ReactiveControllerHost & HTMLElement & { renderRoot: ParentNode }} host
    * @param {string} storageKey
    * @param {Record<string, { width: number, min: number, title: string }>} panes
-   * @param {{ onChange?: (pane: string) => void, legacy?: (raw: any) => PaneState | null }} [opts] `onChange`: a width
-   *   about to change (a map beside it: hold its view); `legacy`: what was saved in an older shape, read as widths and folds
+   * @param {{ onChange?: (pane: string) => void }} [opts] `onChange`: a width about to change (a map beside it: hold its view)
    */
   constructor(host, storageKey, panes, opts = {}) {
     this.host = host;
@@ -78,8 +77,7 @@ export class PaneSizer {
     this.panes = panes;
     /** @type {PaneState} */
     this.state = { widths: {}, folded: {} };
-    const saved = readJSON(storageKey, null);
-    const read = saved && typeof saved === 'object' && !('widths' in saved) && opts.legacy ? opts.legacy(saved) : saved;
+    const read = readJSON(storageKey, null);
     if (read && typeof read === 'object') this.state = { widths: { ...read.widths }, folded: { ...read.folded } };
     host.addController(this);
   }

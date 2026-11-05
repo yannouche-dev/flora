@@ -134,12 +134,12 @@ test('le fond et les couches : par défaut les photos, sans couche ; rien d’é
   assert.equal(localStorage.getItem(OPACITY), null);
 });
 
-test('les clés d’avant, lues telles quelles (cadastre: true d’une version ancienne, une opacité hors bornes ignorée)', () => {
+test('les clés gardées, relues telles quelles (une opacité hors bornes ignorée)', () => {
   /** @type {any[]} */
   const seen = [];
   const on = (/** @type {any} */ e) => seen.push(plain(e.detail));
   mapLookEvents.addEventListener('change', on);
-  localStorage.setItem(LAYER, JSON.stringify({ base: 'plan', cadastre: true, distribution: true }));
+  localStorage.setItem(LAYER, JSON.stringify({ base: 'plan', overlays: ['cadastre'], distribution: true }));
   localStorage.setItem(OPACITY, JSON.stringify({ cadastre: 0.4, forets: 0.8, contours: 7, parcs: 'x' }));
   fromAnotherTab(LAYER);
   fromAnotherTab(OPACITY);
@@ -287,14 +287,10 @@ test('« Noms et réseaux » : gardés seulement quand ce ne sont pas les habitu
   assert.deepEqual(mapLook().landmarks, MARKS);
 });
 
-test('une carte a les siens : sa liste au-dessus de la commune, champ par champ ; un look d’avant (names) lu en noms et réseaux', () => {
+test('une carte a les siens : sa liste au-dessus de la commune, champ par champ', () => {
   assert.deepEqual(cleanOwnLook({ landmarks: [] }), { landmarks: [] });
   assert.deepEqual(cleanOwnLook({ landmarks: ['lieux', 'bati'] }), { landmarks: ['bati', 'lieux'] });
-  // A map block's look of before (MapConfig.look): its names off, none; on, the usual ones; anything else, nothing of its own.
-  assert.deepEqual(cleanOwnLook({ names: false }), { landmarks: [] });
-  assert.deepEqual(cleanOwnLook({ names: true }), { landmarks: MARKS });
-  assert.equal(cleanOwnLook({ names: 'non' }), null);
-  assert.deepEqual(cleanOwnLook({ landmarks: ['rail'], names: false }), { landmarks: ['rail'] }, 'la liste d’abord');
+  assert.equal(cleanOwnLook({ names: false }), null, 'names, un fond propre d’avant #163 : plus lu');
   assert.deepEqual(lookFor({ landmarks: [] }), { base: 'photo', landmarks: [], overlays: [], opacities: {} });
   setMapLook({ landmarks: ['limites'] });
   assert.deepEqual(lookFor({ landmarks: ['rail'] }).landmarks, ['rail']);

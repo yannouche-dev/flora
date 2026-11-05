@@ -2,9 +2,9 @@
 // Rencontres' guided way offers the way chosen for the whole app by buttons that do only what they say (nothing
 // changes without one), its panes are the game's own (never the layout of the mode, Flore's; each step docks its own
 // blocks there once — a block moved stays where it was put), its ⋯ shows or hides the steps of that mini-app alone
-// (and says so on screen), the plants seen count in every mini-app, its guided way is decided as its game begins (a
-// game of before as it resumes, its panes taken back from the mode's layout) and ends with the first steps, and the
-// harvest mode never chosen follows the harvests that arrive (the value a version before wrote by itself no choice).
+// (and says so on screen), the plants seen count in every mini-app, its guided way is decided as its game begins and
+// ends with the first steps, and the harvest mode never chosen follows the harvests that arrive (the value a version
+// before wrote by itself no choice).
 // Rencontres' services answered here.
 import { test, expect, plantId, answerAround } from './fixtures.mjs';
 
@@ -274,39 +274,6 @@ test.describe('premier lancement', () => {
     await app.go('#/app/rencontres/cards');
     await expect(page.locator('ma-around-list')).toHaveCount(1);
     await expect(page.locator('ma-guided')).toHaveCount(0);
-  });
-
-  test('une partie guidée d’une version d’avant : son chemin fixé à la reprise, ses panneaux repris de la mise en page du mode', async ({ app, page }) => {
-    await app.open('#/');
-    // As a version before left it: the guided steps up to « Encyclopédie », their panes docked into the mode's layout
-    // (the photos beside the sheet, the encyclopedia under them), the game with its place but no way of its own.
-    await page.evaluate(async () => {
-      const sb = await import('/app/core/sheet-blocks.js');
-      sb.dockBlock('standard', 'media', 'sheet', 'right');
-      sb.dockBlock('standard', 'wikipedia', /** @type {any} */ (sb.paneOf('standard', 'media')).id, 'bottom');
-      localStorage.setItem('geoflora.discover', JSON.stringify({ done: false, unlocked: [], tips: [], seen: [], step: 2, firstMatch: true, branch: null }));
-      localStorage.setItem('geoflora.app.rencontres.state', JSON.stringify({ v: 1, path: ['start', 'map', 'cards'],
-        ctx: { point: [2.35, 48.85], place: 'Paris', radius: 1000, matches: [], passed: [] }, finished: false }));
-    });
-    await page.goto('about:blank');
-    await app.open('#/app/rencontres/cards');
-    const g = page.locator('ma-guided');
-    await expect(g.locator('.g-steps li.on .l')).toHaveText('Encyclopédie');
-    // Its way as it was playing, kept; the panes back in the sheet of the mode, the game's own holding them now.
-    await expect.poll(async () => (await kept(page, 'rencontres'))?.ctx.guided).toBe(true);
-    await expect.poll(async () => (await panes(page)).flatMap(p => p.tabs)).toEqual(expect.arrayContaining(['media', 'wikipedia']));
-    expect(await page.evaluate(() => JSON.parse(localStorage.getItem('geoflora.sheetLayout') || '{}').tree?.standard ?? null)).toBe(null);
-
-    // Every tab arrives meanwhile (the first steps over): the game keeps its way.
-    // Answered once the app has redrawn (layout.spec: an answer given amid the redraw it starts can be lost).
-    await page.evaluate(async () => {
-      const d = await import('/app/core/discover.js');
-      for (const t of /** @type {const} */ (['mine', 'map', 'flore'])) d.unlock(t);
-      await new Promise(resolve => setTimeout(resolve));
-    });
-    expect((await discover(page)).done).toBe(true);
-    await expect(g.locator('.g-steps li.on .l')).toHaveText('Encyclopédie');
-    await expect(page.locator('ma-around-list')).toHaveCount(0);
   });
 
   test('les plantes vues comptent dans toutes les activités : un parcours noté, une fiche ouverte de Faux amis', async ({ app, page }) => {

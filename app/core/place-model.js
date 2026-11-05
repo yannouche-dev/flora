@@ -1,7 +1,7 @@
 // @ts-check
 // Shape of a collection of plants (favorites, list or place), shared by the database upgrade,
 // the app and GeoJSON import. A place is a collection with a Point; lists have `geometry: null`.
-// No imports: db.js uses it during schema upgrades.
+// No imports: db.js uses it to upgrade a base of version 2.
 
 /**
  * @typedef {{ date: string, quantity?: string, note?: string }} Harvest
@@ -511,52 +511,12 @@ export function madeBy(collections, app) {
 /**
  * A collection without what a mini-app made: null when it made the collection itself (to delete); the favourites
  * without the entries its matches added; any other collection as it is (the same object: what it holds is the
- * user's, or goes with it — an entry of a parcours tagged by an earlier version, in a parcours the user made their own,
- * is theirs too). The same object when nothing goes. Pure.
+ * user's, or goes with it — an entry of a parcours the user made their own is theirs too). The same object when nothing
+ * goes. Pure.
  * @param {Collection} c @param {string} app @returns {Collection | null}
  */
 export function withoutMadeBy(c, app) {
   if (c.id !== FAVORITES_ID) return c.properties.origin?.app === app ? null : c;
   const plants = c.properties.plants.filter(e => e.origin?.app !== app);
   return plants.length === c.properties.plants.length ? c : { ...c, properties: { ...c.properties, plants, plantIds: plantIdsOf(plants) } };
-}
-
-/**
- * The origins of what the mini-apps made before they were recorded (best effort, once): the parcours under way
- * (`walk`), and a parcours kept (`walks`) or started where the walker stood (a parcours' mark) with no plant, are the
- * Parcours'; one with plants was finished, its own already: promoted (kept). The favourites of before are the user's:
- * never tagged. Returns the collections changed. Pure.
- * @param {Collection[]} collections @param {{ walks: string[], walk?: string | null }} known @returns {Collection[]}
- */
-export function tagLegacy(collections, { walks, walk = null }) {
-  /** @type {Collection[]} */
-  const out = [];
-  for (const c of collections) {
-    if (c.id === FAVORITES_ID) continue;
-    const p = c.properties;
-    if (p.origin || p.from) continue;
-    const parcours = c.id === walk || walks.includes(c.id) || (p.kind === 'place' && p.startedHere === true);
-    if (!parcours) continue;
-    const draft = c.id === walk || !p.plants.length;
-    out.push({ ...c, properties: { ...p, ...(draft ? { origin: { app: 'parcours' } } : { from: { app: 'parcours' } }) } });
-  }
-  return out;
-}
-
-/**
- * A walk of before the mark, marked (once, collections.js#markWalks): the record as stored, `walk: true` added and
- * nothing else changed — its date of change kept (the mark is no change by the user: the start list's date stays true,
- * and a merge elsewhere sees no newer copy). null when it needs none: marked already, without a point, or no walk —
- * neither made by the Parcours (normalizeCollection reads it so), nor started « ici », nor kept by the Parcours of this
- * device (`walks`: its list to continue and the recap shown; `walk`: the one under way). Pure.
- * @param {any} record @param {{ walks: string[], walk?: string | null }} known @returns {any}
- */
-export function walkMarked(record, { walks, walk = null }) {
-  // Marked, or said not to be one (`walk: false`: a lieu given its point again, walkMark).
-  if (!record || typeof record.properties?.walk === 'boolean') return null;
-  const c = normalizeCollection(record);
-  if (!c?.geometry) return null;
-  const p = c.properties;
-  if (!(p.walk || p.startedHere || c.id === walk || walks.includes(c.id))) return null;
-  return { ...record, properties: { ...record.properties, walk: true } };
 }

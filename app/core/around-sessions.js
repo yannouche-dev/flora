@@ -2,8 +2,6 @@
 // The games around a place — Rencontres, Cueillette prudente, Mosaïque —, each its own: the place chosen, the
 // distance, the cards swiped and the matches are kept by each mini-app with its state (geoflora.app.<id>.state, the
 // `ctx` of runtime.js), so that « Recommencer » in one leaves the others as they were, and « Continuer » is each one's.
-// Before, the three shared one session, in geoflora.discover: core/discover.js hands it over once (migrate) to
-// Rencontres — nothing is lost, and from then on each goes its own way.
 // Read here for what is not a mini-app: the list of Découvrir (« Continuer »), the place the sheet's map starts from, the
 // privacy page (« Oublier ma dernière position »), the first steps started again (Réglages).
 
@@ -76,24 +74,3 @@ export function clearAroundGames() {
     writeJSON(keyOf(id), null);
   }
 }
-
-/**
- * The session the three shared before (geoflora.discover: the place, the distance, the cards swiped, the matches),
- * handed over once to Rencontres — nothing says which one was played last — under what it already keeps (a value it
- * has wins). Nothing to hand over (no place, no swipe): nothing written. @param {AroundCtx} old
- */
-export function migrateDiscover(old) {
-  const ctx = {
-    point: Array.isArray(old.point) ? old.point : null,
-    place: typeof old.place === 'string' ? old.place : null,
-    radius: typeof old.radius === 'number' ? old.radius : 1000,
-    matches: Array.isArray(old.matches) ? old.matches : [],
-    passed: Array.isArray(old.passed) ? old.passed : []
-  };
-  if (!ctx.point && !ctx.matches.length && !ctx.passed.length) return;
-  const saved = read('rencontres');
-  write('rencontres', { v: V, path: saved?.path ?? ['start'], finished: saved?.finished ?? false, ctx: { ...ctx, ...withoutEmpty(saved?.ctx ?? {}) } });
-}
-
-/** The values a state has (an absent or undefined key does not hide the one handed over). @param {Record<string, unknown>} ctx */
-const withoutEmpty = ctx => Object.fromEntries(Object.entries(ctx).filter(([, v]) => v !== undefined));
