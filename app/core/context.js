@@ -30,15 +30,12 @@ function read() {
   const saved = readJSON(config.storageKeys.context, null);
   if (!saved || typeof saved !== 'object') return { ...EMPTY };
   const str = (/** @type {any} */ v, /** @type {string} */ prefix) => typeof v === 'string' && v.startsWith(prefix) ? v : null;
-  // The Carte's plant filter, kept apart before it was in its address (mapPlants): folded into it once.
-  const map = str(saved.map, '#/map');
-  const old = Array.isArray(saved.mapPlants) ? saved.mapPlants.filter(Number.isInteger) : [];
   return {
     flore: str(saved.flore, '#/'),
     query: str(saved.query, '#/'),
     collection: typeof saved.collection === 'string' ? saved.collection : null,
     mine: str(saved.mine, '#/collections'),
-    map: old.length && !/[?&]plants=/.test(map ?? '') ? (map ?? '#/map') + ((map ?? '').includes('?') ? '&' : '?') + 'plants=' + old.join(',') : map
+    map: str(saved.map, '#/map')
   };
 }
 

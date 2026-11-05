@@ -438,11 +438,9 @@ export class GfFlora extends LitElement {
       // The sheet gone another way while a move plays (Back, another tab): the move let go.
       if (before?.name === 'plant' && this.route.name !== 'plant') this.#cancelStep();
       if (this.route.name === 'plant') {
-        // Where the sheet closes to, kept in its entry: the list just left; the sheet stepped from (‹ ›); a plant entry of an
-        // earlier version (gfList: its list's depth); else opened from elsewhere (a link, a tab, the start).
-        const legacy = entryValue('gfList');
-        this.#sheet = sheetMark('gfSheetFrom', () => before?.name === 'search' ? depth() - 1 : before?.name === 'plant' ? this.#sheet
-          : !before && Number.isInteger(legacy) ? /** @type {number} */ (legacy) : null);
+        // Where the sheet closes to, kept in its entry: the list just left; the sheet stepped from (‹ ›); else opened from
+        // elsewhere (a link, a tab, the start).
+        this.#sheet = sheetMark('gfSheetFrom', () => before?.name === 'search' ? depth() - 1 : before?.name === 'plant' ? this.#sheet : null);
         const same = before?.name === 'plant' && before.id === this.route.id;
         this.#paneMark = this.route.pane ? sheetMark('gfPaneFrom', () => same && !before.pane ? depth() - 1 : same ? this.#paneMark : null) : null;
       } else { this.#sheet = null; this.#paneMark = null; }
