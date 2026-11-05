@@ -1399,8 +1399,8 @@ export class GfLayout extends LitElement {
     // The current plant, chosen, no longer found by its group's search (state.js outside): still shown, said so.
     const outside = !fixed && (id === 'plant' || id === 'media') && s.outside;
     const sub = !r.known ? 'à corriger'
-      : id === 'map' ? scopeWords(s) + (s.updating ? ' · Mise à jour…' : '')
-      : id === 'place' ? scopeWords(s)
+      : id === 'map' ? scopeWords(s, { zone: r.known && r.params.portee === 'zone' }) + (s.updating ? ' · Mise à jour…' : '')
+      : id === 'place' ? scopeWords(s, { zone: true })
       // (Its count kept with its rows while a new answer comes — another text, another sort —, as the other heads'.)
       : whole ? (s.whole ? count(s.whole.total) + ' · toute la France' : '')
       : id === 'search' || id === 'results' || id === 'filters' ? (this.#store.state.status === 'ready' && channel.answered

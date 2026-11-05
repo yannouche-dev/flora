@@ -58,7 +58,7 @@ import { RADII_3D } from '../core/around3d.js';
 import { nearestStop } from '../core/distance.js';
 import { cellIcon, distanceLabel } from './registry.js';
 import { COMPACT_WIDTH, MAP_INTENTS, MAP_LANDMARKS, MAP_LAYERS, WIDE_FEW, WIDE_FRAMES, catalogLayers, inatTiles, inWhen, layersOf, mapControls, opacitiesOf, opacText, overlaysOf, snapRadius, uiMode, viewOf, viewText, wideWords, zoneTaxa } from './map-options.js';
-import { periodQuery, plantOfPoint, taxonIdOf } from '../core/nearby.js';
+import { AROUND_MAX, periodQuery, plantOfPoint, taxonIdOf } from '../core/nearby.js';
 import { OBS_DEFAULTS, SOURCES, SOURCE_NAMES, defaultSources, failedText, inatQuery, obsChanges, obsNotes, sourcesText } from '../core/observations.js';
 import { obsId } from './state.js';
 import { speciesKey } from '../components/map-style.js';
@@ -134,21 +134,28 @@ class StateController {
 }
 
 /**
- * The scope in words: « 2 km autour de Paris », « Toute la France »; a place of the address still to find (place=
- * without at=, state.js): « Recherche du lieu : … », or why it was not found (« Lieu introuvable : … »).
- * @param {LayoutState} state
+ * The scope in words: « 2 km autour de Paris », « Toute la France » — for what shows a zone (a map of the zone, a zone
+ * cell: `zone`), « Sans zone : choisissez un lieu »; a place of the address still to find (place= without at=,
+ * state.js): « Recherche du lieu : … », or why it was not found (« Lieu introuvable : … »).
+ * @param {LayoutState} state @param {{ zone?: boolean }} [o]
  */
-export function scopeWords(state) {
+export function scopeWords(state, { zone = false } = {}) {
   const { at, place } = state.live;
   if (!at && place && state.placeState === 'finding') return `Recherche du lieu : ${place}…`;
   if (!at && place && state.placeError) return state.placeError;
-  return at ? `${distanceLabel(state.radius)} autour ${place ? 'de ' + place : 'du point choisi'}` : 'Toute la France';
+  return at ? `${distanceLabel(state.radius)} autour ${place ? 'de ' + place : 'du point choisi'}` : zone ? NO_ZONE : 'Toute la France';
 }
+
+/** What a map of the zone or a zone cell says without one. */
+const NO_ZONE = 'Sans zone : choisissez un lieu';
 
 /** The layout's period (state.js) in words, after « dans la zone »: the plants of the zone that year, that month. @param {LayoutState} state */
 const periodWords = state => state.periode === 'annee' ? ' cette année' : state.periode === 'mois' ? ' ce mois-ci' : '';
 
-/** What the scope says of the plants: their count, coming, or why it does not filter. @param {LayoutState} state */
+/**
+ * What the scope says of the plants: their count, coming, or why it does not filter — and, the zone having more
+ * observations than were loaded (state.js sample), that they are the most recent. @param {LayoutState} state
+ */
 function scopeNote(state) {
   if (!state.live.at) return '';
   if (state.speciesState === 'loading') return 'Observations de la zone : recherche…';
@@ -157,7 +164,9 @@ function scopeNote(state) {
   const when = periodWords(state);
   // The plants of the zone's latest observations (the map's: state.js), as the flora knows them — and from where.
   const from = sourcesText(state.filters.sources.filter(x => !state.failed.some(f => f.name === SOURCE_NAMES[x])));
-  return n ? `${n.toLocaleString('fr-FR')} plante${n > 1 ? 's' : ''} dans les observations de la zone${when} (${from})` : `Aucune plante de la flore dans les observations de la zone${when} (${from}).`;
+  const sample = state.sample;
+  const most = sample ? ` — les ${sample.shown.toLocaleString('fr-FR')} observations les plus récentes sur ${sample.total.toLocaleString('fr-FR')}` : '';
+  return n ? `${n.toLocaleString('fr-FR')} plante${n > 1 ? 's' : ''} dans les observations de la zone${when} (${from})${most}` : `Aucune plante de la flore dans les observations de la zone${when} (${from}).`;
 }
 
 /** Shared by the scope's controls (map, place): the radius slider, « Autour de moi », the place's name. */
@@ -180,7 +189,7 @@ const scopeStyles = css`
  */
 const where = s => {
   const failed = Boolean(s.placeError && !s.live.at);
-  const words = scopeWords(s);
+  const words = scopeWords(s, { zone: true });
   return html`<div class="where ${failed ? 'error' : ''}" data-place-state=${s.placeState}>${icon(failed ? 'exclamation-triangle-fill' : 'crosshair')}<span role=${failed ? 'alert' : nothing} title=${words}>${words}</span>
     ${s.live.at || s.live.place ? html`<button class="icon-btn" type="button" title="Toute la France (sans zone)" aria-label="Toute la France (sans zone)" @click=${() => s.setScope(null)}>${icon('x-lg')}</button>` : nothing}</div>`;
 };
@@ -901,7 +910,11 @@ export class DlMap extends LitElement {
     const d3 = this.#d3;
     if (d3 !== this.#was3d) { if (this.#was3d !== undefined) map.gl?.recheck(); this.#was3d = d3; }
     map.busy('scope', Boolean(s.live.at) && s.speciesState === 'loading', 'Plantes de la zone : recherche');
-    map.setStatus('scope', s.live.at && s.speciesState === 'error' ? s.speciesError : '', { level: 'warn' });
+    // A map of the zone without one (nor a place being found, nor « Autour de moi » under way): said in its state —
+    // bare too (ui=nue), whose head may say nothing.
+    const none = !s.live.at && !s.live.place && !this._busy && this.#p.portee === 'zone';
+    map.setStatus('scope', s.live.at && s.speciesState === 'error' ? s.speciesError : none ? 'Sans zone : appui long sur la carte, ou « Autour de moi », pour choisir un lieu.' : '',
+      { level: s.live.at ? 'warn' : 'info' });
     // A source of the zone that failed, the others shown (core/observations.js): said on the map — every one failing
     // is the scope's error above. One whose module is off fails only when a map or the address asks it: the layout's
     // own sources leave it out (state.js defaultSources).
@@ -919,6 +932,8 @@ export class DlMap extends LitElement {
     const drawn = obs ? obs.points.some(p => P.src.includes(p.kind) && inWhen(p.date, P.when)) : false;
     map.setStatus('plant', !obs || !name ? '' : !obs.points.length ? `${name} : aucune observation dans la zone`
       : obs.outside ? `${name} : hors des observations de la zone${drawn ? ' (iNaturalist seul)' : ''}` : '');
+    // Asked apart (outside the zone's), as many as iNaturalist gives at most: the most recent, said.
+    map.setStatus('plantMax', obs?.outside && obs.capped && name && drawn ? `${name} : les ${AROUND_MAX} observations les plus récentes seulement` : '');
     // A map of France or of the world: what it shows of the plants, when not those of the list one by one — every plant
     // (too many to find by name), the zone's list cut, its plants GBIF alone saw, the names iNaturalist has not
     // (#wideTaxa). In its « État »; spoken once when a line comes — never again for each new count (a word typed).
@@ -1034,9 +1049,9 @@ export class DlMap extends LitElement {
     const failed = Boolean(s.placeError && !s.live.at);
     const label = s.live.at ? distanceLabel(s.radius) : failed ? 'Lieu introuvable' : 'Zone';
     return html`<div class="zone ${low ? 'low' : ''}" role="group" aria-label="Zone de l’écran">
-      <button type="button" class=${failed ? 'error' : ''} aria-expanded=${String(this._zone)} aria-controls="zone-drop" title=${scopeWords(s)}
+      <button type="button" class=${failed ? 'error' : ''} aria-expanded=${String(this._zone)} aria-controls="zone-drop" title=${scopeWords(s, { zone: true })}
         @click=${() => { this._zone = !this._zone; }}>${failed ? icon('exclamation-triangle-fill') : nothing}${label} ${icon('caret-down-fill')}</button>
-      ${failed && !this._zone ? html`<span class="visually-hidden" role="alert">${scopeWords(s)}</span>` : nothing}
+      ${failed && !this._zone ? html`<span class="visually-hidden" role="alert">${scopeWords(s, { zone: true })}</span>` : nothing}
       ${this._zone ? html`<div class="drop" id="zone-drop">
         ${where(s)}
         ${s.live.at ? html`<div class="stops" role="group" aria-label="Rayon de la zone">${DISTANCES.map(m => html`<button type="button" aria-pressed=${String(m === s.radius)}
@@ -1482,7 +1497,7 @@ class DeckSession extends EventTarget {
   resetPassed() { this.c = { ...this.c, passed: [] }; this.changed(); }
 }
 
-/** Cards past this many results are not made (the deck is a walk through the first ones). */
+/** Cards past this many results are not made (the deck is a walk through the first ones: its end says so). */
 const DECK_MAX = 60;
 
 export class DlDeck extends LitElement {
@@ -1504,6 +1519,8 @@ export class DlDeck extends LitElement {
   /** Plant records read for the cards, by id. @type {Map<number, any>} */
   #plants = new Map();
   #cardsFor = '';
+  /** The zone's plants the cards are the first of (DECK_MAX): their end says it when there are more. */
+  #of = 0;
 
   constructor() {
     super();
@@ -1557,9 +1574,11 @@ export class DlDeck extends LitElement {
     const s = /** @type {LayoutState} */ (this.state);
     const species = s.species;
     if (!species) { this._loading = s.speciesState === 'loading'; return; }
-    // The zone's plants, even while the list keeps to what a map shows of it.
+    // The zone's plants, even while the list keeps to what a map shows of it — the first DECK_MAX (more: said at its end).
     const results = this.#store.state.results;
-    const ids = (results.inZone ?? results.items.map(p => p.id)).filter(id => species.byPlant.has(id)).slice(0, DECK_MAX);
+    const all = (results.inZone ?? results.items.map(p => p.id)).filter(id => species.byPlant.has(id));
+    const ids = all.slice(0, DECK_MAX);
+    this.#of = all.length;
     const current = s.live.plant;
     if (current != null && !ids.includes(current)) ids.unshift(current);
     const key = species.key + '|' + ids.join(',');
@@ -1641,7 +1660,8 @@ export class DlDeck extends LitElement {
     // A source failing, no card from the others (no plant — GBIF's own, often none where iNaturalist's are —, or none
     // the search keeps): said as a failure, never the deck's end (« toutes les plantes du coin »).
     if (s.speciesState === 'ready' && s.failed.length && !ses.cards.length) return this.#failed(s);
-    return html`<ma-deck active .session=${ses} .cards=${ses.deck} .c=${ses.c}></ma-deck>`;
+    const cut = this.#of > DECK_MAX ? `Les ${DECK_MAX} premières plantes en cartes (sur ${this.#of.toLocaleString('fr-FR')}).` : '';
+    return html`<ma-deck active .session=${ses} .cards=${ses.deck} .c=${ses.c} .endNote=${cut}></ma-deck>`;
   }
 
   /**

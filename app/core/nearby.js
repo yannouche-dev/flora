@@ -164,8 +164,11 @@ export async function speciesAround(point, radius, signal, periode = null) {
   };
 }
 
+/** The observations of one species in a circle asked at most (the most recent: observationsAround). */
+export const AROUND_MAX = 600;
+
 /**
- * Where one species was observed in the circle (up to 600 most recent observations): research grade, unless `filters`
+ * Where one species was observed in the circle (up to AROUND_MAX most recent observations): research grade, unless `filters`
  * say otherwise (iNaturalist's own words, core/observations.js inatQuery: a layout's zone; '' every observation: a
  * sheet's map) — of a period (periodQuery: this year, this month; a layout's zone).
  * @param {number} taxonId
@@ -181,7 +184,7 @@ export function observationsAround(taxonId, point, radius, signal, filters = RES
   const when = periodQuery(periode);
   let partial = false;
   return cached(`around-obs2:${taxonId}:${area(point, radius)}${when}${filtersKey(filters)}`, async () => {
-    const page = await paged(`taxon_id=${taxonId}&${area(point, radius)}${filters}&order_by=observed_on${when}`, 600, signal);
+    const page = await paged(`taxon_id=${taxonId}&${area(point, radius)}${filters}&order_by=observed_on${when}`, AROUND_MAX, signal);
     partial = page.partial;
     return page.results.map(toObservation);
   }, () => partial);

@@ -8,7 +8,8 @@
 // what they leave out (without a zone, too many plants: every one, spoken once; names iNaturalist has not, never one it
 // did not answer for); a plant chosen outside the zone's list still has its observations in the zone (its taxon found
 // by its name), said on the map; the plant chosen stays chosen when another search no longer finds it (« hors du
-// résultat », whole on a phone's narrow head), Back takes it away. The
+// résultat », whole on a phone's narrow head), Back takes it away. A map of the zone without one says so (« Sans
+// zone »: its head, its zone panel, its state — bare too). The
 // zone's filters say which observations, every one by default (no quality grade): the zone's, the current plant's, the
 // tiles of France and the world alike.
 // iNaturalist answered here: 12 plants around; GBIF: nothing of its own in the zone (both sources asked by default).
@@ -98,6 +99,23 @@ test.describe('un grand écran', () => {
     // A map that does not follow the search: every observation of the zone, the plant the flora does not know too.
     await app.go(`#/layout/[map(r=1km,suit=0),search]?${AT}&q=ortie`);
     await expect.poll(() => taxaOn(page, 0)).toEqual([...NAMES.map((_, i) => 1000 + i), UNKNOWN]);
+  });
+
+  test('sans zone, la carte le dit : « Sans zone » dans son en-tête, sa zone et son état — nue aussi', async ({ app, page }) => {
+    await answer(page);
+    await app.open('#/layout/[map(r=1km),search]');
+    const head = page.locator('gf-layout section.cell[data-comp="map"] .cell-head .sub');
+    await expect(head).toHaveText('Sans zone : choisissez un lieu');
+    await expect(page.locator('dl-map .where')).toHaveText('Sans zone : choisissez un lieu');
+    const NONE = 'Sans zone : appui long sur la carte, ou « Autour de moi », pour choisir un lieu.';
+    await expect.poll(() => mapState(mapAt(page, 0))).toContain(NONE);
+    // Bare (ui=nue): no zone panel, its state says it all the same; a zone: said no more.
+    await app.go('#/layout/[map(r=1km,ui=nue),search]');
+    await expect(page.locator('dl-map .where')).toHaveCount(0);
+    await expect.poll(() => mapState(mapAt(page, 0))).toContain(NONE);
+    await app.go(`#/layout/[map(r=1km,ui=nue),search]?${AT}`);
+    await expect(head).toHaveText('1 km autour du point choisi');
+    await expect.poll(() => mapState(mapAt(page, 0))).not.toContain(NONE);
   });
 
   test('la période est celle de toutes les cases : ce mois-ci, les plantes de la zone ce mois-ci, la liste et la carte ; dans l’adresse', async ({ app, page }) => {

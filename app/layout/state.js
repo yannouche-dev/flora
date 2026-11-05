@@ -41,8 +41,8 @@ import { getPlant, nameOf } from '../core/plants.js';
 import { forgetFailures } from '../core/cache.js';
 import { findPlace } from '../core/geoservices.js';
 import { errorKind } from '../core/net.js';
-import { observationsAround, plantCounts, plantOfPoint, plantsIn, speciesOf, taxonIdOf } from '../core/nearby.js';
-import { boxHolds, circleBox } from '../core/around3d.js';
+import { AROUND_MAX, observationsAround, plantCounts, plantOfPoint, plantsIn, speciesOf, taxonIdOf } from '../core/nearby.js';
+import { GBIF_MAX, boxHolds, circleBox } from '../core/around3d.js';
 import { OBS_DEFAULTS, SOURCE_NAMES, defaultSources, failedText, inatQuery, obsKey, obsParams, readObsFilters, sourcesText, zoneObservations } from '../core/observations.js';
 import { fromHash, toHash } from '../core/query.js';
 import { searchWhole } from '../core/search.js';
@@ -60,8 +60,9 @@ import { DISTANCE, distanceText, parseDistance } from './registry.js';
  * @typedef {import('../core/nearby.js').AroundPoint} AroundPoint
  * @typedef {{ coordinates: [number, number], date: string | null, url: string | null, kind: string }} Observation  `kind`:
  *   its source (core/observations.js: 'inat', 'gbif')
- * @typedef {{ key: string, points: Observation[], outside: boolean }} PlantObs  the current plant's observations in the
+ * @typedef {{ key: string, points: Observation[], outside: boolean, capped?: boolean }} PlantObs  the current plant's observations in the
  *   zone (`key`: its id and the scope they are of); `outside`: a plant not among the zone's — iNaturalist's alone, asked
+ *   (`capped`: as many as it gives at most, core/nearby.js AROUND_MAX — the most recent)
  * @typedef {'push' | 'replace' | 'none'} How   how the address follows a change: a new entry, the same one, not at all
  */
 
@@ -305,6 +306,16 @@ export class LayoutState extends EventTarget {
   #observed = null;
   /** The circle a view was taken in (its radius and centre; '' without a zone). */
   #circle = '';
+
+  /**
+   * The zone's observations loaded, when it has more (iNaturalist's past ZONE_MAX, GBIF's past its page — core/
+   * observations.js: the most recent of each): how many are shown, of how many; null: all of them (cells.js says it).
+   * @returns {{ shown: number, total: number } | null}
+   */
+  get sample() {
+    const t = this.totals;
+    return (t.inat ?? 0) > ZONE_MAX || (t.gbif ?? 0) > GBIF_MAX ? { shown: this.points.length, total: this.pointsTotal } : null;
+  }
 
   /** The scope's key ('' without one): its circle, its period, its observations' sources and filters. */
   get scopeKey() { return this.live.at ? this.radius + ':' + this.live.at.join(',') + ':' + this.periode + ':' + obsKey(this.filters) : ''; }
@@ -722,7 +733,7 @@ export class LayoutState extends EventTarget {
     if (!live() || taxon === undefined) return;
     const pts = taxon ? await observationsAround(taxon, at, r, abort.signal, filters, periode).catch(() => null) : [];
     if (!live() || !pts) return;
-    this.plantObs = { key, points: pts.map(p => ({ coordinates: p.coordinates, date: p.date, url: p.url, kind: 'inat' })), outside: true };
+    this.plantObs = { key, points: pts.map(p => ({ coordinates: p.coordinates, date: p.date, url: p.url, kind: 'inat' })), outside: true, capped: pts.length >= AROUND_MAX };
     this.#changed();
   }
 

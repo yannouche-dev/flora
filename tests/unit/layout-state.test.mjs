@@ -136,6 +136,23 @@ test('le lieu de départ du groupe : appliqué une fois chacun — une zone ôt�
   s.dispose();
 });
 
+test('les observations de la zone en partie seulement (plus que la page d’iNaturalist ou de GBIF) : combien montrées, sur combien ; toutes, rien', () => {
+  const s = new LayoutState();
+  assert.equal(s.sample, null);
+  s.points = /** @type {any} */ (Array.from({ length: 1000 }, (_, i) => ({ id: 'i' + i })));
+  s.totals = { inat: 1000, gbif: 300 };
+  s.pointsTotal = 1300;
+  assert.equal(s.sample, null);
+  s.totals = { inat: 4200, gbif: null };
+  s.pointsTotal = 4200;
+  assert.deepEqual(s.sample, { shown: 1000, total: 4200 });
+  s.points = s.points.slice(0, 312);
+  s.totals = { inat: 12, gbif: 301 };
+  s.pointsTotal = 313;
+  assert.deepEqual(s.sample, { shown: 312, total: 313 });
+  s.dispose();
+});
+
 test('ce que montre une carte de la zone : la liste gardée à ses plantes, la recherche relancée seulement quand elles changent ; tout le cercle : la zone ; un autre cercle lâche la vue, une autre période la garde ; « Toute la zone » recadre la carte', async t => {
   // The zone's observations (iNaturalist, answered here): the wild garlic east of the centre, the nettle west.
   const fetch = globalThis.fetch;

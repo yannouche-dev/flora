@@ -8,7 +8,8 @@
 // loved: their right says « Je la reconnais : à ne pas cueillir » (stamp À ÉVITER, ⛔ for ♥, a tag on the card).
 // The first time, the top card leans right then left: it can be swiped.
 // The hint once per app open (and again after « Recommencer »: kit/session.js#forgetGame). No more cards: further (« Chercher jusqu’à … »), or the ones passed again
-// (and those recognised to avoid, counted apart from the matches).
+// (and those recognised to avoid, counted apart from the matches) — and what its page says besides (`endNote`: a
+// screen's deck, its cards the first ones of more).
 // It decides nothing itself: the card flown off, the event `deck-decide` (detail { card, liked }); `deck-open`
 // (detail { id }), `deck-undo`, `deck-photos` (detail { id }). The session (kit/session.js) gives the rest.
 
@@ -41,7 +42,9 @@ export class MaDeck extends LitElement {
     /** The keys act on the deck (no plant open, no match on screen). */
     active: { type: Boolean },
     /** A button for the photos of the card on top (Rencontres, once they were shown: kit/ma-meet-media.js). */
-    photos: { type: Boolean }
+    photos: { type: Boolean },
+    /** A line its end says besides (a screen's deck: its cards the first ones of more, layout/cells.js); '': none. */
+    endNote: { attribute: false }
   };
 
   static styles = [ui, css`
@@ -138,6 +141,7 @@ export class MaDeck extends LitElement {
     this.guided = false;
     this.active = false;
     this.photos = false;
+    this.endNote = '';
   }
 
   #onChange = () => this.requestUpdate();
@@ -307,6 +311,7 @@ export class MaDeck extends LitElement {
         <p class="big">${icon('flower3')}</p>
         <p><b>Vous avez rencontré toutes les plantes du coin !</b></p>
         <p class="muted">${matches ? `${matches} match${matches > 1 ? 's' : ''} dans vos favoris — à retrouver dans « Matchs ».` : 'Aucun coup de cœur ? Le prochain se cache peut-être un peu plus loin, derrière la haie.'}</p>
+        ${this.endNote ? html`<p class="muted">${this.endNote}</p>` : nothing}
         ${avoided ? html`<p class="avoided">${icon('exclamation-octagon-fill')}${avoided} plante${avoided > 1 ? 's' : ''} reconnue${avoided > 1 ? 's' : ''} à ne pas cueillir.</p>` : nothing}
         <div class="row">${next ? html`<button class="primary" type="button" @click=${() => s.widen(next)}>Chercher jusqu’à ${distLabel(next)}</button>` : nothing}
           ${c.passed.length || c.avoided?.length ? html`<button class="secondary" type="button" @click=${() => s.resetPassed()}>Revoir les plantes passées</button>` : nothing}</div>

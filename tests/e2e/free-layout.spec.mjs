@@ -519,7 +519,7 @@ test.describe('le titre et un lieu en mots dans l’adresse', () => {
     // ✕: no place to find any more.
     await page.locator('dl-place').getByRole('button', { name: 'Toute la France (sans zone)' }).click();
     await expect.poll(() => param(page, 'place')).toBe(null);
-    await expect(zone).toHaveText('Toute la France');
+    await expect(zone).toHaveText('Sans zone : choisissez un lieu');
     // The geocoder down (503: fixtures.mjs): said too.
     await page.unroute(/^https:\/\/data\.geopf\.fr\/geocodage\/search\?/);
     await app.go('#/layout/[map(r=1km),place,results]?place=Ménétrol');
