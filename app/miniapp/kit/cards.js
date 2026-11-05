@@ -2,12 +2,15 @@
 // The cards of the plants around a place (Rencontres, Cueillette prudente, Mosaïque): what is pure about them — the
 // distances offered, their words and their slider, the order of Cueillette prudente (only the plants of a dangerous
 // confusion, the deadliest first) and its toxic look-alikes (never a match: recognised, to avoid), the deck (the cards
-// not yet swiped), a swipe kept or taken back, the first sentence of what Wikipédia says, and a card's short « bio »,
-// its safety lines first. No DOM, no network: tested under Node (tests/unit/around.test.mjs).
+// not yet swiped), a swipe kept or taken back, what a swipe says aloud (saidOf), a card made of a plant and what was
+// seen of it (cardOf: an activity's and a screen's deck alike), the first sentence of what Wikipédia says, and a card's
+// short « bio », its safety lines first. No DOM, no network: tested under Node (tests/unit/around.test.mjs).
 
 import { UNREAD, rank } from '../../core/danger.js';
 import { gravest, severityOf } from '../../core/lookalikes.js';
 import { STOPS as DISTANCES } from '../../core/distance.js';
+import { floweringMonths } from '../../core/plants.js';
+import { thumbCredit } from '../../core/credit.js';
 
 /**
  * @typedef {{ plant: any, taxonId?: number, count: number, photo: string | null, credit: import('../../core/credit.js').Credit | null,
@@ -144,6 +147,29 @@ export const avoid = (s, id) => ({ avoided: [...(s.avoided ?? []).filter(x => x 
 
 /** A card back in the deck (« ↺ »: the last swipe undone, or a match taken back). @param {Swipes} s @param {number} id @returns {Swipes} */
 export const unswipe = (s, id) => ({ matches: s.matches.filter(x => x !== id), passed: s.passed.filter(x => x !== id), ...unavoided(s, id) });
+
+/**
+ * What a swipe says aloud (the status under the deck): what it did — a match (« ajoutée aux favoris » when its heart
+ * asked for one), passed, or (Cueillette prudente) recognised, to avoid —, then the card now on top.
+ * @param {{ name: string, side: 'match' | 'pass' | 'avoid', fav: boolean, next: string | null }} o
+ */
+export function saidOf({ name, side, fav, next }) {
+  const did = side === 'avoid' ? `Reconnue, à ne pas cueillir : ${name}` : side === 'match' ? `Match : ${name}${fav ? ', ajoutée aux favoris' : ''}` : `Passée : ${name}`;
+  return `${did}. ${next ? `Carte suivante : ${next}.` : 'Plus aucune carte.'}`;
+}
+
+/**
+ * The card of a plant: what was seen of it around (`sp`: its observations' taxon, count, photo — iNaturalist's,
+ * free licence only — and credit; none: the flora's thumbnail, with its credit), whether it flowers in `month`
+ * (0 = January), its verdict to come. Never its `confusions`: undefined says « not read » (only Cueillette prudente's
+ * search reads them, kit/session.js#load), and a card whose confusions are not read is never a match there (fail
+ * closed). @param {any} plant
+ * @param {{ taxonId?: number, count?: number, photo?: string | null, credit?: import('../../core/credit.js').Credit | null } | null | undefined} sp
+ * @param {number} month @returns {Card}
+ */
+export const cardOf = (plant, sp, month) => ({ plant, taxonId: sp?.taxonId, count: sp?.count ?? 0,
+  photo: sp?.photo ? sp.photo.replace(/\/square\./, '/medium.') : plant.thumbnail?.url || null,
+  credit: sp?.photo ? sp.credit : thumbCredit(plant.thumbnail), blooming: floweringMonths(plant.flowering).has(month), verdict: null });
 
 /**
  * What is said of it, in one sentence: the first of the article's names and etymology, else of its history, else its

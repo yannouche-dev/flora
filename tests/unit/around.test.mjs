@@ -1,13 +1,13 @@
 // The games around a place (Rencontres, Cueillette prudente, Mosaïque): the pure part of their cards
 // (app/miniapp/kit/cards.js — Cueillette prudente's order and its toxic look-alikes, never a match but recognised to
-// avoid, the safety lines of a card's bio, the swipes, the slider of
-// the distances: a distance between two stops shown between them, its keys from stop to stop), each game's
+// avoid, the safety lines of a card's bio, the swipes, what a swipe says aloud, a plant's card (never its confusions),
+// the slider of the distances: a distance between two stops shown between them, its keys from stop to stop), each game's
 // own session (core/around-sessions.js), and what a mini-app made in
 // Mes plantes, taken away by « Recommencer » (place-model.js#madeBy, withoutMadeBy; runtime.js#replayItems).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { avoid, bio, deckOf, distanceAt, distanceEvents, distanceKey, distanceNear, distLabel, ethnoSentence, harvestOrder, nextDistance, swipe, toAvoid, unswipe } from '../../app/miniapp/kit/cards.js';
+import { avoid, bio, cardOf, deckOf, distanceAt, distanceEvents, distanceKey, distanceNear, distLabel, ethnoSentence, harvestOrder, nameOf, nextDistance, saidOf, swipe, toAvoid, unswipe } from '../../app/miniapp/kit/cards.js';
 import { lookalikesOf } from '../../app/core/lookalikes.js';
 import { UNREAD, dangerLevel, rank } from '../../app/core/danger.js';
 import { verdictOf } from '../../app/core/alerts.js';
@@ -140,6 +140,31 @@ test('Cueillette prudente : un sosie toxique jamais aimé — à droite, reconnu
   assert.deepEqual(swipe(s, id, false), { matches: [], passed: [id], avoided: [] });
   // A game that does not keep them (Rencontres, Mosaïque): no key added.
   assert.deepEqual(unswipe({ matches: [1], passed: [] }, 1), { matches: [], passed: [] });
+});
+
+test('ce qu’un glissé annonce : le match (et le favori ajouté), la carte passée, la plante reconnue à éviter, puis la carte suivante', () => {
+  const [colchique, cigue] = [plant('Colchicum autumnale'), plant('Conium maculatum')].map(nameOf);
+  assert.equal(saidOf({ name: 'Ail des ours', side: 'match', fav: true, next: 'Ortie dioïque' }), 'Match : Ail des ours, ajoutée aux favoris. Carte suivante : Ortie dioïque.');
+  assert.equal(saidOf({ name: 'Ail des ours', side: 'match', fav: false, next: null }), 'Match : Ail des ours. Plus aucune carte.');
+  assert.equal(saidOf({ name: 'Ail des ours', side: 'pass', fav: false, next: 'Ortie dioïque' }), 'Passée : Ail des ours. Carte suivante : Ortie dioïque.');
+  assert.equal(saidOf({ name: 'Ail des ours', side: 'pass', fav: false, next: null }), 'Passée : Ail des ours. Plus aucune carte.');
+  // Cueillette prudente (tests/e2e/around-apps.spec.mjs says it word for word); never « ajoutée aux favoris ».
+  assert.equal(saidOf({ name: colchique, side: 'avoid', fav: false, next: cigue }), 'Reconnue, à ne pas cueillir : Colchique d\'automne. Carte suivante : Ciguë maculée.');
+  assert.equal(saidOf({ name: colchique, side: 'avoid', fav: false, next: null }), 'Reconnue, à ne pas cueillir : Colchique d\'automne. Plus aucune carte.');
+});
+
+test('la carte d’une plante : la photo vue autour (en moyenne), sinon la vignette de la flore et son crédit ; jamais ses confusions (non lues : jamais un match en Cueillette prudente)', () => {
+  const colchique = plant('Colchicum autumnale');
+  const credit = { author: 'Jane', license: 'CC BY', source: 'iNaturalist', sourceUrl: null };
+  const seen = cardOf(colchique, { taxonId: 7, count: 12, photo: 'https://inat.example/photos/1/square.jpg', credit }, 8);
+  assert.deepEqual(seen, { plant: colchique, taxonId: 7, count: 12, photo: 'https://inat.example/photos/1/medium.jpg', credit, blooming: true, verdict: null });
+  assert.equal('confusions' in seen, false);
+  assert.equal(toAvoid(seen), false);
+  // Nothing seen of it (a screen's current plant, outside the zone): the flora's thumbnail, with its credit.
+  const thumb = cardOf(colchique, undefined, 2);
+  assert.equal(thumb.photo, colchique.thumbnail.url);
+  assert.deepEqual(thumb.credit, { author: colchique.thumbnail.author, license: colchique.thumbnail.license, source: 'Wikimedia Commons', sourceUrl: colchique.thumbnail.sourceUrl });
+  assert.deepEqual([thumb.count, thumb.blooming, 'confusions' in thumb], [0, false, false]);
 });
 
 test('le curseur des distances : une distance entre deux crans montrée entre eux (3 km entre 2 et 5), jamais sur un cran qu’elle n’est pas ; glissé, le cran le plus proche ; au clavier, de cran en cran', () => {
