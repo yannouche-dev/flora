@@ -66,6 +66,10 @@ test('clean : ce qui n’est pas un écran est retiré ; un par disposition et t
   // One per layout and title: the first (the newest) kept, its state whatever it is.
   assert.deepEqual(clean([s('#/layout/[a]?p=2', 'T', 9), s('#/layout/[a]?p=1', 'T', 8), s('#/layout/[a]', null, 7), s('#/layout/[b]', 'T', 6)])
     .map(x => [x.href, x.title]), [['#/layout/[a]?p=2', 'T'], ['#/layout/[a]', null], ['#/layout/[b]', 'T']]);
+  // A map moved by hand (its vue=, wherever it is in its parameters) is the same screen.
+  assert.deepEqual(clean([s('#/layout/[map(pts=pastille,vue=45.1:3.2:12),results]', null, 9), s('#/layout/[map(pts=pastille),results]', null, 8),
+    s('#/layout/[map(vue=44:2:9,pts=pastille),results]', null, 7), s('#/layout/[map(vue=44:2:9),results]', null, 6), s('#/layout/[map,results]', null, 5),
+    s('#/layout/[map(vue=44:2:9;3d=1),results]', null, 4), s('#/layout/[map(3d=1),results]', null, 3)]).map(x => x.at), [9, 6, 4]);
   // An address being modified is the same screen as in use.
   assert.equal(clean([s('#/layout/[a]?edit=1'), s('#/layout/[a]')]).length, 1);
   assert.equal(clean(Array.from({ length: 14 }, (_, i) => s(`#/layout/[slot@${10 + i},slot]`))).length, 10);

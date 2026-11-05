@@ -6,10 +6,14 @@
 // (gf-plant-card lit), and its plant's points on the other maps (the one hovered lights them itself); the list kept to
 // what the map shows once moved by hand (state.js setView, workers/search-core.js within), « Toute la zone » back,
 // never for a move the map makes itself, nor with liste=zone, nor by a map of the current plant alone (plante=seule);
-// on a phone too, the map in its tab and the list in another. iNaturalist answered here: the zone's observations of 12 plants, each a
+// the view of the map that leads it in the address (its vue=, replaced: cells.js), the same list reloaded, let go by
+// « Toute la zone » (every map leading it), another circle (not a map of France's, nor the one a place to start on
+// finds), another map taking the lead or « Seule » (the map left where it is) — never written by a map that does not
+// lead it —, kept by Back (gf-layout.js #follow: never a step); on a phone too, the map in its tab and the list in
+// another, framed on the zone once shown. iNaturalist answered here: the zone's observations of 12 plants, each a
 // different number of times (1 to 12), each plant's in a column of its own (the first plant's the westmost).
 import { test, expect, answerAround, plantId } from './fixtures.mjs';
-import { screenSearch } from './app.mjs';
+import { layoutOf, screenSearch } from './app.mjs';
 
 /** @typedef {import('@playwright/test').Page} Page */
 
@@ -43,16 +47,22 @@ test.beforeEach(async ({ context, page }) => {
 const param = (page, key) => page.evaluate(k => new URLSearchParams(location.hash.split('?')[1] || '').get(k), key);
 /** The names the list holds, in its order (the screen's search: the list draws only the rows in view). @param {Page} page */
 const names = async page => ((await screenSearch(page))?.items ?? []).map(p => p.scientificName);
-/** What the layout's map shows now, [west, south, east, north] (gf-map bounds). @param {Page} page @returns {Promise<number[]>} */
-const bounds = page => page.locator('dl-map gf-map').evaluate(el => /** @type {any} */ (el).bounds());
+/** What a map of the layout shows now (the first, else the nth), [west, south, east, north] (gf-map bounds). @param {Page} page @param {number} [nth] @returns {Promise<number[]>} */
+const bounds = (page, nth = 0) => page.locator('dl-map gf-map').nth(nth).evaluate(el => /** @type {any} */ (el).bounds());
 /** The plants with a point in a box (where the route above puts them), sorted. @param {number[]} box */
 const seenIn = ([w, s, e, n]) => SEEN.filter(([, count], i) => Array.from({ length: count }, (_, k) => [LNG + (i - 5.5) * 0.0008, LAT + (k - count / 2) * 0.0004])
   .some(([x, y]) => x >= w && x <= e && y >= s && y <= n)).map(([name]) => name).sort();
-/** Whether a box holds all of the zone's circle (1 km around its centre). @param {number[]} box */
-const holdsZone = ([w, s, e, n]) => w <= LNG - 0.0137 && e >= LNG + 0.0137 && s <= LAT - 0.009 && n >= LAT + 0.009;
-/** The map zoomed by hand: the wheel over its middle (up: in). @param {Page} page @param {number} [dy] */
-const wheel = async (page, dy = -300) => {
-  const box = /** @type {{ x: number, y: number, width: number, height: number }} */ (await page.locator('dl-map gf-map .leaflet-container').boundingBox());
+/** The address' entries (history.length): a view written replaces the address, never a new entry. @param {Page} page */
+const entries = page => page.evaluate(() => history.length);
+/** Whether each map of the layout has its view in the address (vue=), in their order. @param {Page} page */
+const vues = async page => [...String(await layoutOf(page)).matchAll(/map\(([^)]*)\)/g)].map(m => /(^|,)vue=/.test(m[1]));
+/** Whether a box holds all of the zone's circle (1 km around its centre, else `km`). @param {number[]} box @param {number} [km] */
+const holdsZone = ([w, s, e, n], km = 1) => w <= LNG - 0.0137 * km && e >= LNG + 0.0137 * km && s <= LAT - 0.009 * km && n >= LAT + 0.009 * km;
+/** The state part of the address (after « ? »). @param {Page} page */
+const query = page => page.evaluate(() => location.hash.split('?')[1] ?? '');
+/** A map zoomed by hand (the first, else the nth): the wheel over its middle (up: in). @param {Page} page @param {number} [dy] @param {number} [nth] */
+const wheel = async (page, dy = -300, nth = 0) => {
+  const box = /** @type {{ x: number, y: number, width: number, height: number }} */ (await page.locator('dl-map gf-map .leaflet-container').nth(nth).boundingBox());
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
   await page.mouse.wheel(0, dy);
 };
@@ -152,11 +162,11 @@ test('survol croisé : une ligne survolée (ou atteinte au clavier) allume les p
   expect(await page.evaluate(() => location.hash)).toBe(hash);
 });
 
-test('la liste suit la carte déplacée à la main : les plantes de ce qu’elle montre, dites ; « Toute la zone » la rend et recadre la carte ; un point touché (la carte vole) n’y change rien ; dézoomée sur tout le cercle, toute la zone', async ({ app, page, isMobile }) => {
+test('la liste suit la carte déplacée à la main : les plantes de ce qu’elle montre, dites ; son cadrage dans l’adresse (vue=, sans nouvelle entrée), rechargé la même liste ; « Toute la zone » la rend, recadre la carte et efface vue= ; un point touché (la carte vole) n’y change rien ; dézoomée sur tout le cercle, toute la zone', async ({ app, page, isMobile }) => {
   test.skip(isMobile, WIDE);
   await app.open(`#/layout/[map(pts=pastille),results(view=list)]?${AT}`);
   await expect.poll(async () => (await names(page)).length).toBe(12);
-  const hash = await page.evaluate(() => location.hash);
+  const was = await entries(page), state = await query(page);
   const line = page.locator('dl-results .scope.view');
   await expect(line).toHaveCount(0);
   // Zoomed in by hand: the plants of the points it shows, said — in the cell's head too.
@@ -167,14 +177,24 @@ test('la liste suit la carte déplacée à la main : les plantes de ce qu’elle
   await expect.poll(async () => (await names(page)).sort()).toEqual(shown);
   await expect(line).toContainText(`Dans la vue de la carte : ${shown.length} plante${shown.length > 1 ? 's' : ''} sur 12`);
   await expect(page.locator('section.cell[data-comp="results"] .cell-head .sub')).toContainText('dans la vue');
-  // The map's points are still the zone's (never kept to its view), and nothing of it in the address.
+  // The map's points are still the zone's (never kept to its view).
   await expect(page.locator('dl-map .leaflet-overlay-pane path.gf-obs')).toHaveCount(78);
-  expect(await page.evaluate(() => location.hash)).toBe(hash);
-  // « Toute la zone »: the whole list, the map framed on the zone again.
+  // Its view in the address (it leads the list): the layout's alone, the address replaced, no new entry.
+  await expect.poll(() => layoutOf(page)).toMatch(/^\[map\(pts=pastille,vue=[\d.]+:[\d.]+:[\d.]+\),results\(view=list\)\]$/);
+  expect(await query(page)).toBe(state);
+  expect(await entries(page)).toBe(was);
+  // Reloaded (a link): the map there, the same list, said the same.
+  await page.reload();
+  await app.ready();
+  await expect.poll(async () => (await names(page)).sort()).toEqual(shown);
+  await expect(line).toContainText(`Dans la vue de la carte : ${shown.length} plante${shown.length > 1 ? 's' : ''} sur 12`);
+  // « Toute la zone »: the whole list, the map framed on the zone again, its view gone from the address.
   await line.getByRole('button', { name: 'Toute la zone' }).click();
   await expect.poll(async () => (await names(page)).length).toBe(12);
   await expect(line).toHaveCount(0);
   await expect.poll(async () => holdsZone(await bounds(page))).toBe(true);
+  await expect.poll(() => layoutOf(page)).toBe('[map(pts=pastille),results(view=list)]');
+  expect(await entries(page)).toBe(was);
   // A point touched (the mouse's own click: a hand on the map) — one of the eastmost column, clear of the zone's
   // panel —: its plant chosen, the map flying to it, a move it makes itself: the list stays the zone's. Where the
   // points are once still (an eased frame has its view at once, its points drawn there a moment later).
@@ -219,18 +239,34 @@ test('survol d’une carte à l’autre : un point survolé sur l’une allume l
   await expect(page.locator('dl-results gf-plant-card[lit]')).toHaveCount(0);
 });
 
-test('plante=seule : la carte de la plante courante seule ne mène pas la liste — déplacée, la liste reste toute la zone, rien n’est dit', async ({ app, page, isMobile }) => {
+test('plante=seule : la carte de la plante courante seule ne mène pas la liste — déplacée, la liste reste toute la zone, rien n’est dit ni écrit ; « Seule » sur la carte qui menait efface son cadrage', async ({ app, page, isMobile }) => {
   test.skip(isMobile, WIDE);
-  await app.open(`#/layout/[map(pts=pastille,plante=seule),results(view=list)]?${AT}&p=${plantId('Urtica dioica')}`);
+  const ortie = plantId('Urtica dioica');
+  await app.open(`#/layout/[map(pts=pastille,plante=seule),results(view=list)]?${AT}&p=${ortie}`);
   await expect.poll(async () => (await names(page)).length).toBe(12);
   await wheel(page);
   await page.waitForTimeout(1500);
   expect((await names(page)).length).toBe(12);
   await expect(page.locator('dl-results .scope.view')).toHaveCount(0);
   await expect(page.locator('section.cell[data-comp="results"] .cell-head .sub')).not.toContainText('dans la vue');
+  expect(await layoutOf(page)).toBe('[map(pts=pastille,plante=seule),results(view=list)]');
+  // A map that leads it, moved: its view written; « Seule » on its chip — it no longer leads —: let go, the whole zone
+  // — the map left where it is (only what it shows changed).
+  await app.open(`#/layout/[map(pts=pastille),results(view=list)]?${AT}&p=${ortie}`);
+  await expect.poll(async () => (await names(page)).length).toBe(12);
+  await wheel(page);
+  await expect.poll(async () => (await names(page)).length).toBeLessThan(12);
+  await expect.poll(() => layoutOf(page)).toContain('vue=');
+  const box = await bounds(page);
+  await page.locator('dl-map .chip').getByRole('button', { name: 'Seule' }).click();
+  await expect.poll(() => layoutOf(page)).toBe('[map(pts=pastille,plante=seule),results(view=list)]');
+  await expect.poll(async () => (await names(page)).length).toBe(12);
+  await expect(page.locator('dl-results .scope.view')).toHaveCount(0);
+  await page.waitForTimeout(800);
+  expect(await bounds(page)).toEqual(box);
 });
 
-test('liste=zone : la carte zoomée laisse la liste à toute la zone ; menée par la carte, un autre rayon lâche sa vue', async ({ app, page, isMobile }) => {
+test('liste=zone : la carte zoomée laisse la liste à toute la zone, rien n’est écrit ; menée par la carte, un autre rayon lâche sa vue et l’efface de l’adresse — une carte de la France garde la sienne', async ({ app, page, isMobile }) => {
   test.skip(isMobile, WIDE);
   await app.open(`#/layout/[map(pts=pastille,liste=zone),results(view=list)]?${AT}`);
   await expect.poll(async () => (await names(page)).length).toBe(12);
@@ -238,15 +274,118 @@ test('liste=zone : la carte zoomée laisse la liste à toute la zone ; menée pa
   await page.waitForTimeout(1500);
   expect((await names(page)).length).toBe(12);
   await expect(page.locator('dl-results .scope.view')).toHaveCount(0);
-  // Led by the map (its default): kept to its view; the radius changed — another circle —: the whole new zone.
+  expect(await layoutOf(page)).toBe('[map(pts=pastille,liste=zone),results(view=list)]');
+  // Led by the map (its default): kept to its view, written; the radius changed — another circle —: the whole new
+  // zone, its view gone from the address.
   await app.open(`#/layout/[map(pts=pastille),results(view=list)]?${AT}`);
   await expect.poll(async () => (await names(page)).length).toBe(12);
   await wheel(page);
   await expect.poll(async () => (await names(page)).length).toBeLessThan(12);
+  await expect.poll(() => layoutOf(page)).toContain('vue=');
   await page.evaluate(() => { location.hash = location.hash.replace('r=1km', 'r=2km'); });
   await expect.poll(() => param(page, 'r')).toBe('2km');
   await expect.poll(async () => (await names(page)).length).toBe(12);
   await expect(page.locator('dl-results .scope.view')).toHaveCount(0);
+  await expect.poll(() => layoutOf(page)).toBe('[map(pts=pastille),results(view=list)]');
+  // Beside it, a map of France with a view of its own (written while modified): another circle leaves it — it is never
+  // framed on the zone.
+  await app.open(`#/layout/[map(pts=pastille),map(portee=france,vue=46.5:2.5:6),results(view=list)]?${AT}`);
+  await expect.poll(async () => (await names(page)).length).toBe(12);
+  await wheel(page);
+  await expect.poll(() => vues(page)).toEqual([true, true]);
+  await page.evaluate(() => { location.hash = location.hash.replace('r=1km', 'r=2km'); });
+  await expect.poll(() => param(page, 'r')).toBe('2km');
+  await expect.poll(() => vues(page)).toEqual([false, true]);
+  await expect.poll(async () => (await names(page)).length).toBe(12);
+  expect(await vues(page)).toEqual([false, true]);
+});
+
+test('deux cartes qui mènent la liste : seul le cadrage de la dernière déplacée à la main est écrit, celui de l’autre effacé', async ({ app, page, isMobile }) => {
+  test.skip(isMobile, WIDE);
+  await app.open(`#/layout/[map(pts=pastille),map(pts=pastille),results(view=list)]?${AT}`);
+  await expect.poll(async () => (await names(page)).length).toBe(12);
+  const was = await entries(page);
+  expect(await vues(page)).toEqual([false, false]);
+  // The first moved: it leads, its view written.
+  await wheel(page, -300, 0);
+  await expect.poll(() => vues(page)).toEqual([true, false]);
+  await expect.poll(async () => (await names(page)).sort()).toEqual(seenIn(await bounds(page, 0)));
+  const first = await bounds(page, 0);
+  // The second moved: it leads now, its view alone written — the first's let go from the address, the map left where
+  // it is (nobody moved it).
+  await wheel(page, -300, 1);
+  await expect.poll(() => vues(page)).toEqual([false, true]);
+  await expect.poll(async () => (await names(page)).sort()).toEqual(seenIn(await bounds(page, 1)));
+  expect(await bounds(page, 0)).toEqual(first);
+  expect(await entries(page)).toBe(was);
+});
+
+test('deux cartes et leurs cadrages dans l’adresse : « Toute la zone » les efface tous deux — rechargé, toute la zone ; une carte qui ne mène pas la liste garde le sien', async ({ app, page, isMobile }) => {
+  test.skip(isMobile, WIDE);
+  // Both lead the list, both with a view (written while modified, or a link): the list kept to the first's.
+  await app.open(`#/layout/[map(pts=pastille,vue=48.85:2.345:17),map(pts=pastille,vue=48.85:2.355:17),results(view=list)]?${AT}`);
+  const line = page.locator('dl-results .scope.view');
+  await expect(line).toBeVisible();
+  await expect.poll(async () => (await names(page)).length).toBeLessThan(12);
+  // « Toute la zone »: neither view kept — both maps framed on the zone, the same after a reload.
+  await line.getByRole('button', { name: 'Toute la zone' }).click();
+  await expect.poll(() => vues(page)).toEqual([false, false]);
+  await expect.poll(async () => (await names(page)).length).toBe(12);
+  await page.reload();
+  await app.ready();
+  await expect.poll(async () => holdsZone(await bounds(page, 0)) && holdsZone(await bounds(page, 1))).toBe(true);
+  await page.waitForTimeout(1000);
+  expect((await names(page)).length).toBe(12);
+  await expect(line).toHaveCount(0);
+  // A map that does not lead it (liste=zone) keeps its own view when the other one is moved: never its author.
+  await app.open(`#/layout/[map(pts=pastille),map(pts=pastille,liste=zone,vue=48.851:2.351:16),results(view=list)]?${AT}`);
+  await expect.poll(async () => (await names(page)).length).toBe(12);
+  const own = await bounds(page, 1);
+  expect(holdsZone(own)).toBe(false);
+  await wheel(page, -300, 0);
+  await expect.poll(() => vues(page)).toEqual([true, true]);
+  await expect.poll(async () => (await names(page)).sort()).toEqual(seenIn(await bounds(page, 0)));
+  expect(await bounds(page, 1)).toEqual(own);
+});
+
+test('Retour après une plante choisie puis la carte déplacée : la plante ôtée, la vue gardée (l’étape retrouvée la reçoit), la liste avec elle, la case agrandie aussi', async ({ app, page, isMobile }) => {
+  test.skip(isMobile, WIDE);
+  await app.open(`#/layout/[map(pts=pastille,actions=agrandir),results(view=list)]?${AT}`);
+  await expect.poll(async () => (await names(page)).length).toBe(12);
+  await wheel(page);
+  await expect.poll(() => layoutOf(page)).toContain('vue=');
+  const was = await entries(page);
+  // A plant chosen in the list: a new entry.
+  await page.locator('dl-results gf-plant-card a.row').first().click();
+  await expect.poll(() => param(page, 'p')).not.toBe(null);
+  expect(await entries(page)).toBe(was + 1);
+  // The map enlarged, then moved again: its view replaces the new entry's.
+  const cell = page.locator('section.cell[data-comp="map"]');
+  await cell.getByRole('button', { name: 'Agrandir « Carte »' }).click();
+  await expect(cell).toHaveClass(/maxed/);
+  const before = await layoutOf(page);
+  await wheel(page);
+  await expect.poll(() => layoutOf(page)).not.toBe(before);
+  const moved = await layoutOf(page), box = await bounds(page);
+  await expect.poll(async () => (await names(page)).sort()).toEqual(seenIn(box));
+  // Back: the plant gone — the view is not a step: as it is, the entry found again given it; the cell still enlarged.
+  await page.goBack();
+  await expect.poll(() => param(page, 'p')).toBe(null);
+  await expect.poll(() => layoutOf(page)).toBe(moved);
+  await expect(cell).toHaveClass(/maxed/);
+  expect(await bounds(page)).toEqual(box);
+  expect((await names(page)).sort()).toEqual(seenIn(box));
+  expect(await entries(page)).toBe(was + 1);
+});
+
+test('un lieu de départ et un cadrage, sans zone dans l’adresse : le lieu trouvé, le cadrage gardé — la liste le suit', async ({ app, page, isMobile }) => {
+  test.skip(isMobile, WIDE);
+  await page.route(/^https:\/\/data\.geopf\.fr\/geocodage\/completion\?/, route => route.fulfill({ contentType: 'application/json', body: JSON.stringify({ status: 'OK',
+    results: [{ fulltext: 'Colline de Mirabel, 63200 Ménétrol', zipcode: '63200', city: 'Ménétrol', kind: 'lieu-dit', x: 3.1116, y: 45.8726 }] }) }));
+  await app.open('#/layout/[map(pts=pastille,vue=45.8726:3.1116:17,lieu=Mirabel Ménétrol 63),results(view=list)]');
+  await expect.poll(() => param(page, 'at')).toBe('45.87260,3.11160');
+  await expect(page.locator('dl-results .scope.view')).toContainText('Dans la vue de la carte');
+  expect(await layoutOf(page)).toContain('vue=45.8726:3.1116:17');
 });
 
 test('au téléphone : la carte zoomée dans son onglet, l’onglet de la liste montre ses plantes, et le dit', async ({ app, page, isMobile }) => {
@@ -261,4 +400,37 @@ test('au téléphone : la carte zoomée dans son onglet, l’onglet de la liste 
   await expect(line).toBeVisible();
   await expect(line).toContainText(`Dans la vue de la carte : ${shown.length} plante${shown.length > 1 ? 's' : ''} sur 12`);
   expect((await names(page)).sort()).toEqual(shown);
+});
+
+test('au téléphone : « Toute la zone » dans l’onglet de la liste, puis la carte dans le sien — cadrée sur la zone, la liste entière ; de même pour un autre rayon', async ({ app, page, isMobile }) => {
+  test.skip(!isMobile, 'a phone: the map and the list in tabs');
+  await app.open(`#/layout/[map(pts=pastille),results(view=list)]?${AT}`);
+  await expect.poll(async () => (await names(page)).length).toBe(12);
+  const tabs = page.locator('gf-layout [role="tab"]'), line = page.locator('dl-results .scope.view');
+  await wheel(page);
+  await expect.poll(() => layoutOf(page)).toContain('vue=');
+  await tabs.nth(1).click();
+  await line.getByRole('button', { name: 'Toute la zone' }).click();
+  await expect.poll(async () => (await names(page)).length).toBe(12);
+  await expect.poll(() => layoutOf(page)).toBe('[map(pts=pastille),results(view=list)]');
+  // The map, out of sight then, framed on the zone once shown: the list stays whole.
+  await tabs.nth(0).click();
+  await expect.poll(async () => holdsZone(await bounds(page))).toBe(true);
+  await page.waitForTimeout(1000);
+  expect((await names(page)).length).toBe(12);
+  await expect(line).toHaveCount(0);
+  // Another radius while the list's tab is shown: the same, on the new circle.
+  await wheel(page);
+  await expect.poll(() => layoutOf(page)).toContain('vue=');
+  await tabs.nth(1).click();
+  await expect(line).toBeVisible();
+  await page.evaluate(() => { location.hash = location.hash.replace('r=1km', 'r=2km'); });
+  await expect.poll(() => param(page, 'r')).toBe('2km');
+  await expect.poll(async () => (await names(page)).length).toBe(12);
+  await expect.poll(() => layoutOf(page)).toBe('[map(pts=pastille),results(view=list)]');
+  await tabs.nth(0).click();
+  await expect.poll(async () => holdsZone(await bounds(page), 2)).toBe(true);
+  await page.waitForTimeout(1000);
+  expect((await names(page)).length).toBe(12);
+  await expect(line).toHaveCount(0);
 });

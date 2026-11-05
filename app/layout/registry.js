@@ -131,7 +131,7 @@ const MAP_PARAMS = {
   lieu: { kind: 'text', label: 'Lieu de départ', def: null, group: 'Où', words: ['place', 'commune', 'ville', 'adresse'] },
   autour: { kind: 'bool', label: 'Autour de moi au départ', def: false, group: 'Où', words: ['around', 'moi', 'gps', 'position'] },
   // The view it starts on (its centre, its zoom; in 3D its tilt and turn), the map moved while the screen is
-  // modified: else framed on the zone.
+  // modified — in use, the one that leads the list (cells.js): else framed on the zone.
   vue: { kind: 'text', label: 'Cadrage de départ', def: null, group: 'Où', own: true, named: true, max: 60, read: readView, words: ['view', 'cadrage', 'camera'] },
   // Fond: the maps' common look (core/map-settings.js) unless it says one (its own then, kept by the cell: base=, and
   // annee= its photos' year or period, SPOT's year — core/backgrounds.js; without it the most recent; noms= « Noms et

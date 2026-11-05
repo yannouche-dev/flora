@@ -1629,8 +1629,9 @@ export class GfMap extends LitElement {
     const first = !this.#areaBounds;
     this.#areaBounds = bounds;
     this.#areaInset = inset;
-    // A view given (vue=) frames the map instead, the first time; a circle moved afterwards is framed again.
-    if (moved && first && this.#lastFit === 'view') { /* on its view */ } else if (moved) this.#fitArea(!first);
+    // A view given (vue=) frames the map instead, the first time — told again, now on a circle (a place found after
+    // it: lieu=, autour); a circle moved afterwards is framed again.
+    if (moved && first && this.#lastFit === 'view') { const on = this.bounds(); if (on) this.#emit('view-framed', { bounds: on }); } else if (moved) this.#fitArea(!first);
     // All new: one after the other as before; a few more among those kept: quicker.
     const all = fresh.length === dots.size;
     for (const [i, { point, key }] of fresh.entries()) dots.set(key, this.#areaDot(area, point, all ? Math.min(i, 40) * 25 : Math.min(i, 30) * 14).addTo(layer));
@@ -2380,8 +2381,10 @@ export class GfMap extends LitElement {
   /** The circle framed (area.fit), with a margin; `ease`: a short zoom animation. Told: `view-framed` (bounds null). @param {boolean} [ease] */
   #fitArea(ease = false) {
     const map = this.#map, b = this.#areaBounds;
-    if (!map || !b || !map.getSize().x) return;
+    if (!map || !b) return;
+    // Framed on it from now on — out of sight (a phone's other tab, a folded cell: no size), once it has one.
     this.#lastFit = 'area';
+    if (!map.getSize().x) return;
     this.#selfMove();
     // The area seen through its ring: the distance under it again at once (a resize).
     if (this.#smooth) { this.#tweenArea(this.#smooth, false); return; }
@@ -2393,6 +2396,12 @@ export class GfMap extends LitElement {
 
   /** Framed on its area again (« Toute la zone » beside it). */
   refit() { this.#fitArea(true); }
+
+  /**
+   * The view given (`view`) let go where the map is, before its page takes it back (it no longer keeps it): not framed
+   * on its area again — shown as the hand left it, framed again on a resize like a map moved by hand.
+   */
+  letGoView() { if (this.#lastFit === 'view') this.#lastFit = 'area'; }
 
   /**
    * What the map shows, as [west, south, east, north] — in 3D, what the 3D map shows (#sight) —; null before it has a

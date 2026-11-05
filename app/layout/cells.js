@@ -23,8 +23,8 @@
 // What is done in a cell with its own controls is kept in the layout (`cell-param` {key: value…}, gf-layout.js: the
 // address is the app, sent as it is): a map's 3D, background, layers (their order, IGN's catalogue, their opacity),
 // period, « Seule », legend, binoculars (« Observations autour » in 3D), its points' sources and the current plant's
-// (« Sur cette carte » of its panel ▦), and, while the screen is modified, its view; the search's filters opened; the
-// results as a list or a grid.
+// (« Sur cette carte » of its panel ▦), and its view (vue=: while the screen is modified, any map's; in use, the one
+// leading the list's); the search's filters opened; the results as a list or a grid.
 // A link to a plant's sheet anywhere in a cell (a result, a look-alike) makes it the current plant (gf-layout.js).
 // The frame every cell shares (registry.js#FRAME: its head, its actions, its empty state) is gf-layout.js'; its links
 // are honoured here: a plant of its own (plante=: renderCell), the whole flora instead of the zone (results zone=0:
@@ -230,7 +230,7 @@ export class DlMap extends LitElement {
     state: { attribute: false }, params: { attribute: false },
     /** The search of its group (core/search-channel.js: the screen's own); none: the app's. */
     channel: { attribute: false },
-    /** While modified: the map moved there is the view it starts on (vue=). */
+    /** While modified: the map moved there is the view it starts on (vue=) — in use, only the one leading the list. */
     editing: { attribute: false },
     _busy: { state: true }, _narrow: { state: true }, _zone: { state: true }, _thumb: { state: true }
   };
@@ -345,10 +345,18 @@ export class DlMap extends LitElement {
   constructor() {
     super();
     // A plant hovered in a list: its points lit on the map itself (the cell not drawn again). « Toute la zone » beside
-    // the list it led: framed on the zone again.
+    // the list it led: framed on the zone again, its view (vue=) gone from the address — in use, every map of the
+    // group that leads it lets its own go too (framed on the zone: a reload gives the whole zone). Another map of the
+    // group moved by hand in use, leading the list now: this one, if it leads it too, lets its view go from the address
+    // (one author), the map left where it is.
     new StateController(this, {
       hover: () => this.#lightHovered(),
-      refit: e => { if (/** @type {CustomEvent} */ (e).detail?.by === this) this.#map?.refit(); }
+      refit: e => {
+        const by = /** @type {CustomEvent} */ (e).detail?.by;
+        if (by === this) this.#map?.refit();
+        if (this.params?.vue && (by === this || (!this.editing && this.#leads))) this.#set({ vue: null });
+      },
+      lead: e => { if (/** @type {CustomEvent} */ (e).detail?.by !== this && !this.editing && this.#leads && this.params?.vue) this.#letGo(); }
     });
     /** @type {LayoutState | null} */ this.state = null;
     /** The search of its group (core/search-channel.js); none: the app's. @type {import('../core/search-channel.js').Channel | null} */ this.channel = null;
@@ -708,12 +716,16 @@ export class DlMap extends LitElement {
   /** @type {{ text: string, value: import('./map-options.js').MapView | null } | null} */ #viewMemo = null;
 
   /**
-   * The map moved by hand: the list kept to what it shows (liste=vue: state.js setView) — while the screen is modified,
-   * the view it starts on too (vue=). @param {CustomEvent} e
+   * The map moved by hand: the list kept to what it shows (liste=vue: state.js setView), its view written in the
+   * address (vue=, replaced: no new entry) — while the screen is modified, any map's (the view it starts on); in use,
+   * only the one leading the list, the others of its group letting theirs go (state.js lead). @param {CustomEvent} e
    */
   #onView(e) {
-    if (this.editing) this.#set({ vue: viewText(e.detail) });
-    if (this.#leads && e.detail.bounds) this.state?.setView(e.detail.bounds, { kinds: this.#p.src, by: this });
+    const s = this.state, leads = this.#leads;
+    if (this.editing || leads) this.#set({ vue: viewText(e.detail) });
+    if (!leads || !s) return;
+    if (e.detail.bounds) s.setView(e.detail.bounds, { kinds: this.#p.src, by: this });
+    if (!this.editing) s.lead(this);
   }
 
   /**
@@ -732,6 +744,12 @@ export class DlMap extends LitElement {
    * one that shows the current plant alone (plante=seule: its points are not the list's).
    */
   get #leads() { return this.#p.portee === 'zone' && this.params?.liste !== 'zone' && this.#p.plante !== 'seule' && Boolean(this.state?.live.at); }
+
+  /** In use, its view (vue=) let go from the address — no longer the list's: the map left where it is (gf-map letGoView). */
+  #letGo() {
+    this.#map?.letGoView();
+    this.#set({ vue: null });
+  }
 
   /** The cell's map (gf-map: what the cell says goes through it — the quiet-map rule). @returns {any} */
   get #map() { return this.renderRoot.querySelector('gf-map'); }
@@ -813,7 +831,8 @@ export class DlMap extends LitElement {
     this._busy = true;
     try { const at = await locateOnce(); s.setScope(at, null, how); nameScope(s, /** @type {[number, number]} */ (s.live.at)); }
     // Asked, no position: one brief toast over the map.
-    catch (error) { this.#map?.toast(/** @type {Error} */ (error).message); }
+    // (Its view, written for the zone it was to open on: a zone given by hand afterwards is not that one.)
+    catch (error) { this.#openedOn = null; this.#map?.toast(/** @type {Error} */ (error).message); }
     finally { this._busy = false; }
   }
 
@@ -852,11 +871,23 @@ export class DlMap extends LitElement {
     this.toggleAttribute('updating', Boolean(s?.updating));
     if (!s || !map) return;
     this.#defaultScope();
-    // No longer leading the list (liste=zone, plante=seule, France or the world now): it shows the whole zone again.
-    if (s.view?.by === this && !this.#leads) s.setView(null);
-    // The zone moved while modified: the view kept was the old zone's — framed on the new one.
+    // No longer leading the list (liste=zone, plante=seule, France or the world now): it shows the whole zone again —
+    // in use, its view gone from the address (written there only while it led), the map left where it is.
+    if (s.view?.by === this && !this.#leads) {
+      s.setView(null);
+      if (!this.editing && this.params?.vue) this.#letGo();
+    }
+    // The zone moved (another place, another radius, none): the view kept was the old zone's — framed on the new one.
+    // Not the zone it opens on (lieu=, autour: found after it is drawn), its view the address' still: that view frames
+    // it (gf-map, the first time). In use, a map of the zone's alone: a map of France or of the world keeps its own
+    // (never framed on the zone).
     const zone = s.live.at ? s.live.at.join(',') + ':' + s.radius : '';
-    if (this.editing && this.params?.vue && this.#zoneWas !== undefined && zone !== this.#zoneWas) this.#set({ vue: null });
+    if (this.#zoneWas === undefined) this.#openedOn = this.params?.vue ?? null;
+    // Its place not found (lieu=): a zone given by hand afterwards is not the one its view was written for.
+    if (s.placeState === 'failed') this.#openedOn = null;
+    const opens = this.#zoneWas === '' && Boolean(this.params?.lieu || this.params?.autour) && this.params?.vue === this.#openedOn;
+    if (this.params?.vue && (this.editing || this.#p.portee === 'zone') && this.#zoneWas !== undefined && zone !== this.#zoneWas && !opens) this.#set({ vue: null });
+    if (zone) this.#openedOn = null;
     this.#zoneWas = zone;
     const d3 = this.#d3;
     if (d3 !== this.#was3d) { if (this.#was3d !== undefined) map.gl?.recheck(); this.#was3d = d3; }
@@ -895,6 +926,7 @@ export class DlMap extends LitElement {
   #said = '';
   /** The lines a map of France or of the world says (wideWords' keys), as last drawn: spoken when they come. @type {Set<string>} */ #wideHad = new Set();
   /** The zone at the last update (undefined: none yet). @type {string | undefined} */ #zoneWas;
+  /** The view it opened on (vue=, the address'), until it has a zone: kept when its first one comes. @type {string | null} */ #openedOn = null;
 
   /**
    * The controls placed around the map's own, whose number and size vary (measured): top right under its buttons;

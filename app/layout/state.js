@@ -252,7 +252,8 @@ export class LayoutState extends EventTarget {
     this.hover = null;
     /**
      * What a map shows of the zone (moved by hand: its box [west, south, east, north], the sources of its points, the
-     * map), the list kept to it; null: the whole zone (a map that shows all of the circle too). Never in the address.
+     * map), the list kept to it; null: the whole zone (a map that shows all of the circle too). In the address as the
+     * leading map's vue= (cells.js; replaced, never a new entry).
      * @type {{ box: number[], kinds: string[] | null, by: object | null } | null}
      */
     this.view = null;
@@ -365,6 +366,13 @@ export class LayoutState extends EventTarget {
     this.setView(null);
     this.dispatchEvent(new CustomEvent('refit', { detail: { by } }));
   }
+
+  /**
+   * A map moved by hand in use takes the lead of the list (`lead`, detail: { by }): its view is the one the address
+   * keeps (its vue=, cells.js) — the group's other maps that lead it let theirs go. One author.
+   * @param {object} by
+   */
+  lead(by) { this.dispatchEvent(new CustomEvent('lead', { detail: { by } })); }
 
   /** The plants of the view, now (none without one, or before the zone's plants are known). @returns {number[] | null} */
   #withinNow() {
