@@ -25,14 +25,23 @@ import { floweringMonths } from '../../core/plants.js';
 import { ui } from '../../styles/ui.js';
 import { bio, distLabel, nameOf, nextDistance } from './cards.js';
 
-/** @typedef {import('./cards.js').Card} Card */
+/**
+ * @typedef {import('./cards.js').Card} Card
+ * @typedef {EventTarget & { deck: Card[], matchCards: Card[], avoidCards: Card[], history: readonly import('./swipes.js').Swiped[],
+ *   burst: number, hintOnce(): boolean, avoids(card: Card): boolean, ethnoOf(card: Card): string | null | undefined,
+ *   widen(m: number): void, resetPassed(): void }} DeckHost
+ *   what the deck asks of its host — an activity's game (kit/session.js) or a screen's deck (layout/cells.js), both on
+ *   the swipe core (kit/swipes.js): its cards not swiped, matched, recognised to avoid (a screen's: none), ↺'s swipes, the
+ *   heart flying off, the hint once, which cards are to avoid (a screen's: none), what Wikipédia says (a screen's:
+ *   nothing), further (« Chercher jusqu’à … »), the cards passed again; `change` when any of it changed
+ */
 
 /** A pointer still this long (ms) before it is let go: the card was held, not thrown. */
 const REST_MS = 60;
 
 export class MaDeck extends LitElement {
   static properties = {
-    /** The game (kit/session.js). */
+    /** Its host (DeckHost: kit/session.js, layout/cells.js). */
     session: { attribute: false },
     /** The cards as shown, the top one first. */
     cards: { attribute: false },
@@ -137,7 +146,7 @@ export class MaDeck extends LitElement {
 
   constructor() {
     super();
-    /** @type {import('./session.js').AroundSession | null} */
+    /** @type {DeckHost | null} */
     this.session = null;
     /** @type {Card[]} */
     this.cards = [];
@@ -311,9 +320,8 @@ export class MaDeck extends LitElement {
       // Cut short: no wider search (further, its cards would still be the first ones).
       const next = this.endTitle ? null : nextDistance(c.radius);
       const matches = s.matchCards.length;
-      // Cueillette prudente: the toxic look-alikes recognised, counted apart — never with the matches. (A layout's
-      // deck, layout/cells.js, has none.)
-      const avoided = s.avoidCards?.length ?? 0;
+      // Cueillette prudente: the toxic look-alikes recognised, counted apart — never with the matches.
+      const avoided = s.avoidCards.length;
       return html`<div class="deck-end">
         <p class="big">${icon('flower3')}</p>
         <p><b>${this.endTitle || 'Vous avez rencontré toutes les plantes du coin !'}</b></p>
@@ -328,9 +336,9 @@ export class MaDeck extends LitElement {
     const name = nameOf(top.plant);
     const left = s.deck.length;
     // Cueillette prudente: a toxic look-alike on top (or the confusions unreadable) — its right is « recognised, to
-    // avoid », never a match (kit/session.js#avoids; a layout's deck, layout/cells.js, has none). One button for both,
-    // so the focus stays on it from a card to the next.
-    const avoid = s.avoids?.(top) ?? false;
+    // avoid », never a match (the host's avoids: kit/session.js#avoids). One button for both, so the focus stays on it
+    // from a card to the next.
+    const avoid = s.avoids(top);
     // The deck takes the focus (a Tab), and ← → ↑ then act on its top card — only there (#onKey): on a tab, a
     // button or the map, the arrows keep their own meaning.
     return html`<div class="deck-wrap">
@@ -354,14 +362,14 @@ export class MaDeck extends LitElement {
 
   /** @param {Card} c @param {boolean} top */
   #card(c, top) {
-    const s = /** @type {import('./session.js').AroundSession} */ (this.session);
+    const s = /** @type {DeckHost} */ (this.session);
     const p = c.plant, name = nameOf(p);
     // A plant already loved, brought back on top: its heart says so; a swipe either way only puts it back.
     const loved = /** @type {number[]} */ (this.c?.matches ?? []).includes(p.id);
     const photo = this.#photo(c.photo);
     const ethno = s.ethnoOf(c);
     // Cueillette prudente's toxic look-alike: swiped right, recognised — its stamp and its tag say so.
-    const avoid = s.avoids?.(c) ?? false;
+    const avoid = s.avoids(c);
     // The card underneath is out of reach (inert) and unread: a screen reader meets the card on top only.
     return html`<article class="swipe-card ${top ? 'top' : 'under'} ${loved ? 'loved' : ''}" aria-label=${loved ? name + ' — déjà aimée' : name} data-id=${p.id}
         ?inert=${!top} aria-hidden=${top ? 'false' : 'true'}

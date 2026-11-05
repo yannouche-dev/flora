@@ -40,15 +40,15 @@ import { addressAt } from '../core/geoservices.js';
 import { SearchController } from '../core/search-channel.js';
 import { blockStyle } from '../core/sheet-blocks.js';
 import { href } from '../core/router.js';
-import { floweringMonths, getPlant } from '../core/plants.js';
+import { getPlant } from '../core/plants.js';
 import { verdictOf } from '../core/alerts.js';
-import { thumbCredit } from '../core/credit.js';
 import { cachedThumb, thumbUrl } from '../core/thumb.js';
 import { hintView, takeHint } from '../core/hints.js';
 import { addFavorite, forgetFavoriteEntry, isFavorite } from '../core/collections.js';
 import { ui } from '../styles/ui.js';
 import { photosOffLine } from '../components/ui-kit.js';
-import { DISTANCES, distanceAt, distanceEvents, distanceKey } from '../miniapp/kit/cards.js';
+import { DISTANCES, cardOf, distanceAt, distanceEvents, distanceKey } from '../miniapp/kit/cards.js';
+import { SwipeCore, memoryStore } from '../miniapp/kit/swipes.js';
 import { pushHash } from '../core/history.js';
 import { addCatalogLayer, defaultOpacity, isOverlay } from '../core/ign.js';
 import { mapLook } from '../core/map-settings.js';
@@ -78,6 +78,7 @@ import '../miniapp/kit/ma-deck.js';
  * @typedef {import('./state.js').LayoutState} LayoutState
  * @typedef {import('./registry.js').Resolved} Resolved
  * @typedef {import('../miniapp/kit/cards.js').Card} Card
+ * @typedef {import('../miniapp/kit/ma-deck.js').DeckHost} DeckHost
  * @typedef {import('./map-options.js').MapPin} MapPin
  */
 
@@ -1461,38 +1462,68 @@ export async function revealFacet(panel, facet) {
 // ── deck ─────────────────────────────────────────────────────────────────────────────────────────────────────
 
 /**
- * Rencontres' deck (ma-deck) asks a « session » for its cards and a few things more (kit/session.js): this one gives
- * the plants found in the scope, the current plant on top; a heart puts it in the favourites; the swipes are this
- * screen's (forgotten when it goes).
+ * The favourites of a screen's hearts (kit/swipes.js's policy): without origin — a screen is not an activity, no
+ * « Recommencer » takes them away —, added only if the plant is not one (a heart never removes a favourite). ↺ takes
+ * back the entry its heart added, and only as that heart left it (core/collections.js#forgetFavoriteEntry compares its
+ * notes, rating, abundance and harvests: one of them given since, it is the user's and stays; filed in a list, noted in
+ * a lieu, given a sheet's note or shared since, it still goes — the list or the lieu keeps the plant). A plant already
+ * a favourite — one an activity made too — gets nothing from a heart here: it stays that activity's, and that
+ * activity's « Recommencer » still removes it. No fallback: forget(id, null) takes back nothing.
+ * @type {import('../miniapp/kit/swipes.js').FavouritePolicy}
+ */
+const entryFavourites = {
+  has: isFavorite,
+  add: plant => addFavorite(plant).catch(() => null),
+  forget: (_id, e) => (e ? forgetFavoriteEntry(e.id, e) : Promise.resolve(false))
+};
+
+/**
+ * Rencontres' deck (ma-deck) asks its host (kit/ma-deck.js DeckHost) for its cards and a few things more: this one
+ * gives the plants found in the scope, the current plant on top. Its swipes on the swipe core (kit/swipes.js), in
+ * memory (this screen's: forgotten when it goes), its favourites without origin, taken back as left (entryFavourites);
+ * no toxic side (a screen's deck is not an activity: never « to avoid »), no Wikipédia sentence (the sheet is beside).
+ * @implements {DeckHost}
  */
 class DeckSession extends EventTarget {
+  #store = memoryStore();
+
   constructor() {
     super();
     /** @type {Card[]} */ this.cards = [];
     /** @type {number | null} */ this.top = null;
-    /** @type {{ matches: number[], passed: number[], radius: number }} */ this.c = { matches: [], passed: [], radius: 0 };
-    /**
-     * ↺: the last swipes, to undo — a heart's `entry`, the favourite it added (null: a favourite already, or not
-     * written): ↺ takes back only that one, as it left it. @type {{ id: number, liked: boolean, entry: Promise<import('../core/collections.js').PlantEntry | null> | null }[]}
-     */
-    this.history = [];
-    this.burst = 0;
+    /** The scope's radius (m): « Chercher jusqu’à … » past it. */
+    this.radius = 0;
     this.hinted = false;
+    this.core = new SwipeCore({ store: this.#store, favourites: entryFavourites, avoids: () => false });
+    this.core.addEventListener('change', () => this.changed());
   }
 
   changed() { this.dispatchEvent(new Event('change')); }
-  /** The cards not swiped, the current plant first. */
-  get deck() {
-    const left = this.cards.filter(c => !this.c.passed.includes(c.plant.id) && !this.c.matches.includes(c.plant.id));
-    const i = left.findIndex(c => c.plant.id === this.top);
-    return i > 0 ? [left[i], ...left.slice(0, i), ...left.slice(i + 1)] : left;
+
+  /** @type {{ s: import('../miniapp/kit/cards.js').Swipes, radius: number, c: Record<string, any> } | null} */ #c = null;
+  /** What ma-deck reads of the swipes, and the radius: a new object only when one of them changed. */
+  get c() {
+    const s = this.#store.read();
+    if (this.#c?.s !== s || this.#c.radius !== this.radius) this.#c = { s, radius: this.radius, c: { ...s, radius: this.radius } };
+    return this.#c.c;
   }
-  get matchCards() { return this.cards.filter(c => this.c.matches.includes(c.plant.id)); }
+  /** ↺: the last swipes, to undo. */
+  get history() { return this.core.history; }
+  /** A heart flying off the deck. */
+  get burst() { return this.core.burst; }
+  /** The cards not swiped, the current plant first. */
+  get deck() { return this.core.deck(this.cards, this.top); }
+  get matchCards() { return this.core.matchCards(this.cards); }
+  /** None: no toxic side. @returns {Card[]} */
+  get avoidCards() { return []; }
+  /** Never « recognised, to avoid ». @returns {boolean} */
+  avoids() { return false; }
+  /** The swipe hint, once per deck shown (this element's). */
   hintOnce() { if (this.hinted) return false; this.hinted = true; return true; }
   /** No Wikipédia sentence on these cards (their sheet is beside). @returns {null} */
   ethnoOf() { return null; }
   /** @type {(m: number) => void} */ widen = () => {};
-  resetPassed() { this.c = { ...this.c, passed: [] }; this.changed(); }
+  resetPassed() { this.core.reset(); }
 }
 
 /** Cards past this many results are not made (the deck is a walk through the first ones: its end says so). */
@@ -1529,7 +1560,7 @@ export class DlDeck extends LitElement {
     this._loading = false;
     this.#session.widen = m => this.state?.set({ r: m }, 'replace');
     this.#session.addEventListener('change', () => this.requestUpdate());
-    this.addEventListener('deck-decide', e => this.#decide(/** @type {CustomEvent} */ (e).detail));
+    this.addEventListener('deck-decide', e => { e.stopPropagation(); this.#decide(/** @type {CustomEvent} */ (e).detail); });
     // A card touched, as the cell says (toucher, ecrit: registry.js#touchOf): the current plant, its sheet, or nothing.
     this.addEventListener('deck-open', e => {
       e.stopPropagation();
@@ -1588,11 +1619,7 @@ export class DlDeck extends LitElement {
       const plant = this.#plants.get(id) ?? await getPlant(id);
       if (!plant) return null;
       this.#plants.set(id, plant);
-      const sp = species.byPlant.get(id);
-      /** @type {Card} */
-      const card = { plant, taxonId: sp?.taxonId, count: sp?.count ?? 0, photo: sp?.photo ? sp.photo.replace(/\/square\./, '/medium.') : plant.thumbnail?.url || null,
-        credit: sp?.photo ? sp.credit : thumbCredit(plant.thumbnail), blooming: floweringMonths(plant.flowering).has(month), verdict: null };
-      return card;
+      return cardOf(plant, species.byPlant.get(id), month);
     }))).filter(c => c !== null);
     if (key !== this.#cardsFor) return;
     this.#session.cards = /** @type {Card[]} */ (cards);
@@ -1606,33 +1633,28 @@ export class DlDeck extends LitElement {
   }
 
   /**
-   * A card swiped: a heart (a favourite — added only if it is not one: a heart never removes a favourite), or passed;
-   * the next one on top is the current plant. @param {{ card: Card, liked: boolean }} d
+   * A card swiped (kit/swipes.js): a heart (a favourite — added only if it is not one: a heart never removes a
+   * favourite) and its heart flying off, or passed; a card decided already (a second click while it flew): nothing.
+   * The next one on top is the current plant. @param {{ card: Card, liked: boolean }} d
    */
   #decide({ card, liked }) {
-    const ses = this.#session, id = card.plant.id;
-    const entry = liked && !isFavorite(id) ? addFavorite(card.plant).catch(() => null) : null;
-    ses.history = [...ses.history, { id, liked, entry }].slice(-30);
-    ses.c = liked ? { ...ses.c, matches: [...ses.c.matches, id] } : { ...ses.c, passed: [...ses.c.passed, id] };
-    if (liked) { ses.burst++; setTimeout(() => { ses.burst = 0; ses.changed(); }, 900); }
+    const ses = this.#session;
+    const r = ses.core.decide(card, liked);
+    if (!r) return;
+    if (r.side === 'match') ses.core.heart();
     ses.top = null;
     const next = ses.deck[0];
     if (next && this.#writes) this.state?.pick(next.plant.id, { how: 'replace' });
-    ses.changed();
   }
 
   /**
    * ↺: the last card swiped back on top — a heart that made a favourite: out of the favourites again, only that entry
-   * and only as it left it (a note, a rating, a harvest given since: the user's, kept).
+   * and only as it left it (entryFavourites: a note, a rating, a harvest given since — the user's, kept).
    */
   #undo() {
-    const ses = this.#session, last = ses.history[ses.history.length - 1];
+    const last = this.#session.core.undo();
     if (!last) return;
-    ses.history = ses.history.slice(0, -1);
-    ses.c = { ...ses.c, matches: ses.c.matches.filter(x => x !== last.id), passed: ses.c.passed.filter(x => x !== last.id) };
-    last.entry?.then(e => e && forgetFavoriteEntry(e.id, e));
     if (this.#writes) this.state?.pick(last.id, { how: 'replace' });
-    ses.changed();
   }
 
   willUpdate() {
@@ -1640,7 +1662,13 @@ export class DlDeck extends LitElement {
     if (!s?.live.at) return;
     this.#cards();
     this.#session.top = s.live.plant;
-    this.#session.c = { ...this.#session.c, radius: s.radius };
+    this.#session.radius = s.radius;
+  }
+
+  disconnectedCallback() {
+    super.disconnectedCallback();
+    // Its heart flying off stopped; its swipes stay with it (back in the page, the same deck).
+    this.#session.core.dispose();
   }
 
   render() {

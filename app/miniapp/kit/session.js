@@ -27,6 +27,7 @@ import { SwipeCore, forgetHint, hintOnce as hintOnceFor } from './swipes.js';
  * @typedef {import('./cards.js').Card} Card
  * @typedef {import('./swipes.js').Side} Side
  * @typedef {import('./swipes.js').Swiped} Swiped
+ * @typedef {import('./ma-deck.js').DeckHost} DeckHost
  * @typedef {import('../../core/nearby.js').AroundPoint} AroundPoint
  * @typedef {import('../runtime.js').MiniApp} MiniApp
  */
@@ -65,6 +66,7 @@ const gameFavourites = app => ({
   forget: id => forgetFavoriteMadeBy(id, app)
 });
 
+/** @implements {DeckHost} */
 export class AroundSession extends EventTarget {
   /** @param {MiniApp} app */
   constructor(app) {
