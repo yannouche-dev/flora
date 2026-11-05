@@ -1,6 +1,7 @@
 // The deck's motion (kit/ma-deck.js): the card underneath rises as the one on top is dragged, and is full size when
-// that one has flown — the swap shows no jump; let go too soon, it goes back down. A new card fades in underneath.
-import { test, expect, plantId, answerAround } from './fixtures.mjs';
+// that one has flown — the swap shows no jump; let go too soon, it goes back down. A new card fades in underneath. One
+// decision at a time: a double click on ♥ while the card flies decides it once (a screen's deck).
+import { test, expect, plantId, answerAround, answerZone } from './fixtures.mjs';
 
 test.use({ reducedMotion: 'no-preference' });
 test.beforeEach(({ context }) => answerAround(context));
@@ -78,4 +79,26 @@ test('la carte du dessous grandit avec le glissé, sans saut à l’échange', a
   await expect(page.locator('ma-deck .swipe-card.under')).toHaveCount(1);
   expect(await page.locator('ma-deck .swipe-card.under').evaluate(el => getComputedStyle(el).animationName)).toBe('under-in');
   expect(await page.locator('ma-deck .swipe-card.top').evaluate(el => /** @type {HTMLElement} */ (el).style.getPropertyValue('--rise'))).toBe('');
+});
+
+test('un double-clic sur ♥ pendant que la carte s’envole : une seule décision — un favori, la suivante dessus ; un ↺ la reprend, puis plus rien à reprendre', async ({ app, page }) => {
+  await answerZone(page);
+  await app.open('#/layout/[map(r=500m),deck]?at=48.85,2.35');
+  const deck = page.locator('dl-deck ma-deck'), top = deck.locator('.swipe-card.top');
+  await expect(deck.locator('.swipe-card.under')).toHaveCount(1);
+  const first = Number(await top.getAttribute('data-id')), second = Number(await deck.locator('.swipe-card.under').getAttribute('data-id'));
+  const favourite = (/** @type {number} */ id) => page.evaluate(async id => (await import('/app/core/collections.js')).isFavorite(id), id);
+  // Each decision the deck tells its host (deck-decide), counted.
+  await deck.evaluate(el => { const w = /** @type {any} */ (window); w.__decided = 0; el.addEventListener('deck-decide', () => w.__decided++); });
+  await deck.locator('.round.like').dblclick();
+  await expect(top).toHaveAttribute('data-id', String(second));
+  await expect.poll(() => favourite(first)).toBe(true);
+  expect(await page.evaluate(() => /** @type {any} */ (window).__decided)).toBe(1);
+  expect(await favourite(second)).toBe(false);
+  // One ↺: the card back on top, its favourite taken back — and nothing more to undo.
+  const undo = deck.locator('.round.undo');
+  await undo.click();
+  await expect(top).toHaveAttribute('data-id', String(first));
+  await expect.poll(() => favourite(first)).toBe(false);
+  await expect(undo).toBeDisabled();
 });

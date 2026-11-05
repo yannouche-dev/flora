@@ -2,7 +2,8 @@
 // The deck of a mini-app around a place (and of a screen's `deck` cell): one card at a time, the next under it — its
 // photo and credit, what Wikipédia says of it, a short bio (its safety first: kit/cards.js#bio). Dragged, it leans and
 // shows its stamp (MATCH, BOF); far enough, or thrown, it flies off: right a match, left passed; up (or a touch), its
-// sheet. The three buttons (↺ undo, ✕, ♥, « ⋯ » its sheet unless `guided`, and its photos when asked: `photos`) and the
+// sheet — one decision at a time (another while the card flies, a double click: none), and none by a gesture the
+// browser takes over (pointercancel: a scroll, a pinch — the card back in place). The three buttons (↺ undo, ✕, ♥, « ⋯ » its sheet unless `guided`, and its photos when asked: `photos`) and the
 // keys (→ ←, ↑) do the same — the keys only when the deck has the focus or nothing has (never a match by mistake from a
 // tab, a slider or the map), and only while `active` (no plant open, no match on screen). Cueillette prudente's toxic
 // look-alikes (kit/session.js#avoids) are never loved: their right says « Je la reconnais : à ne pas cueillir » (stamp
@@ -237,8 +238,11 @@ export class MaDeck extends LitElement {
    * @param {Card} card @param {boolean} liked @param {HTMLElement} [el]
    */
   decide(card, liked, el) {
+    // One decision at a time: a second one while the card flies (a double click, a key pressed again) is none.
+    if (this.#flying) return;
     const node = el || /** @type {HTMLElement | null} */ (this.renderRoot.querySelector('.swipe-card.top'));
     const done = () => {
+      this.#flying = false;
       if (node) { node.style.transition = 'none'; this.#reset(node); node.classList.remove('fly'); requestAnimationFrame(() => { node.style.transition = ''; }); }
       this.dispatchEvent(new CustomEvent('deck-decide', { detail: { card, liked }, bubbles: true, composed: true }));
       // Now on top, the card that rose needs its rise no more (it would show if it came back under, by ↺).
@@ -246,15 +250,21 @@ export class MaDeck extends LitElement {
     };
     node?.classList.remove('hint');
     if (!node || matchMedia('(prefers-reduced-motion: reduce)').matches) { done(); return; }
+    // Until it has flown (done: from its timer, even once the deck is gone).
+    this.#flying = true;
     this.#rise(1);
     node.classList.add('fly');
     node.style.transform = `translate(${liked ? 140 : -140}vw, -40px) rotate(${liked ? 30 : -30}deg)`;
     setTimeout(done, 260);
   }
 
+  /** A card flying off (decide, 260 ms): no other decision, no drag meanwhile. */
+  #flying = false;
+
   /** @type {{ id: number, x: number, y: number, dx: number, dy: number, el: HTMLElement, t: number, vx: number, lx: number, lt: number } | null} */ #drag = null;
 
   #dragStart = (/** @type {PointerEvent} */ e) => {
+    if (this.#flying) return;
     const el = /** @type {HTMLElement} */ (e.currentTarget);
     try { el.setPointerCapture(e.pointerId); } catch { /* synthetic */ }
     this.#drag = { id: Number(el.dataset.id), x: e.clientX, y: e.clientY, dx: 0, dy: 0, el, t: performance.now(), vx: 0, lx: e.clientX, lt: performance.now() };
@@ -295,6 +305,19 @@ export class MaDeck extends LitElement {
     if (card && d.dy < -h * 0.18 && Math.abs(d.dx) < w * 0.25) { this.#reset(d.el); this.#open(card); return; }
     // A touch without moving: its sheet.
     if (card && Math.hypot(d.dx, d.dy) < 6) { this.#reset(d.el); this.#open(card); return; }
+    this.#reset(d.el);
+  };
+
+  /**
+   * The gesture taken over by the browser (a scroll, a pinch: pointercancel): the card back in place — nothing
+   * decided, nothing opened, however far it was dragged.
+   */
+  #dragCancel = () => {
+    const d = this.#drag;
+    this.#drag = null;
+    if (!d) return;
+    d.el.classList.remove('dragging');
+    this.#under()?.classList.remove('following');
     this.#reset(d.el);
   };
 
@@ -375,7 +398,7 @@ export class MaDeck extends LitElement {
     // The card underneath is out of reach (inert) and unread: a screen reader meets the card on top only.
     return html`<article class="swipe-card ${top ? 'top' : 'under'} ${loved ? 'loved' : ''}" aria-label=${loved ? name + ' — déjà aimée' : name} data-id=${p.id}
         ?inert=${!top} aria-hidden=${top ? 'false' : 'true'}
-        @pointerdown=${top ? this.#dragStart : null} @pointermove=${top ? this.#dragMove : null} @pointerup=${top ? this.#dragEnd : null} @pointercancel=${top ? this.#dragEnd : null}>
+        @pointerdown=${top ? this.#dragStart : null} @pointermove=${top ? this.#dragMove : null} @pointerup=${top ? this.#dragEnd : null} @pointercancel=${top ? this.#dragCancel : null}>
       <div class="nophoto">${icon('leaf')}</div>
       ${photo ? html`<img src=${photo} alt="" loading="eager" decoding="async" referrerpolicy="no-referrer" draggable="false" @error=${hideImg} @load=${showImg} />` : nothing}
       <span class="stamp like ${avoid ? 'avoid' : ''}" aria-hidden="true">${avoid ? 'À ÉVITER' : 'MATCH'}</span><span class="stamp nope" aria-hidden="true">BOF</span>

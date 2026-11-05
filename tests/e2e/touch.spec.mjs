@@ -1,6 +1,6 @@
 // The phone, by the finger (390 px project only): swiping the cards of Rencontres, a tap on a result, swiping from a
-// plant to the next one of the results. Known touch bugs of the audit (GAP3-5) as test.fixme. Migrated from
-// tinder.cjs, meetpick.cjs, plantnav.cjs, drag.cjs, review-parcours/a11y-touch.
+// plant to the next one of the results; a gesture the browser takes over (pointercancel, the audit's GAP3-5) decides
+// nothing. Migrated from tinder.cjs, meetpick.cjs, plantnav.cjs, drag.cjs, review-parcours/a11y-touch.
 import { test, expect, plantId } from './fixtures.mjs';
 import { centre, swipe } from './touch.mjs';
 
@@ -38,7 +38,7 @@ test.describe('Rencontres', () => {
     expect(await page.evaluate(async id => (await import('/app/core/collections.js')).isFavorite(id), plantId('Allium ursinum'))).toBe(false);
   });
 
-  test.fixme('GAP3-5 : un geste repris par le navigateur (pointercancel) ne décide rien', async ({ app, page, context }) => {
+  test('GAP3-5 : un geste repris par le navigateur (pointercancel) ne décide rien', async ({ app, page, context }) => {
     await cardsAround(context);
     await app.open('#/app/rencontres');
     await page.getByRole('button', { name: 'Autour de moi' }).click();
