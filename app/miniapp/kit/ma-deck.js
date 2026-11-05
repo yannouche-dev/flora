@@ -2,21 +2,20 @@
 // The deck of a mini-app around a place (and of a screen's `deck` cell): one card at a time, the next under it — its
 // photo and credit, what Wikipédia says of it, a short bio (its safety first: kit/cards.js#bio). Dragged, it leans and
 // shows its stamp (MATCH, BOF); far enough, or thrown, it flies off: right a match, left passed; up (or a touch), its
-// sheet (unless its host's touch opens none: `opens`) — one decision at a time (another while the card flies, a double click: none), and none by a gesture the
-// browser takes over (pointercancel: a scroll, a pinch — the card back in place). The three buttons (↺ undo, ✕, ♥,
-// « ⋯ » its sheet unless `guided` or not `opens`, and its photos when asked: `photos`) and the keys (→ ←, ↑) do the
-// same — the keys
-// only on a deck shown (none folded away, nor in a tab not shown), when it has the focus, or when nothing has and it is
-// the only deck shown with cards (never a match by mistake from a tab, a slider, the map or another deck), and only
-// while `active` (no plant open, no match on screen). Cueillette prudente's toxic look-alikes (kit/session.js#avoids)
-// are never loved: their right says « Je la reconnais : à ne pas cueillir » (stamp À ÉVITER, ⛔ for ♥, a tag on the
-// card).
-// The first time, the top card leans right then left: it can be swiped.
-// The hint once per app open (and again after « Recommencer »: kit/session.js#forgetGame). No more cards: the matches
-// counted, in its host's words (`end.kept`: « à retrouver dans « Matchs » » only where there is such a tab), further
-// (« Chercher jusqu’à … »), or the ones passed again (and those recognised to avoid, counted apart from the matches).
-// A deck cut short (a screen's: its cards the first ones of more) says so instead (`end.title`, `end.note`), without
-// « Chercher jusqu’à … » (further, its cards would still be the first ones).
+// sheet (unless its host's touch opens none: `opens`). One decision at a time (another while the card flies, a double
+// click: none), and none by a gesture the browser takes over (pointercancel: a scroll, a pinch — the card back in
+// place). The three buttons (↺ undo, ✕, ♥, « ⋯ » its sheet unless `guided` or not `opens`, and its photos when asked:
+// `photos`) and the keys (→ ←, ↑) do the same — the keys only on a deck shown (none folded away, nor in a tab not
+// shown), when it has the focus, or when nothing has and it is the only deck shown with cards (never a match by
+// mistake from a tab, a slider, the map or another deck), and only while `active` (no plant open, no match on screen).
+// Cueillette prudente's toxic look-alikes (kit/session.js#avoids) are never a match: their right says « Je la
+// reconnais : à ne pas cueillir » (stamp À ÉVITER, ⛔ for ♥, a tag on the card).
+// The first time, the top card leans right then left: it can be swiped — once per app open (and again after
+// « Recommencer »: kit/session.js#forgetGame). No more cards: the matches counted, in its host's words (`end.kept`:
+// « à retrouver dans « Matchs » » only where there is such a tab), further (« Chercher jusqu’à … »), or the ones passed
+// again (and those recognised to avoid, counted apart from the matches). A deck cut short (a screen's: its cards the
+// first ones of more) says so instead (`end.title`, `end.note`), without « Chercher jusqu’à … » (further, its cards
+// would still be the first ones).
 // It decides nothing itself: the card flown off, the event `deck-decide` (detail { card, liked }); `deck-open`
 // (detail { id }), `deck-undo`, `deck-photos` (detail { id }). Its host (`session`, DeckHost: an activity's game,
 // kit/session.js, or a screen's deck, layout/cells.js — both on the swipe core, kit/swipes.js) gives the rest.
@@ -67,7 +66,7 @@ export class MaDeck extends LitElement {
     session: { attribute: false },
     /** The cards as shown, the top one first. */
     cards: { attribute: false },
-    /** The app's context (its matches, passed, distance). */
+    /** The app's context (its cards passed, those recognised to avoid, its radius). */
     c: { attribute: false },
     /** Rencontres while discovering: no « ⋯ », no ↑ (the plant is beside it), its size in the guided layout. */
     guided: { type: Boolean, reflect: true },
@@ -113,8 +112,6 @@ export class MaDeck extends LitElement {
     .swipe-card.under.following { transition: none; }
     /* Risen while the top card flies (0.26 s): full size before the swap. */
     .swipe-card.under.rising { transition: transform 0.24s ease-out, filter 0.24s ease-out; }
-    /* Risen while the top card flies (0.26 s): full size before the swap. */
-    .swipe-card.under.rising { transition: transform 0.24s ease-out, filter 0.24s ease-out; }
     @keyframes under-in { from { opacity: 0; transform: scale(0.9) translateY(18px); } }
     .swipe-card img, .swipe-card .nophoto { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; pointer-events: none; }
     .swipe-card .nophoto { display: grid; place-items: center; font-size: 4rem; opacity: 0.4; }
@@ -129,9 +126,6 @@ export class MaDeck extends LitElement {
     .stamp.like.avoid { color: #fbbf24; font-size: 1.5rem; }
     .avoid-tag { display: flex; align-items: center; gap: 5px; width: fit-content; margin: 0 0 6px; padding: 2px 10px; border-radius: var(--gf-radius-pill);
       background: #b91c1c; color: #fff; font-size: 0.8rem; font-weight: 700; }
-    /* A plant already loved, brought back on top (touched on the map or in the list around). */
-    .loved-badge { position: absolute; top: 12px; left: 12px; z-index: 1; display: inline-flex; align-items: center; gap: 5px; padding: 4px 10px; border-radius: var(--gf-radius-pill);
-      background: var(--gf-kin); color: #fff; font-size: 0.8rem; font-weight: 700; box-shadow: 0 0 0 2px var(--gf-highlight), 0 2px 8px rgb(0 0 0 / 35%); pointer-events: none; }
     .actions { display: flex; gap: 22px; align-items: center; }
     .round { width: 62px; height: 62px; border-radius: 50%; border: 0; display: grid; place-items: center; font-size: 1.6rem; cursor: pointer; background: var(--gf-surface);
       box-shadow: 0 6px 16px rgb(0 0 0 / 18%); transition: transform 0.12s; }
@@ -377,7 +371,6 @@ export class MaDeck extends LitElement {
     if (!u) return;
     u.classList.toggle('following', follow);
     u.classList.toggle('rising', !follow && p === 1);
-    u.classList.toggle('rising', !follow && p === 1);
     if (p) u.style.setProperty('--rise', String(p)); else u.style.removeProperty('--rise');
   }
 
@@ -434,20 +427,17 @@ export class MaDeck extends LitElement {
   #card(c, top) {
     const s = /** @type {DeckHost} */ (this.session);
     const p = c.plant, name = nameOf(p);
-    // A plant already loved, brought back on top: its heart says so; a swipe either way only puts it back.
-    const loved = /** @type {number[]} */ (this.c?.matches ?? []).includes(p.id);
     const photo = this.#photo(c.photo);
     const ethno = s.ethnoOf(c);
     // Cueillette prudente's toxic look-alike: swiped right, recognised — its stamp and its tag say so.
     const avoid = s.avoids(c);
     // The card underneath is out of reach (inert) and unread: a screen reader meets the card on top only.
-    return html`<article class="swipe-card ${top ? 'top' : 'under'} ${loved ? 'loved' : ''}" aria-label=${loved ? name + ' — déjà aimée' : name} data-id=${p.id}
+    return html`<article class="swipe-card ${top ? 'top' : 'under'}" aria-label=${name} data-id=${p.id}
         ?inert=${!top} aria-hidden=${top ? 'false' : 'true'}
         @pointerdown=${top ? this.#dragStart : null} @pointermove=${top ? this.#dragMove : null} @pointerup=${top ? this.#dragEnd : null} @pointercancel=${top ? this.#dragCancel : null}>
       <div class="nophoto">${icon('leaf')}</div>
       ${photo ? html`<img src=${photo} alt="" loading="eager" decoding="async" referrerpolicy="no-referrer" draggable="false" @error=${hideImg} @load=${showImg} />` : nothing}
       <span class="stamp like ${avoid ? 'avoid' : ''}" aria-hidden="true">${avoid ? 'À ÉVITER' : 'MATCH'}</span><span class="stamp nope" aria-hidden="true">BOF</span>
-      ${loved ? html`<span class="loved-badge">${icon('heart-fill')} Déjà aimée</span>` : nothing}
       ${photo && c.credit ? html`<p class="credit">Photo : ${creditText(c.credit)}</p>` : nothing}
       <div class="about">
         ${avoid ? html`<p class="avoid-tag">${icon('exclamation-octagon-fill')} À ne pas cueillir</p>` : nothing}
