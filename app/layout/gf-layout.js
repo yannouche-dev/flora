@@ -335,7 +335,7 @@ export class GfLayout extends LitElement {
        the controls in use (dl-map, dl-results, dl-deck). */
     .cell-body { flex: 1; min-height: 0; display: flex; flex-direction: column; position: relative; }
     .cell-body > * { flex: 1; min-height: 0; }
-    .cell-body gf-plant-detail { overflow-y: auto; }
+    .cell-body gf-plant-detail, .cell-body gf-sheet-block { overflow-y: auto; }
     .cell-body .scroll { overflow-y: auto; }
     .cell-body .pad { padding: 0 12px; }
     .placeholder { display: grid; align-content: center; justify-items: center; gap: 6px; padding: 16px; text-align: center; font-size: 0.9rem; overflow-y: auto; }

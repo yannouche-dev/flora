@@ -175,7 +175,7 @@ test.describe('un téléphone', () => {
     await expect.poll(() => param(page, 'b.p')).not.toBe(null);
     expect(await param(page, 'p')).toBe(null);
     await expect(tabs.nth(2)).toHaveAttribute('aria-selected', 'true');
-    await expect(cellOf(page, '2').locator('gf-plant-detail')).toHaveAttribute('plant-id', /** @type {string} */ (await param(page, 'b.p')));
+    await expect(cellOf(page, '2').locator('gf-sheet-block')).toHaveAttribute('plant-id', /** @type {string} */ (await param(page, 'b.p')));
   });
 
   test('chaque onglet dit ses groupes par leur lettre, jamais par leur seule couleur ; en sombre, des couleurs plus claires, lisibles sur l’onglet', async ({ app, page }) => {

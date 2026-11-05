@@ -154,7 +154,7 @@ test.describe('un grand écran', () => {
     await row.click();
     await expect.poll(() => param(page, 'p')).toBe(id);
     await expect(wiki).toBeVisible();
-    await expect(wiki.locator('gf-plant-detail')).toHaveAttribute('plant-id', id);
+    await expect(wiki.locator('gf-sheet-block')).toHaveAttribute('plant-id', id);
     expect((await box(wiki)).width).toBeGreaterThan(grid.width / 4);
     // Back: no plant, hidden again.
     await page.goBack();
@@ -334,8 +334,8 @@ test.describe('un grand écran', () => {
     const ortie = plantId(ORTIE), ail = plantId(AIL);
     await app.open(`#/layout/[results(list),plant.status(plante=${ail}),plant.calendar]?p=${ortie}&q=allium`);
     const fixed = cellOf(page, 'plant.status'), cal = cellOf(page, 'plant.calendar');
-    await expect(fixed.locator('gf-plant-detail')).toHaveAttribute('plant-id', String(ail));
-    await expect(cal.locator('gf-plant-detail')).toHaveAttribute('plant-id', String(ortie));
+    await expect(fixed.locator('gf-sheet-block')).toHaveAttribute('plant-id', String(ail));
+    await expect(cal.locator('gf-sheet-block')).toHaveAttribute('plant-id', String(ortie));
     // Its head: a pin, its own plant's names.
     await expect(fixed.locator('.cell-head .pin')).toBeVisible();
     await expect(fixed.locator('.cell-head .sub')).toContainText('Plante fixée');
@@ -344,8 +344,8 @@ test.describe('un grand écran', () => {
     await cellOf(page, 'results').locator('gf-plant-card a.row').first().click();
     await expect.poll(() => param(page, 'p')).not.toBe(String(ortie));
     const now = /** @type {string} */ (await param(page, 'p'));
-    await expect(cal.locator('gf-plant-detail')).toHaveAttribute('plant-id', now);
-    await expect(fixed.locator('gf-plant-detail')).toHaveAttribute('plant-id', String(ail));
+    await expect(cal.locator('gf-sheet-block')).toHaveAttribute('plant-id', now);
+    await expect(fixed.locator('gf-sheet-block')).toHaveAttribute('plant-id', String(ail));
   });
 
   test('zone=0 : des résultats sur toute la France, à côté d’une recherche gardée à la zone', async ({ app, page }) => {
