@@ -8,8 +8,8 @@
 // at its end, nor results zone=0 « Aucune plante… », its grid sorted from the keyboard keeping its focus, headers and rows —
 // twice before its answer, reversed; another screen's rows never shown; nor « Aucune plante… » of an empty search said of
 // the next one before its answer), its links (plante=: a plant of its own, whatever the current one; results zone=0: the whole flora whatever the
-// zone; toucher=fiche: a result opens its sheet; toucher=rien: nothing), and the editor's « Cadre » writing them in the
-// address. iNaturalist answered as in free-layout.spec.mjs: 12 plants around.
+// zone; toucher=fiche: a result — or a sosie in the sheet — opens its sheet; toucher=rien: nothing; a sosie chosen over
+// the page, ⤢, closes that dialog), and the editor's « Cadre » writing them in the address. iNaturalist answered as in free-layout.spec.mjs: 12 plants around.
 import { test, expect, plantId, answerAround } from './fixtures.mjs';
 import { layoutOf, screen, screenSearch } from './app.mjs';
 
@@ -418,6 +418,37 @@ test.describe('un grand écran', () => {
     await app.go('#/layout/[results(list,ecrit=0),plant.calendar]?q=ortie');
     await cellOf(page, 'results').locator('gf-plant-card a.row').first().click();
     await expect.poll(() => hash(page)).toMatch(/^#\/plant\/\d+/);
+  });
+
+  test('un sosie dans une case : la plante courante (ou sa fiche, ou rien, selon toucher) ; choisi par-dessus la page (⤢), ce panneau fermé', async ({ app, page }) => {
+    // Muguet: a species of the flora, a link to its sheet (Colchique, a genus, leads to Flore's search).
+    const ail = String(plantId(AIL)), muguet = String(plantId('Convallaria majalis'));
+    const sosie = (/** @type {string} */ comp) => cellOf(page, comp).locator('gf-lookalikes').getByRole('link', { name: 'Muguet' });
+    await app.open(`#/layout/[results(list),plant.lookalikes]?p=${ail}`);
+    await sosie('plant.lookalikes').click();
+    await expect.poll(() => param(page, 'p')).toBe(muguet);
+    expect(await hash(page)).toMatch(/^#\/layout\//);
+    await page.goBack();
+    await expect.poll(() => param(page, 'p')).toBe(ail);
+    await app.go(`#/layout/[plant.lookalikes(toucher=fiche)]?p=${ail}`);
+    await sosie('plant.lookalikes').click();
+    await expect.poll(() => hash(page)).toBe(`#/plant/${muguet}`);
+    await app.go(`#/layout/[plant.lookalikes(toucher=rien)]?p=${ail}`);
+    const still = await hash(page);
+    await sosie('plant.lookalikes').click();
+    await page.waitForTimeout(300);
+    expect(await hash(page)).toBe(still);
+    // The whole sheet: ⤢ on « Plantes à confondre », over the page; a sosie chosen there closes it.
+    await app.go(`#/layout/[plant]?p=${ail}`);
+    const sheet = cellOf(page, 'plant').locator('gf-plant-detail');
+    await sheet.getByRole('button', { name: 'Ouvrir « Plantes à confondre » en panneau' }).click();
+    await expect(sheet.locator('dialog.pane')).toHaveAttribute('open', '');
+    await sheet.locator('dialog.pane gf-lookalikes').getByRole('link', { name: 'Muguet' }).click();
+    await expect.poll(() => param(page, 'p')).toBe(muguet);
+    await expect(sheet.locator('dialog.pane[open]')).toHaveCount(0);
+    await page.goBack();
+    await expect.poll(() => param(page, 'p')).toBe(ail);
+    await expect(sheet.locator('dialog.pane[open]')).toHaveCount(0);
   });
 
   test('en modification : « Cadre » et « Liens » dans le choix du contenu, écrits dans l’adresse ; l’écran en usage les montre', async ({ app, page }) => {

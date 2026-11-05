@@ -26,7 +26,7 @@
 // period, « Seule », legend, binoculars (« Observations autour » in 3D), its points' sources and the current plant's
 // (« Sur cette carte » of its panel ▦), and its view (vue=: while the screen is modified, any map's; in use, the one
 // leading the list's); the search's filters opened; the results as a list or a grid.
-// A link to a plant's sheet anywhere in a cell (a result, a look-alike) makes it the current plant (gf-layout.js).
+// A link to a plant's sheet anywhere in a cell (a result, a look-alike) makes it the current plant (gf-layout.js, core/embed-links.js).
 // The frame every cell shares (registry.js#FRAME: its head, its actions, its empty state) is gf-layout.js'; its links
 // are honoured here: a plant of its own (plante=: renderCell), the whole flora instead of the zone (results zone=0:
 // DlResults, state.js#wholeOf), a card touched and the swipes (toucher, ecrit=0: DlDeck); the deck tells the layout
