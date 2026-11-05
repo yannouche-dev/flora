@@ -3,7 +3,7 @@
 // avoid, the safety lines of a card's bio, the swipes, the slider of
 // the distances: a distance between two stops shown between them, its keys from stop to stop), each game's
 // own session (core/around-sessions.js), and what a mini-app made in
-// Mes plantes, taken away by « Recommencer » (place-model.js#madeBy, withoutMadeBy, tagLegacy; runtime.js#replayItems).
+// Mes plantes, taken away by « Recommencer » (place-model.js#madeBy, withoutMadeBy; runtime.js#replayItems).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
@@ -308,21 +308,6 @@ test('à vous : un parcours fait sien garde toutes ses plantes ; un favori annot
     ['Votre favori venu de Rencontres, devenu le vôtre, est conservé.']);
   assert.deepEqual(replayItems(meet, { favorites: [], collections: [], kept: { favorites: 3, collections: 0 } }).kept,
     ['Vos 3 favoris venus de Rencontres, devenus les vôtres, sont conservés.']);
-});
-
-test('avant les origines : le parcours en cours et les vides tagués ; les parcours terminés et tous les favoris, déjà à soi', () => {
-  const mine = col({ type: 'Feature', id: 'm', geometry: { type: 'Point', coordinates: [2, 48] }, properties: { name: 'Jardin', plants: [{ plantId: 6, scientificName: 'F' }] } });
-  const old = col({ type: 'Feature', id: 'favorites', geometry: null, properties: { plants: [{ plantId: 1, scientificName: 'A' }, { plantId: 2, scientificName: 'B' }, { plantId: 9, scientificName: 'Z' }] } });
-  const empty = col({ type: 'Feature', id: 'e', geometry: { type: 'Point', coordinates: [2, 48] }, properties: { name: 'Vide', startedHere: true, plants: [] } });
-  const finished = col({ type: 'Feature', id: 'f', geometry: { type: 'Point', coordinates: [2, 48] }, properties: { name: 'Fini', plants: [{ plantId: 4, scientificName: 'D' }] } });
-  const current = col({ type: 'Feature', id: 'c', geometry: { type: 'Point', coordinates: [2, 48] }, properties: { name: 'En cours', plants: [{ plantId: 5, scientificName: 'E' }] } });
-  const tagged = M.tagLegacy([old, empty, finished, current, mine], { walks: ['f'], walk: 'c' });
-  const by = Object.fromEntries(tagged.map(c => [c.id, c]));
-  assert.equal(by.favorites, undefined, 'les favoris d’avant sont à soi : jamais tagués');
-  assert.deepEqual(by.e.properties.origin, { app: 'parcours' });
-  assert.deepEqual(by.c.properties.origin, { app: 'parcours' });
-  assert.deepEqual([by.f.properties.origin, by.f.properties.from], [undefined, { app: 'parcours' }], 'terminé avec ses plantes : gardé');
-  assert.equal(by.m, undefined, 'un lieu à soi n’est pas tagué');
 });
 
 test('runtime : « Recommencer » ne laisse rien derrière lui, comme jamais ouverte', async () => {

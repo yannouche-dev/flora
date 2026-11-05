@@ -74,9 +74,6 @@ test('normalizeCollection : un parcours, marqué ou fait par le Parcours ; jamai
   assert.equal(walk(at, { walk: false, origin: { app: 'parcours' } }), false);
   assert.equal(walk(at, { walk: false }), undefined, 'sans origine du Parcours, rien à dire');
   assert.equal(walk(null, { walk: false, from: { app: 'parcours' } }), undefined);
-  // Never marked once by the pass of 2.8 (markWalks) either.
-  const said = { type: 'Feature', id: 'w', geometry: at, properties: { walk: false, from: { app: 'parcours' }, startedHere: true, plants: [] } };
-  assert.equal(M.walkMarked(said, { walks: ['w'], walk: 'w' }), null);
 });
 
 test('toPortable : seulement ce que l’utilisateur a saisi ; sans le personnel sur demande', () => {
@@ -139,27 +136,6 @@ test('propriété : normalizeCollection(toPortable(c)) rend la collection (300 c
     const comparable = (/** @type {any} */ c) => ({ ...c, properties: { ...c.properties, plants: c.properties.plants.map((/** @type {any} */ e) => ({ ...e, scientificName: e.plantId === null ? e.scientificName : '', vernacularName: null })) } });
     assert.deepEqual(comparable(back), comparable(original), `run ${run}`);
   }
-});
-
-test('walkMarked : un parcours d’avant la marque, marqué sans rien changer d’autre ; rien pour les autres', () => {
-  const at = { type: 'Point', coordinates: [2.35, 48.85] };
-  const rec = (/** @type {string} */ id, /** @type {any} */ properties, geometry = /** @type {any} */ (at)) =>
-    ({ type: 'Feature', id, geometry, properties: { kind: geometry ? 'place' : 'list', name: id, notes: '', createdAt: DATE, updatedAt: '2026-06-01T08:00:00.000Z', plants: [{ plantId: 1, scientificName: 'A' }], ...properties } });
-  const known = { walks: ['listed'], walk: 'under-way' };
-  // Made by the Parcours (under way, or made the user's own), started « ici », in the list kept, under way: marked.
-  for (const r of [rec('made', { origin: { app: 'parcours' } }), rec('mine', { from: { app: 'parcours' } }), rec('here', { startedHere: true }), rec('listed', {}), rec('under-way', {})]) {
-    const out = M.walkMarked(r, known);
-    assert.deepEqual(out, { ...r, properties: { ...r.properties, walk: true } }, r.id);
-    assert.equal(out.properties.updatedAt, '2026-06-01T08:00:00.000Z', 'sa date de modification gardée');
-    assert.equal(M.walkMarked(out, known), null, 'déjà marqué : rien à faire');
-  }
-  // Not walks: a lieu of the user's, a game's, one whose notes merely say so; a list (even listed); none at all.
-  assert.equal(M.walkMarked(rec('jardin', {}), known), null);
-  assert.equal(M.walkMarked(rec('match', { origin: { app: 'rencontres' } }), known), null);
-  assert.equal(M.walkMarked(rec('notes', { notes: 'Parcours botanique' }), known), null);
-  assert.equal(M.walkMarked(rec('listed', { origin: { app: 'parcours' } }, null), known), null);
-  assert.equal(M.walkMarked(rec(M.FAVORITES_ID, {}, null), { walks: [M.FAVORITES_ID] }), null);
-  assert.equal(M.walkMarked(null, known), null);
 });
 
 test('locationLoss : ce qu’un lieu perdrait en liste — la position d’une plante, les autres fois qu’elle est notée, un tracé', () => {

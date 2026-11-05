@@ -86,9 +86,6 @@ export const config = {
     cachePurgedAt: 'geoflora.cachePurgedAt',
     // The Parcours botanique (miniapp/kit/trail-store.js): the walk under way, the one ended.
     trail: 'geoflora.trail',
-    // Obsolete: the walks to take up again, read from Mes plantes since 2.8 — read once at start (main.js), forgotten once
-    // they are marked (collections.js#markWalks); gone with 3.2.
-    trails: 'geoflora.trails',
     trailDone: 'geoflora.trailDone',
     // Between tabs, where BroadcastChannel is missing (core/sync.js).
     sync: 'geoflora.sync',
@@ -105,10 +102,11 @@ export const config = {
    * once wrote it by itself — at the first launch, or as Cueillette prudente began — never told from the user's own
    * choice: « auto » again (storageKeys.harvestMode), King (« Personnaliser la fiche ») kept until left: it
    * now lasts for the visit (core/store.js KingState); the plant sheet's order and folded blocks of before sheetLayout
-   * (sheetBlocks, sheetHidden).
+   * (sheetBlocks, sheetHidden); the walks to take up again as this device listed them before 2.8 (read from Mes plantes
+   * since).
    */
   obsoleteKeys: ['geoflora.plantView', 'geoflora.target', 'geoflora.harvestMode', 'geoflora.kingMode',
-    'geoflora.sheetBlocks', 'geoflora.sheetHidden'],
+    'geoflora.sheetBlocks', 'geoflora.sheetHidden', 'geoflora.trails'],
 
   /**
    * The keys of the panes' widths (core/panes.js), one per screen: the first steps (core/discover.js) never read
