@@ -23,6 +23,7 @@ import { href } from '../core/router.js';
 import { icon } from '../core/icons.js';
 import { aloneNote, blockStyle, blockTitle, hidesEmpty, isMap, isTitleShown } from '../core/sheet-blocks.js';
 import { SheetBase, sheetStyles } from './sheet-base.js';
+import { photosOffLine } from './ui-kit.js';
 
 export class GfSheetBlock extends SheetBase {
   static properties = {
@@ -124,7 +125,7 @@ export class GfSheetBlock extends SheetBase {
         ? html`${icon('eye-slash')} ${note.text} (<a href=${href.settings()}>Réglages › Modules</a>).` : note.text}</p>`;
     }
     if (key === 'media') {
-      return ctx.photosOff ? html`<p class="muted only-pad">Photos en ligne désactivées (<a href=${href.settings()}>Réglages › Modules</a>).</p>`
+      return ctx.photosOff ? html`<p class="muted only-pad">${photosOffLine()}</p>`
         : html`<gf-media-viewer ?local=${this.local} plant-id=${ctx.plant.id} presentation=${blockStyle(v, 'media')} .index=${this.at ?? 0} .startUrl=${this.startUrl}></gf-media-viewer>`;
     }
     const empty = this.titled && key !== 'uses' && hidesEmpty(v, key);

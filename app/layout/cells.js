@@ -47,6 +47,7 @@ import { cachedThumb, thumbUrl } from '../core/thumb.js';
 import { hintView, takeHint } from '../core/hints.js';
 import { addFavorite, forgetFavoriteEntry, isFavorite } from '../core/collections.js';
 import { ui } from '../styles/ui.js';
+import { photosOffLine } from '../components/ui-kit.js';
 import { DISTANCES, distanceAt, distanceEvents, distanceKey } from '../miniapp/kit/cards.js';
 import { pushHash } from '../core/history.js';
 import { addCatalogLayer, defaultOpacity, isOverlay } from '../core/ign.js';
@@ -1732,7 +1733,7 @@ export function renderCell(r, ctx) {
     // it is (⋯ open, a search being typed); nothing to close.
     return moduleOn('photos')
       ? html`<gf-media-viewer local plant-id=${plant} presentation=${r.params.style ?? blockStyle(/** @type {any} */ (view), 'media')}></gf-media-viewer>`
-      : html`<p class="placeholder quiet">Photos en ligne désactivées (<a href=${href.settings()}>Réglages › Modules</a>).</p>`;
+      : html`<p class="placeholder quiet">${photosOffLine()}</p>`;
   }
   // Among the cells (local): its photos block (plant.media) drawn by itself never takes the focus either.
   return r.view

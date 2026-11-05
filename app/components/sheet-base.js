@@ -35,7 +35,7 @@ import * as usesData from '../core/uses.js';
 import { gravest, lookalikesOf, severityNote } from '../core/lookalikes.js';
 import { harvestRuleText } from '../core/regulation.js';
 import { dangerLevel, rank } from '../core/danger.js';
-import { severityChip, severityStyles } from './ui-kit.js';
+import { photosOffLine, severityChip, severityStyles } from './ui-kit.js';
 import { formatAltitude } from '../core/altitude.js';
 import { chartStyles, climateChart, groupColor, groupLegend, networkChart, nicheChart } from '../core/charts.js';
 import { unsafeCSS } from 'lit';
@@ -1502,7 +1502,7 @@ export class SheetBase extends LitElement {
   /** Photos of the plant (licensed), or why there are none. @param {any} ctx @param {number} [max] */
   #gallery({ plant, images, loading, photosOff }, max = Infinity) {
     const shown = images.slice(0, max);
-    return photosOff ? html`<p class="muted">Photos en ligne désactivées (<a href=${href.settings()}>Réglages › Modules</a>).</p>` : shown.length ? html`
+    return photosOff ? html`<p class="muted">${photosOffLine()}</p>` : shown.length ? html`
       <div class="gallery">
         ${shown.map(image => html`
           <figure>
@@ -1729,7 +1729,7 @@ export class SheetBase extends LitElement {
       case 'name': return this.#name(ctx);
       case 'web': return html`<gf-web-pane ?inactive=${!this._paneOf('web')}></gf-web-pane>`;
       case 'media': {
-        if (ctx.photosOff) return html`<p class="muted">Photos en ligne désactivées (<a href=${href.settings()}>Réglages › Modules</a>).</p>`;
+        if (ctx.photosOff) return html`<p class="muted">${photosOffLine()}</p>`;
         // In the sheet: compact; in a pane (the mode's, or the host's own): the full viewer, filling it (its keys only
         // when it has the focus).
         const edged = Boolean(this._paneOf('media'));
@@ -2037,7 +2037,7 @@ export class SheetBase extends LitElement {
 
   /** « Médias GBIF »: field photos and herbarium sheets, apart. @param {any} ctx */
   #gbifMedia({ plant, photosOff }) {
-    if (photosOff) return html`<p class="muted">Photos en ligne désactivées (Réglages › Modules).</p>`;
+    if (photosOff) return html`<p class="muted">${photosOffLine()}</p>`;
     const g = this._gbif;
     return html`${this.#subs('gbifMedia', {
       photos: () => this.#mediaGallery(plant, 'Photos d’observation (France)', g.photos, 'Aucune photo d’observation sous licence libre sur GBIF.', false),
