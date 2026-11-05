@@ -9,7 +9,7 @@
 // the image shown (the event media-index, for the address). `simple` (Orchidées de Mirabel): only its « Médias » (the
 // viewer, a block of the sheet: it takes ← → once touched, never the focus by itself, and Échap still closes the sheet
 // unless the viewer uses it — zoomed, its information shown) and its rubric « L'essentiel », each of its blocks alone,
-// titled as the sheet titles it (gf-plant-detail `only` `titled`: no layout of the sheet read for its places, none
+// titled as the sheet titles it (gf-sheet-block `titled`: no layout of the sheet read for its places, none
 // written) — as the Épuré sheet orders them on this device, those folded there left out, and those it leaves out
 // when they are empty. takeFocus(): the focus into the sheet (its plant touched: the screen that opened it).
 
@@ -26,6 +26,7 @@ import { modalOpen } from '../../core/history.js';
 import { ui } from '../../styles/ui.js';
 import { nameOf } from './cards.js';
 import '../../components/gf-plant-detail.js';
+import '../../components/gf-sheet-block.js';
 import '../../components/gf-media-viewer.js';
 
 export class MaPlantSheet extends LitElement {
@@ -71,7 +72,7 @@ export class MaPlantSheet extends LitElement {
     .simple .off { margin: 0; padding: 12px 16px; color: var(--gf-text-muted); }
     .simple .rub { display: flex; align-items: center; gap: 8px; margin: 0; padding: 14px 16px 0; font-size: 0.8125rem; font-weight: 700;
       letter-spacing: 0.06em; text-transform: uppercase; color: var(--gf-accent); }
-    .simple .essential gf-plant-detail { display: block; overflow: visible; padding: 0; }
+    .simple .essential gf-sheet-block { display: block; overflow: visible; padding: 0; }
   `];
 
   constructor() {
@@ -218,7 +219,7 @@ export class MaPlantSheet extends LitElement {
         : html`<p class="off">${fr(`${blockTitle('media')} : Photos en ligne désactivées (Réglages › Modules).`)}</p>`}
       <section class="essential" aria-labelledby="ma-sheet-essential">
         <h2 class="rub" id="ma-sheet-essential">${icon(rubric.icon)} ${rubric.label}</h2>
-        ${keys.map(k => html`<gf-plant-detail embedded subheading titled only=${k} plant-id=${id} view="epure" ?scoped=${this.scoped}></gf-plant-detail>`)}
+        ${keys.map(k => html`<gf-sheet-block titled key=${k} plant-id=${id} view="epure"></gf-sheet-block>`)}
       </section>
     </div>`;
   }

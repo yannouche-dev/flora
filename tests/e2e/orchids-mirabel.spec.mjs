@@ -349,11 +349,11 @@ test('une observation touchée : sa fiche simple, le focus dedans — « Médias
   await expect(viewer).toHaveJSProperty('index', 2);
   // « L'essentiel »: its blocks alone, as Épuré orders and titles them — nothing else of the sheet.
   await expect(sheet.getByRole('heading', { level: 2, name: 'L’essentiel' })).toBeVisible();
-  expect(await sheet.locator('gf-plant-detail').evaluateAll(els => els.map(el => el.getAttribute('only')))).toEqual(['name', 'names', 'taxonomy', 'ids']);
-  await expect(sheet.locator('gf-plant-detail[only="name"]').getByRole('heading', { level: 2, name: 'Traunsteinère globuleuse' })).toBeVisible();
+  expect(await sheet.locator('gf-sheet-block').evaluateAll(els => els.map(el => el.getAttribute('key')))).toEqual(['name', 'names', 'taxonomy', 'ids']);
+  await expect(sheet.locator('gf-sheet-block[key="name"]').getByRole('heading', { level: 2, name: 'Traunsteinère globuleuse' })).toBeVisible();
   // On a phone, the sheet is the screen: its plant's name the screen's title (under the panel's beside the map).
   await expect(sheet.locator('.sheet-head').getByRole('heading', { level: 1 })).toHaveCount(app.phone ? 1 : 0);
-  await expect(sheet.locator('gf-plant-detail').getByRole('heading', { level: 3 })).toHaveText(['Noms', 'Classification', 'Identifiants']);
+  await expect(sheet.locator('gf-sheet-block').getByRole('heading', { level: 3 })).toHaveText(['Noms', 'Classification', 'Identifiants']);
   await expect(sheet.locator('gf-media-viewer')).toHaveCount(1);
   await expect(sheet.locator('gf-add-to')).toHaveCount(0);
   // ‹ Préc. / Suivante ›: the orchids of the list that have a sheet.
@@ -418,8 +418,8 @@ test('la fiche simple suit la fiche Épurée de l’appareil — l’ordre de «
   const sheet = page.locator('ma-orchids ma-plant-sheet .sheet');
   // « Médias » whatever Épuré does of it (folded there: its large photo instead); its rubric as this device has it.
   await expect(sheet.locator('gf-media-viewer')).toHaveCount(1);
-  await expect.poll(() => sheet.locator('gf-plant-detail').evaluateAll(els => els.map(el => el.getAttribute('only')))).toEqual(['name', 'taxonomy', 'names']);
-  await expect(sheet.locator('gf-plant-detail').getByRole('heading', { level: 3 })).toHaveText(['Noms']);
+  await expect.poll(() => sheet.locator('gf-sheet-block').evaluateAll(els => els.map(el => el.getAttribute('key')))).toEqual(['name', 'taxonomy', 'names']);
+  await expect(sheet.locator('gf-sheet-block').getByRole('heading', { level: 3 })).toHaveText(['Noms']);
   await page.keyboard.press('Escape');
   await expect(sheet).toHaveCount(0);
   expect(await footprint(page)).toEqual(before);
@@ -621,6 +621,6 @@ test('accessibilité : l’écran de départ, la carte et ses filtres, la fiche 
   await chip(page, 'Ophrys').click();
   expect(await axe(page)).toEqual([]);
   await screen(page).locator(`button.row[data-id="${plantId('Ophrys holosericea')}"]`).click();
-  await expect(page.locator('ma-plant-sheet .sheet gf-plant-detail[only="name"]').getByRole('heading', { name: 'Ophrys bourdon' })).toBeVisible();
+  await expect(page.locator('ma-plant-sheet .sheet gf-sheet-block[key="name"]').getByRole('heading', { name: 'Ophrys bourdon' })).toBeVisible();
   expect(await axe(page)).toEqual([]);
 });
