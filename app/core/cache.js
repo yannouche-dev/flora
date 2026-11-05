@@ -39,14 +39,6 @@ export const MAX_ENTRIES = 4000;
 /** … and about this many bytes of answers (JSON length), the least recently used going first. */
 export const MAX_BYTES = 40e6;
 
-/** Entries written before each one carried its ttl: their module's. @param {string} key */
-function legacyTtl(key) {
-  if (key.startsWith('geo:')) return 365 * DAY;
-  if (key.startsWith('protected:') || key.startsWith('wikibooks') || key.startsWith('ign:')) return 30 * DAY;
-  if (key.startsWith('wd-uses:')) return 14 * DAY;
-  return config.remoteTtl;
-}
-
 /** A cache over `store` (tests give an in-memory one). @param {{ store: CacheStore, now?: () => number, negativeTtl?: number }} options */
 export function createCache({ store, now = Date.now, negativeTtl = NEGATIVE_TTL }) {
   /** Requests in flight, by key. @type {Map<string, Promise<any>>} */
@@ -122,7 +114,7 @@ export function createCache({ store, now = Date.now, negativeTtl = NEGATIVE_TTL 
     /** @type {string[]} */
     const gone = [];
     await store.scan(entry => {
-      const expires = entry.fetchedAt + (entry.ttl ?? legacyTtl(String(entry.key)));
+      const expires = entry.fetchedAt + (entry.ttl ?? config.remoteTtl);
       if (!Number.isFinite(expires) || t > expires + (entry.partial ? 0 : grace)) { gone.push(entry.key); return; }
       let size;
       try { size = JSON.stringify(entry.value ?? null).length; } catch { size = 0; }

@@ -119,13 +119,13 @@ test('purge : expirées depuis plus d’un mois et dégradées expirées supprim
   rows.set('old', { key: 'old', fetchedAt: t0 - 7 * DAY - GRACE - 1, ttl: 7 * DAY, value: 1 });
   rows.set('recent-expired', { key: 'recent-expired', fetchedAt: t0 - 8 * DAY, ttl: 7 * DAY, value: 2 });
   rows.set('partial', { key: 'partial', fetchedAt: t0 - NEGATIVE_TTL - 1, ttl: NEGATIVE_TTL, partial: true, value: 3 });
-  // Written before entries carried their ttl: their module's (geo: a year).
+  // Without a ttl (no writer leaves it out): config.remoteTtl, as cached() reads it.
   rows.set('geo:alt:1,2', { key: 'geo:alt:1,2', fetchedAt: t0 - 200 * DAY, value: 120 });
   rows.set('details2:1', { key: 'details2:1', fetchedAt: t0 - 40 * DAY, value: {} });
   rows.set('fresh', { key: 'fresh', fetchedAt: t0, ttl: DAY, value: 4 });
   const result = await cache.purge();
-  assert.deepEqual([...rows.keys()].sort(), ['fresh', 'geo:alt:1,2', 'recent-expired']);
-  assert.deepEqual(result, { removed: 3, kept: 3 });
+  assert.deepEqual([...rows.keys()].sort(), ['fresh', 'recent-expired']);
+  assert.deepEqual(result, { removed: 4, kept: 2 });
 
   // Ceiling: the least recently used go first (usedAt, else fetchedAt).
   rows.clear();
