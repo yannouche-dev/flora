@@ -472,3 +472,11 @@ test('le 📍 de Flore : le premier lieu qui la garde, sa première note, pas la
   assert.equal(placed.has(7003), false, 'une liste : pas un lieu');
   for (const c of [a, b, list]) await db.remove('spots', c.id);
 });
+
+test('findEntry : une plante notée par son id, une plante par son numéro ; un numéro en texte, rien', () => {
+  const p = C.withPlant(C.withPlant(C.newPlace([2.35, 48.85], { name: 'Talus' }), plant(7)), plant(7), { coordinates: [2.3504, 48.8502] }, { again: true });
+  const [first, second] = p.properties.plants;
+  assert.equal(C.findEntry(p, 7), first, 'une plante : sa première note');
+  assert.equal(C.findEntry(p, second.id), second);
+  assert.equal(C.findEntry(p, '7'), null, 'focus=7, un lien d’avant : plus lu');
+});

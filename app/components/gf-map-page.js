@@ -184,7 +184,6 @@ export class GfMapPage extends LitElement {
     .plants .nm { font-weight: 600; }
     .plants .sub { font-size: 0.8rem; color: var(--gf-text-muted); }
     .plants .sub, .plants .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .plants li.focus { background: var(--gf-accent-soft); border-radius: var(--gf-radius-sm); padding-left: 6px; padding-right: 6px; }
     .plants gf-thumb { box-shadow: 0 0 0 2.5px var(--c); margin: 3px; }
     .plants .harvest { flex: none; }
     .around { max-height: 55%; }
@@ -690,7 +689,7 @@ export class GfMapPage extends LitElement {
    * Keeps the URL in sync with selection and filters. Opening a place is a view (Back closes it, closing it
    * goes back); the focused plant, the season and the plant filter update the view in place.
    */
-  /** The marker of the focused plant of the selected place (an occurrence, or a plant's first). @param {any[]} spots */
+  /** The marker of the focused noting of the selected place (focus=: an entry id). @param {any[]} spots */
   #focusKey(spots) {
     const { spot, focus } = this.route;
     if (!spot || !focus) return null;

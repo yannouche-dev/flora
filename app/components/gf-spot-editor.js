@@ -250,7 +250,7 @@ export class GfSpotEditor extends LitElement {
     this.at = null;
     this.embedded = false;
     this.mapEditing = false;
-    /** @type {string | number | null} an occurrence id, or a plant id (its first occurrence) */
+    /** @type {string | null} a noting of the place (its entry id), from the Carte's focus= */
     this.focusEntry = null;
     /** Address and altitude of the place point (IGN). @type {{ key: string, address?: string | null, alt?: number | null }} */
     this._where = { key: '' };
@@ -964,7 +964,7 @@ export class GfSpotEditor extends LitElement {
     if (this.embedded) this.#emit('plant-focus', { entryId: key, plantId: entry?.plantId ?? null });
   }
 
-  /** The entry id for a focus from the Carte (an occurrence id, or a plant id: its first occurrence). @param {string | number} focus */
+  /** The entry id for a focus from the Carte (focus=: an entry id; none in the place: null). @param {string} focus */
   #entryKey(focus) {
     return this._place ? findEntry(this._place, focus)?.id ?? null : null;
   }

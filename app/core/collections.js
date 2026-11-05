@@ -278,18 +278,12 @@ export const newEntry = plant => normalizeEntry({
 }, new Date().toISOString());
 
 /**
- * An entry of a collection: `ref` an entry id (one occurrence), or a plant id (its first occurrence; a
- * number given as text too, as in an address).
+ * An entry of a collection: `ref` an entry id (one noting), or a plant id (its first noting).
  * @param {Place} place @param {string | number | null} ref
  */
 export function findEntry(place, ref) {
   const plants = place.properties.plants;
-  if (typeof ref === 'string') {
-    const byId = plants.find(e => e.id === ref);
-    if (byId || !/^\d+$/.test(ref)) return byId || null;
-    ref = Number(ref);
-  }
-  return plants.find(e => e.plantId === ref) || null;
+  return (typeof ref === 'string' ? plants.find(e => e.id === ref) : plants.find(e => e.plantId === ref)) || null;
 }
 
 /** All the occurrences of a plant in a collection (a place may hold several, along a walk). @param {Place} place @param {number | null} plantId */

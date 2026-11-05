@@ -283,7 +283,7 @@ test('♥ ôté d’un favori annoté (sa fiche, sa carte dans Flore) : demandé
   await expect(page.getByRole('alertdialog')).toHaveCount(0);
 });
 
-test('Le 📍 de Flore et « Dans mes listes et lieux » ouvrent la plante notée, la première fois', async ({ app, page }) => {
+test('Le 📍 de Flore et « Dans mes listes et lieux » ouvrent la plante notée, la première fois ; un lien d’avant (focus= une plante) : le lieu, rien de déplié', async ({ app, page }) => {
   await app.open('#/');
   const ortie = plantId('Urtica dioica');
   // The lieu « Talus », the nettle noted there twice (the second a step away).
@@ -313,4 +313,8 @@ test('Le 📍 de Flore et « Dans mes listes et lieux » ouvrent la plante noté
   await expect(link).toHaveAttribute('href', `#/map?spot=${id}&focus=${first}`);
   await link.click();
   await opened();
+  // A link of before, focus= giving the plant: the lieu, nothing unfolded.
+  await app.open(`#/map?spot=${id}&focus=${ortie}`);
+  await expect(page.locator('gf-spot-editor li.entry')).toHaveCount(2);
+  await expect(page.locator('gf-spot-editor li.entry.open')).toHaveCount(0);
 });
