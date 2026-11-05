@@ -277,23 +277,24 @@ test('modules : un choix pour tout l’appareil, parti de ce qui est stocké (un
   assert.equal(localStorage.getItem(key), null, 'tout allumé : rien de gardé');
 });
 
-test('modules : l’ancien format, mode par mode, repris au plus strict — coupé dans un mode, coupé partout', async () => {
+test('modules : toute clé gardée est un module coupé, pour tout l’appareil — jamais rallumé sans le dire ; illisible : tout allumé', async () => {
   const modules = await import('../../app/core/modules.js');
   const key = config.storageKeys.modules;
-  /** Written by the version before (or another tab): this one reads it again, as on a `storage` event. @param {unknown} value */
+  /** Written by another tab (or a version of before): this one reads it again, as on a `storage` event. @param {unknown} value */
   const stored = value => {
     if (value === null) localStorage.removeItem(key); else localStorage.setItem(key, JSON.stringify(value));
     dispatchEvent(Object.assign(new Event('storage'), { key, storageArea: localStorage }));
   };
-  stored({ gbif: { epure: false }, photos: { standard: true, scientific: false }, wikidata: false, globi: { epure: true }, openmeteo: {} });
-  const state = modules.modulesState();
-  assert.deepEqual(['gbif', 'photos', 'wikidata', 'globi', 'openmeteo', 'inaturalist'].map(k => state[/** @type {any} */ (k)]), [false, false, false, true, true, true]);
-  assert.equal(modules.modulesSignature(), 'gbif,wikidata,photos');
-  // The next change writes the new format, from the strictest reading.
+  stored({ gbif: false, wikidata: false });
+  assert.equal(modules.modulesSignature(), 'gbif,wikidata');
+  // A module kept per display mode (a version of before): off, whatever its value.
+  stored({ photos: { epure: false } });
+  assert.equal(modules.moduleOn('photos'), false, 'une valeur d’une autre forme : coupé');
   modules.setModule('globi', false);
-  assert.deepEqual(JSON.parse(localStorage.getItem(key) || '{}'), { gbif: false, photos: false, wikidata: false, globi: false });
-  modules.setModule('gbif', true);
-  assert.equal(modules.moduleOn('gbif'), true, 'rallumé une fois : partout');
+  assert.deepEqual(JSON.parse(localStorage.getItem(key) || '{}'), { photos: false, globi: false });
+  modules.setModule('photos', true);
+  assert.equal(modules.moduleOn('photos'), true, 'rallumé par l’utilisateur');
+  modules.setModule('globi', true);
   // Unreadable: everything on.
   stored(['gbif']);
   assert.equal(modules.modulesSignature(), '');

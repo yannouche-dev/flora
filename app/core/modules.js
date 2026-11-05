@@ -59,18 +59,15 @@ export class ModuleOffError extends Error {
 }
 
 /**
- * Only the modules switched off are stored: { gbif: false }. Earlier versions kept a choice per display mode
- * ({ gbif: { epure: false } }): a module off in any mode is off everywhere — the strictest, so a service cut
- * somewhere is never called again without the user saying so.
+ * Only the modules switched off are stored: { gbif: false }. Every key stored is a module off (setModule writes
+ * nothing else): a service cut is never called again without the user saying so.
  * @param {any} value @returns {Partial<Record<ModuleKey, false>>}
  */
 function cleanModules(value) {
   /** @type {Record<string, false>} */
   const off = {};
   if (!value || typeof value !== 'object' || Array.isArray(value)) return off;
-  for (const [k, v] of Object.entries(value)) {
-    if (v === false || (v && typeof v === 'object' && Object.values(v).includes(false))) off[k] = false;
-  }
+  for (const k of Object.keys(value)) off[k] = false;
   return off;
 }
 
