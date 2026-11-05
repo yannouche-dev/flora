@@ -222,7 +222,7 @@ export class MaDeck extends LitElement {
 
   /**
    * Right: a match (Cueillette prudente's toxic look-alike: recognised, to avoid — the session decides,
-   * kit/session.js#swiped); left: passed. The card flies off first, then `deck-decide` says it.
+   * kit/session.js#decide); left: passed. The card flies off first, then `deck-decide` says it.
    * @param {Card} card @param {boolean} liked @param {HTMLElement} [el]
    */
   decide(card, liked, el) {

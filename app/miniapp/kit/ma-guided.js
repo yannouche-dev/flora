@@ -30,7 +30,7 @@ import { openView } from '../../core/history.js';
 import { setHarvestMode, setMode, StoreController } from '../../core/store.js';
 import { config } from '../../config.js';
 import { ui } from '../../styles/ui.js';
-import { nameOf } from './cards.js';
+import { nameOf, saidOf } from './cards.js';
 import { sessionOf } from './session.js';
 import './ma-around-map.js';
 import './ma-deck.js';
@@ -347,7 +347,7 @@ export class MaGuided extends LitElement {
   }
 
   /**
-   * A card swiped (flown off the deck): a heart chooses its plant (kit/session.js#swiped) — the map lights it, the
+   * A card swiped (flown off the deck): a heart chooses its plant (kit/session.js#decide) — the map lights it, the
    * panes show it, until the next heart; a pass changes nothing (before any heart, the card now on top is the plant of
    * the screen). The first match brings its photos at once (the third block, zoomed); the next ones, a heart.
    * @param {CustomEvent} e
@@ -355,11 +355,13 @@ export class MaGuided extends LitElement {
   #onDecide = e => {
     const { card, liked } = /** @type {{ card: Card, liked: boolean }} */ (e.detail);
     const s = this.#s;
-    const fav = s.swiped(card, liked);
+    // A card decided already (a second click while it flew): nothing.
+    const r = s.decide(card, liked);
+    if (!r) return;
     // Said aloud (the status under the view): what the swipe did, then the card now on top.
     const next = s.deck[0];
-    this._said = `${liked ? `Match : ${nameOf(card.plant)}${fav ? ', ajoutée aux favoris' : ''}` : `Passée : ${nameOf(card.plant)}`}. ${next ? `Carte suivante : ${nameOf(next.plant)}.` : 'Plus aucune carte.'}`;
-    if (!liked) return;
+    this._said = saidOf({ name: nameOf(card.plant), side: r.side, fav: r.fav, next: next ? nameOf(next.plant) : null });
+    if (r.side !== 'match') return;
     if (!discoverState().firstMatch) {
       firstMatchShown();
       // Its photos are the game's now: once the first steps are over, the list keeps them beside the deck

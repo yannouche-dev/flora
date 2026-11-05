@@ -117,7 +117,7 @@ export const aroundOrder = list => [...list].sort((a, b) => b.count - a.count ||
 
 /**
  * Cueillette prudente: a plant on the toxic side of a confusion (only its cards carry their confusions) — never a
- * match nor a favourite: swiped right, it is recognised, to avoid (kit/session.js#swiped). @param {Card} c
+ * match nor a favourite: swiped right, it is recognised, to avoid (kit/session.js#decide). @param {Card} c
  */
 export const toAvoid = c => Boolean(c.confusions?.some(l => l.side === 'toxic'));
 

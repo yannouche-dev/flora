@@ -109,6 +109,10 @@ test('Cueillette prudente : toutes les plantes lues et triées avant d’en gard
   assert.deepEqual(app.c.avoided, [], '« Revoir les plantes passées » la ramène');
   const [garlic, saffron, hemlock] = /** @type {import('../../app/miniapp/kit/cards.js').Card[]} */ (s.cards);
   assert.deepEqual(s.deck, [garlic, saffron, hemlock]);
+  // Each swipe says its plant seen (to the box: runtime.js#seen), a plant recognised to avoid as a match.
+  /** @type {number[]} */
+  const seen = [];
+  app.addEventListener('seen', e => seen.push(/** @type {CustomEvent} */ (e).detail));
 
   // The meadow saffron swiped right: recognised, to avoid — not shown again, never a match nor a favourite.
   assert.equal(s.swiped(saffron, true), false);
@@ -128,6 +132,11 @@ test('Cueillette prudente : toutes les plantes lues et triées avant d’en gard
   assert.equal(s.swiped(garlic, true), true);
   assert.deepEqual(app.c.matches, [ail.id]);
   assert.deepEqual(s.matchCards, [garlic]);
+  assert.deepEqual(seen, [colchique.id, cigue.id, ail.id]);
+  // Decided already (a second click while it flew): nothing — no second entry, nothing seen again.
+  const swipes = s.history.length;
+  assert.equal(s.swiped(garlic, true), false);
+  assert.deepEqual([s.history.length, seen.length], [swipes, 3]);
   s.swiped(saffron, true);
   assert.deepEqual(s.deck, []);
   assert.deepEqual(s.avoidCards, [saffron, hemlock]);

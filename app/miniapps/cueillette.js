@@ -2,7 +2,7 @@
 // Cueillette prudente: around you, only the plants that matter for picking — those of the Anses and Centres antipoison
 // list of dangerous confusions, the deadliest first —, each card saying its look-alikes, its toxicity, its protection
 // before anything else; the list says, in red, never to pick without a certain identification, and whom to call. A
-// toxic look-alike is never a match nor a favourite: swiped right, it is recognised, to avoid (kit/session.js#swiped),
+// toxic look-alike is never a match nor a favourite: swiped right, it is recognised, to avoid (kit/session.js#decide),
 // counted apart. Its start (« Autour de moi », a commune, « Continuer »), how far to look over the map, then the
 // cards. Doing it changes nothing else in the app: the harvest mode stays as the user set it (Réglages).
 // Built from the kit (app/miniapp/kit): ma-distance, then ma-around-list (harvest).
