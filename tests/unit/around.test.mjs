@@ -199,32 +199,27 @@ test('le curseur des distances : une distance entre deux crans montrée entre eu
   assert.equal(target.value, '6');
 });
 
-test('sessions : la partie partagée d’avant donnée à la dernière jouée (sinon Rencontres), une fois ; « Oublier ma position »', () => {
+test('sessions : la partie partagée d’avant donnée à Rencontres, une fois ; « Oublier ma position »', () => {
   localStorage.clear();
   const old = { point: [2.35, 48.85], place: 'Paris', radius: 2000, matches: [7], passed: [8] };
   localStorage.setItem('geoflora.app.rencontres.state', JSON.stringify({ v: 1, path: ['start', 'map', 'cards'], ctx: {}, finished: false }));
-  migrateDiscover(old, '#/collections');
+  migrateDiscover(old);
   assert.deepEqual(keptCtx('rencontres'), old, 'rien ne dit laquelle : Rencontres');
   assert.deepEqual([keptCtx('cueillette'), keptCtx('mosaique')], [{}, {}], 'les autres : rien, pas de « Continuer »');
   assert.equal(leftAt('rencontres'), 'cards', 'l’étape où on l’a laissée, gardée');
   assert.equal(leftAt('cueillette'), null);
+  // Nothing kept by Rencontres: its start.
   clearAroundGames();
-  // Opened at the old address of a scenario: that one was played last.
-  migrateDiscover(old, '#/discover?s=mosaic&p=3');
-  assert.deepEqual(keptCtx('mosaique'), old);
-  assert.deepEqual([keptCtx('rencontres'), keptCtx('cueillette')], [{}, {}]);
-  clearAroundGames();
-  migrateDiscover(old, '#/discover?s=harvest');
-  assert.deepEqual(keptCtx('cueillette'), old);
-  assert.equal(leftAt('cueillette'), 'start');
+  migrateDiscover(old);
+  assert.equal(leftAt('rencontres'), 'start');
   assert.deepEqual(keptPlace(), { point: [2.35, 48.85], place: 'Paris' });
   forgetPlaces();
   assert.equal(keptPlace(), null);
-  assert.deepEqual(keptCtx('cueillette').matches, [7], 'le reste de la partie gardé');
+  assert.deepEqual(keptCtx('rencontres').matches, [7], 'le reste de la partie gardé');
   // Nothing to hand over: nothing written.
   clearAroundGames();
   migrateDiscover({ point: null, matches: [], passed: [] });
-  assert.equal(localStorage.getItem('geoflora.app.cueillette.state'), null);
+  assert.equal(localStorage.getItem('geoflora.app.rencontres.state'), null);
 });
 
 /** Every key kept on the device, with its value. */
