@@ -5,7 +5,7 @@ Les mots de l'interface de GeoFlora, chacun avec sa définition et son nom dans 
 | Terme | Définition | Dans le code |
 | --- | --- | --- |
 | **fiche** | La page d'une plante, qui défile : ses blocs, rangés par rubrique. | plant sheet, `app/components/gf-plant-detail.js` |
-| **bloc** | Une partie titrée de la fiche (Wikipédia, Calendrier, Carte, Usages, une Note…), parfois faite de sous-blocs ; se range, se masque, se renomme, se place dans un panneau. | sheet block, `app/core/sheet-blocks.js` (clé `plant.<bloc>` dans un écran sur mesure) |
+| **bloc** | Une partie titrée de la fiche (Wikipédia, Calendrier, Carte, Usages, une Note…), parfois faite de sous-blocs ; se range, se masque, se renomme, se place dans un panneau. | sheet block, `app/core/sheet-blocks.js` (clé `plant.<bloc>` dans un écran sur mesure) ; un bloc seul : `app/components/gf-sheet-block.js` |
 | **rubrique** | Un groupe de blocs de la fiche sous un en-tête collé (L'essentiel, Images, Alertes, Usages…), qui répond à une question sur la plante. | category, `app/core/categories.js` (classes `rub-*`) |
 | **panneau** | Une région posée à côté d'une autre, redimensionnable par son séparateur ; dans le panneau Plante, chaque panneau de l'arbre tient des blocs en onglets, à côté de la fiche. | pane, `app/core/pane-tree.js` (arbre de la fiche), `app/core/panes.js` (panneaux d'un écran) |
 | **disposition** | L'arrangement des panneaux d'un écran selon sa largeur (téléphone, tablette, grand écran) ; aussi le texte d'un écran sur mesure, sa grammaire (« Avancé : le texte de la disposition »). | layout, `app/core/panes.js`, `config.paneLayouts` |
