@@ -2,7 +2,7 @@
 // own — the activities, nothing else (Scientifique is a mode, not an activity). « Commencer » opens one (and changes
 // nothing else: Cueillette prudente leaves the harvest mode as it was), « Quitter l’activité » comes back to the list;
 // the first launch lands on it, and an activity done there brings the tabs; the old addresses of Découvrir lead to the
-// activities. Rencontres' services answered here.
+// list, nothing else. Rencontres' services answered here.
 import { test, expect, plantId, answerAround } from './fixtures.mjs';
 
 test.use({ reducedMotion: 'reduce' });
@@ -76,13 +76,17 @@ test('une activité en cours se continue ; Cueillette prudente est une activité
   expect({ on: await app.state('harvestMode'), kept: await page.evaluate(() => localStorage.getItem('geoflora.harvestModeChoice')) }).toEqual(harvest);
 });
 
-test('les anciennes adresses de Découvrir mènent où elles menaient', async ({ app, page }) => {
+test('les anciennes adresses de Découvrir : la liste, rien d’autre', async ({ app, page }) => {
   const ail = plantId('Allium ursinum');
+  // A plant over Rencontres' cards, then: the list, no activity nor plant sheet.
   await app.open(`#/discover?p=${ail}`);
-  await expect.poll(() => hash(page)).toMatch(new RegExp(`^#/app/rencontres/[a-z]+\\?p=${ail}&fiche=1$`));
+  await expect(list(page).getByRole('heading', { level: 1, name: 'Découvrir' })).toBeVisible();
+  await expect(page.locator('gf-miniapp')).toHaveCount(0);
+  await expect(page.locator('ma-plant-sheet')).toHaveCount(0);
+  // An activity's old ?s=: the list.
   await app.go('#/discover?s=mosaic');
-  await expect.poll(() => hash(page)).toBe('#/app/mosaique/start');
-  await expect(page.getByRole('heading', { name: 'La mosaïque du coin' })).toBeVisible();
+  await expect(list(page).getByRole('heading', { level: 1, name: 'Découvrir' })).toBeVisible();
+  await expect(page.locator('gf-miniapp')).toHaveCount(0);
   // An unknown old ?s=: the list.
   await app.go('#/discover?s=inconnu');
   await expect(list(page).getByRole('heading', { level: 1, name: 'Découvrir' })).toBeVisible();

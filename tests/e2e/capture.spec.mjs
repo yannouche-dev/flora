@@ -258,7 +258,7 @@ test('Noter ici : la même offre partout — l’en-tête, la fiche, un nouveau 
   await expect(offer.getByRole('listitem')).toHaveText(['Ortie dioïque · 0 m · 1 plante Ouvrir ce lieu', 'Pré · 60 m · 2 plantes Y ajouter Ortie dioïque']);
 
   // An activity's sheet (Rencontres): « Noter ici » over the activity, the address unchanged; « Fermer », still there.
-  await app.go(`#/discover?p=${ortie}`);
+  await app.go(`#/app/rencontres?p=${ortie}&fiche=1`);
   await expect.poll(() => page.evaluate(() => location.hash)).toMatch(new RegExp(`^#/app/rencontres/[a-z]+\\?p=${ortie}&fiche=1$`));
   const there = await page.evaluate(() => location.hash);
   const sheet = page.locator('ma-plant-sheet');
@@ -365,7 +365,7 @@ test('Noter ici : le focus là où l’on commence, chaque lieu proposé nommé,
   await dialog.getByRole('button', { name: 'Fermer' }).click();
 
   // Over an activity's sheet (Rencontres): Échap closes the dialog only — the sheet, its plant and the address stay.
-  await app.go(`#/discover?p=${ortie}`);
+  await app.go(`#/app/rencontres?p=${ortie}&fiche=1`);
   await expect.poll(() => page.evaluate(() => location.hash)).toMatch(new RegExp(`^#/app/rencontres/[a-z]+\\?p=${ortie}&fiche=1$`));
   const there = await page.evaluate(() => location.hash);
   const sheet = page.locator('ma-plant-sheet');

@@ -2,9 +2,9 @@
 // session: its start, its map and distance, its cards (#/app/<id>/<step>); Cueillette prudente's safety warnings exactly
 // as before (never pick without a certain identification, the look-alikes, the deadliest first, toxicity) — a deadly
 // plant seen once among more than 120 is in its deck, a toxic look-alike is never a match nor a favourite (« à ne pas
-// cueillir »), an empty list says one thing; Mosaïque's photo grid; the old addresses of Découvrir; the session the
-// three shared before handed over to each; « Recommencer » in one leaving the others as they were; the parcours of
-// before their mark, marked once (collections.js#markWalks). Rencontres' services answered here.
+// cueillir »), an empty list says one thing; Mosaïque's photo grid; the session the three shared before handed over to
+// Rencontres; « Recommencer » in one leaving the others as they were; the parcours of before their mark, marked once
+// (collections.js#markWalks). Rencontres' services answered here.
 import { readFileSync } from 'node:fs';
 import { test, expect, plantId, answerAround, fixturePlants } from './fixtures.mjs';
 
@@ -232,20 +232,6 @@ async function toCardsAny(page, id) {
   await expect(page.locator('ma-around-list .head')).toBeVisible();
 }
 
-test('les anciennes adresses : Cueillette prudente et Mosaïque ouvrent leur activité', async ({ app, page }) => {
-  await app.open('#/discover?s=harvest');
-  await expect.poll(() => hash(page)).toBe('#/app/cueillette/start');
-  await expect(page.getByRole('heading', { name: 'Cueillette prudente' })).toBeVisible();
-  await app.go('#/discover?s=mosaic');
-  await expect.poll(() => hash(page)).toBe('#/app/mosaique/start');
-  await expect(page.getByRole('heading', { name: 'La mosaïque du coin' })).toBeVisible();
-  // A plant open there, with no place kept: the plant over the start screen.
-  const ail = plantId('Allium ursinum');
-  await app.go(`#/discover?s=mosaic&p=${ail}`);
-  await expect.poll(() => hash(page)).toBe(`#/app/mosaique/start?p=${ail}`);
-  await expect(page.locator('ma-plant-sheet .sheet-head')).toContainText('Ail des ours');
-});
-
 test.describe('la partie partagée d’avant', () => {
   test('donnée à Rencontres (rien ne dit laquelle a été jouée), une fois ; ses favoris restent à soi', async ({ app, page, context }) => {
     const ail = plantId('Allium ursinum');
@@ -284,19 +270,6 @@ test.describe('la partie partagée d’avant', () => {
     await launcher.locator('dialog.ask').getByRole('button', { name: 'Recommencer' }).click();
     await expect.poll(() => hash(page)).toBe('#/app/rencontres/start');
     expect(await origin()).toBe('none');
-  });
-
-  test('donnée à la dernière jouée quand l’adresse le dit (Cueillette prudente)', async ({ app, page, context }) => {
-    await context.addInitScript(() => {
-      if (sessionStorage.getItem('seeded')) return;
-      sessionStorage.setItem('seeded', '1');
-      localStorage.setItem('geoflora.discover', JSON.stringify({ done: true, point: [2.35, 48.85], place: 'Paris', radius: 2000, matches: [], passed: [3] }));
-    });
-    await app.open('#/discover?s=harvest');
-    await expect.poll(() => hash(page)).toBe('#/app/cueillette/start');
-    expect((await kept(page, 'cueillette'))?.passed).toEqual([3]);
-    expect(await kept(page, 'rencontres')).toBe(null);
-    await expect(page.getByRole('group', { name: 'Continuer' })).toContainText('Autour de Paris');
   });
 });
 

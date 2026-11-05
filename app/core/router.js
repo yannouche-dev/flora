@@ -73,13 +73,7 @@ export function parse(hash) {
     return { name: 'app', id: app[1], step: app[2] ?? null, plant: number('p'), view: view && /^[a-z]{1,16}$/.test(view) ? view : null,
       media: number('m') || null, sheet: params.get('fiche') === '1' };
   }
-  // Rencontres, the Parcours, Cueillette prudente and Mosaïque, scenarios of Découvrir before they were mini-apps: their
-  // old addresses open them (a plant open over Découvrir with no scenario, #/discover?p=<id>, was over Rencontres'
-  // cards); a plant open there, over its cards.
-  const was = path === 'discover' ? { meet: 'rencontres', trail: 'parcours', harvest: 'cueillette', mosaic: 'mosaique' }[params.get('s') || (params.has('p') ? 'meet' : '')] : undefined;
-  // (Rencontres: the plant in its sheet, &fiche=1, as it was then.)
-  if (was) return { name: 'app', id: was, step: was !== 'parcours' && params.has('p') ? 'cards' : null, plant: number('p'), view: null, media: null, sheet: was === 'rencontres' && params.has('p') };
-  // « Découvrir »: the list of the activities (any other old ?s=, Scientifique's ?s=science among them: the list too).
+  // « Découvrir »: the list of the activities (whatever else its address says).
   if (path === 'discover') return { name: 'discover' };
   // « Écran sur mesure » (app/layout/gf-layout.js): #/layout/<layout>?<state>[&edit=1] — the layout as written
   // (grammar.js), its live state (state.js) read by the screen itself; edit=1: being modified, its tools shown. #/layout

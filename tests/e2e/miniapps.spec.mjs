@@ -1,7 +1,6 @@
 // The activities (app/miniapps), each alone on the screen at #/app/<id>/<step>: opened from Découvrir (the film icon),
-// the old addresses of Découvrir leading to them, their steps in the address, « Recommencer » (confirmed) emptying
-// what each owns and only that, back at its first step — and still empty after a reload. Rencontres' services
-// answered here.
+// their steps in the address, « Recommencer » (confirmed) emptying what each owns and only that, back at its first
+// step — and still empty after a reload. Rencontres' services answered here.
 import { test, expect, plantId, answerAround, answerOrchids } from './fixtures.mjs';
 
 test.use({ reducedMotion: 'reduce' });
@@ -144,14 +143,6 @@ test('ouverte sans rien derrière, une activité, et celle lancée depuis elle, 
   await expect.poll(hash).toBe('#/app/mosaique/start');
   await box.locator('.quit').click();
   await expect.poll(hash).toBe('#/');
-});
-
-test('les anciennes adresses de Découvrir ouvrent les activités', async ({ app, page }) => {
-  await app.open('#/discover?s=trail');
-  await expect.poll(() => page.evaluate(() => location.hash)).toBe('#/app/parcours/start');
-  await app.go('#/discover?s=meet');
-  await expect.poll(() => page.evaluate(() => location.hash)).toBe('#/app/rencontres/start');
-  await expect(page.getByRole('heading', { name: 'Rencontrez les plantes d’ici' })).toBeVisible();
 });
 
 test('Rencontres : départ, carte, cartes ; « Recommencer » vide la partie et ses favoris, pas ceux d’ailleurs', async ({ app, page }) => {
