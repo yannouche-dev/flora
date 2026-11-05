@@ -20,9 +20,9 @@
 //                                      (core/nearby.js periodQuery); not said, the layout's own (a map's when=);
 //   &sources=inat,gbif&qualite=…&taxon=espece&photos=avec|libre&sauvages=1&jeux=…&sansjeux=<GBIF datasets>
 //                                      the zone's observations: their sources and the filters every source applies
-//                                      (core/observations.js); not said, the defaults — the sources a map says (src=),
-//                                      else both (but one switched off in Réglages › Modules: defaultSources), every
-//                                      observation (every quality, every dataset);
+//                                      (core/observations.js); not said, the defaults — both sources (but one switched
+//                                      off in Réglages › Modules: defaultSources; a map's src= is its own, never the
+//                                      group's: cells.js), every observation (every quality, every dataset);
 //   &q=…&family=…&sort=…               the search itself: the screen's own (core/query.js — the same words as #/?q=…),
 //                                      never Flore's.
 // A layout's other groups (a cell's groupe=b: its own zone, plant, period and search, apart from the others) have
@@ -41,8 +41,8 @@ import { getPlant, nameOf } from '../core/plants.js';
 import { forgetFailures } from '../core/cache.js';
 import { findPlace } from '../core/geoservices.js';
 import { errorKind } from '../core/net.js';
-import { observationsAround, plantCounts, plantOfPoint, plantsIn, speciesOf, taxonIdOf } from '../core/nearby.js';
-import { boxHolds, circleBox } from '../core/around3d.js';
+import { AROUND_MAX, observationsAround, plantCounts, plantOfPoint, plantsIn, speciesOf, taxonIdOf } from '../core/nearby.js';
+import { GBIF_MAX, boxHolds, circleBox } from '../core/around3d.js';
 import { OBS_DEFAULTS, SOURCE_NAMES, defaultSources, failedText, inatQuery, obsKey, obsParams, readObsFilters, sourcesText, zoneObservations } from '../core/observations.js';
 import { fromHash, toHash } from '../core/query.js';
 import { searchWhole } from '../core/search.js';
@@ -60,8 +60,9 @@ import { DISTANCE, distanceText, parseDistance } from './registry.js';
  * @typedef {import('../core/nearby.js').AroundPoint} AroundPoint
  * @typedef {{ coordinates: [number, number], date: string | null, url: string | null, kind: string }} Observation  `kind`:
  *   its source (core/observations.js: 'inat', 'gbif')
- * @typedef {{ key: string, points: Observation[], outside: boolean }} PlantObs  the current plant's observations in the
+ * @typedef {{ key: string, points: Observation[], outside: boolean, capped?: boolean }} PlantObs  the current plant's observations in the
  *   zone (`key`: its id and the scope they are of); `outside`: a plant not among the zone's — iNaturalist's alone, asked
+ *   (`capped`: as many as it gives at most, core/nearby.js AROUND_MAX — the most recent)
  * @typedef {'push' | 'replace' | 'none'} How   how the address follows a change: a new entry, the same one, not at all
  */
 
@@ -166,7 +167,7 @@ export const sameLive = (a, b) => a.title === b.title && a.plant === b.plant && 
 export class LayoutState extends EventTarget {
   /**
    * @param {{ radius?: number | null, find?: typeof findPlace, channel?: SearchChannel }} [defaults] the
-   *   layout's own default radius (a map or a place cell's r=); `find`: how a place typed is found (the IGN geocoder;
+   *   group's own default radius (a map or a zone cell's r=: group-defaults.js); `find`: how a place typed is found (the IGN geocoder;
    *   tests give their own); `channel`: the search its zone keeps to its plants (core/search-channel.js; none: one of
    *   its own — never Flore's)
    */
@@ -176,13 +177,20 @@ export class LayoutState extends EventTarget {
     /** @type {Live} */
     this.live = EMPTY;
     this.defaultRadius = defaults.radius ?? DEFAULT_RADIUS;
-    /** The layout's own period (a map's when=), until the address says one. @type {Period} */
+    /** The group's own period (a map's when=: group-defaults.js), until the address says one. @type {Period} */
     this.defaultPeriode = 'toujours';
     /**
-     * The layout's own sources of observations (its maps' src=; none said: both, but one whose module is off —
-     * core/observations.js defaultSources), until the address says them. @type {ObsFilters['sources']}
+     * The group's own sources of observations — both, but one whose module is off (core/observations.js
+     * defaultSources) —, until the address says them: never a map's (its src= is its own: what it draws among
+     * them). @type {ObsFilters['sources']}
      */
     this.defaultSources = defaultSources();
+    /**
+     * The place the group starts on (its first map's lieu=: 'lieu:<words>', else its « Autour de moi au départ »:
+     * 'autour'; null: none — group-defaults.js), applied once (applyOnce), the address having no zone.
+     * @type {string | null}
+     */
+    this.defaultStart = null;
     this.find = defaults.find ?? findPlace;
     /** A place to find (place= without at=): being found, or why it was not (in French; null: none to find, or found). */
     /** @type {'idle' | 'finding' | 'failed'} */
@@ -238,8 +246,12 @@ export class LayoutState extends EventTarget {
     this.scopeFor = '';
     this.obsFor = '';
     this.infoFor = 0;
-    /** The map's own scope (its lieu=, its autour), applied once for each (dl-map), the address having none. */
-    this.defaultedFor = '';
+    /**
+     * The starting places already applied (or not, the address having a zone then): each once (applyOnce) — a zone
+     * taken off (✕) stays off, whichever map of the group draws again.
+     * @type {Set<string>}
+     */
+    this.applied = new Set();
     /** The search over the whole flora (wholeOf: a results cell with zone=0), and the search it answers. */
     /** @type {{ key: string, total: number, items: any[] } | null} */
     this.whole = null;
@@ -259,6 +271,16 @@ export class LayoutState extends EventTarget {
     this.view = null;
     /** The plants observed in that view (the search kept to them: workers/search-core.js within); null: the zone's all. @type {number[] | null} */
     this.within = null;
+  }
+
+  /**
+   * A starting place (defaultStart) comes: true the first time only — every map of the group asks, one applies it.
+   * @param {string | null} want
+   */
+  applyOnce(want) {
+    if (!want || this.applied.has(want)) return false;
+    this.applied.add(want);
+    return true;
   }
 
   /** The radius in use: the address', else the layout's default. */
@@ -284,6 +306,20 @@ export class LayoutState extends EventTarget {
   #observed = null;
   /** The circle a view was taken in (its radius and centre; '' without a zone). */
   #circle = '';
+
+  /**
+   * The zone's observations loaded, when a source has more, each apart (core/observations.js): iNaturalist's past
+   * ZONE_MAX — its most recent —, GBIF's past its page of GBIF_MAX — one page, asked in no order —: how many of its
+   * points are shown, of how many it counts (null: all of them); null: every source's all (cells.js says it).
+   * @returns {{ inat: { shown: number, total: number } | null, gbif: { shown: number, total: number } | null } | null}
+   */
+  get sample() {
+    const t = this.totals;
+    const part = (/** @type {'inat' | 'gbif'} */ kind, /** @type {number} */ max) => (t[kind] ?? 0) > max
+      ? { shown: this.points.filter(p => p.kind === kind).length, total: /** @type {number} */ (t[kind]) } : null;
+    const inat = part('inat', ZONE_MAX), gbif = part('gbif', GBIF_MAX);
+    return inat || gbif ? { inat, gbif } : null;
+  }
 
   /** The scope's key ('' without one): its circle, its period, its observations' sources and filters. */
   get scopeKey() { return this.live.at ? this.radius + ':' + this.live.at.join(',') + ':' + this.periode + ':' + obsKey(this.filters) : ''; }
@@ -349,15 +385,17 @@ export class LayoutState extends EventTarget {
   /**
    * What a map shows of the zone (`box` [west, south, east, north]; null: let go), the sources of its points
    * (`kinds`), the map (`by`): the list kept to the plants observed there — the whole zone when it shows all of the
-   * circle. The search runs again only when those plants change.
+   * circle. The search runs again only when those plants change — other sources, the same plants: the cells told all
+   * the same (the list's banner says them).
    * @param {number[] | null} box @param {{ kinds?: string[] | null, by?: object | null }} [o]
    */
   setView(box, { kinds = null, by = null } = {}) {
     const at = this.live.at;
     const view = box && at && !boxHolds(box, circleBox(at, this.radius)) ? { box, kinds, by } : null;
     if (!view && !this.view) return;
+    const other = Boolean(view && this.view) && String(view?.kinds) !== String(this.view?.kinds);
     this.view = view;
-    this.#narrow();
+    this.#narrow(other);
   }
 
   /** « Toute la zone »: the list back to the whole zone, and the map that led it framed on it again (`refit`, detail: { by }). */
@@ -383,12 +421,13 @@ export class LayoutState extends EventTarget {
   /**
    * The list kept to the view's plants: its search run again when they changed, its answer published with the cells
    * told — unless another view, or other plants of the zone, came meanwhile (theirs publish). The zone's points still
-   * coming (another period, other filters): found among them once there (#loadScope).
+   * coming (another period, other filters): found among them once there (#loadScope). `told`: the cells told even when
+   * the plants are the same (the view's sources changed).
    */
-  async #narrow() {
+  async #narrow(told = false) {
     if (this.speciesState === 'loading') return;
     const within = this.#withinNow();
-    if (String(within) === String(this.within)) return;
+    if (String(within) === String(this.within)) { if (told) this.#changed(); return; }
     this.within = within;
     const s = this.species;
     if (!s) { this.#changed(); return; }
@@ -701,7 +740,7 @@ export class LayoutState extends EventTarget {
     if (!live() || taxon === undefined) return;
     const pts = taxon ? await observationsAround(taxon, at, r, abort.signal, filters, periode).catch(() => null) : [];
     if (!live() || !pts) return;
-    this.plantObs = { key, points: pts.map(p => ({ coordinates: p.coordinates, date: p.date, url: p.url, kind: 'inat' })), outside: true };
+    this.plantObs = { key, points: pts.map(p => ({ coordinates: p.coordinates, date: p.date, url: p.url, kind: 'inat' })), outside: true, capped: pts.length >= AROUND_MAX };
     this.#changed();
   }
 

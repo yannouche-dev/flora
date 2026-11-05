@@ -3,7 +3,8 @@
 // « Emplacement »'s tiles) — its component, its block, its intent, its settings. Everything it offers comes from the registry's schema (registry.js; picker-model.js,
 // summary.js), never from a component by name. Three levels, a breadcrumb (« Case 3 › Carte › Couches ») and Back:
 //  - « Contenu »: a tile per component (its icon, title, sentence), those to suggest first (what the other cells
-//    read and write: nothing chooses a plant → the results, the map…), those too large for the cell greyed with why
+//    read and write of their group's selection, registry.js StateKey: nothing writes the plant from the search → the
+//    results, the map…; nothing shows it → the sheet, the photos), those too large for the cell greyed with why
 //    (« « Carte » demande 240 px de large »); the sheet's tile opens its blocks; never the « Emplacement » itself (what
 //    « Vider la case » leaves, when the host offers it: `clear-label`).
 //  - « Que montre-t-il ? » (a component with intents: the map): a card per intent, what it sets drawn as chips; a tap
@@ -63,6 +64,11 @@ export class GfBlockPicker extends LitElement {
     clearLabel: { type: String, attribute: 'clear-label' },
     /** The current plant (a cell's « Plante fixée » can take it). */
     plant: { type: Number },
+    /**
+     * The cell's group's letter (A, B, C) when the layout has several; '' with one: what a setting of the whole group
+     * (registry.js `shared`: the radius, the period, the starting place) says beside its label.
+     */
+    group: { type: String },
     /** Drawn in an « Emplacement » (a slot), its first level only. */
     inline: { type: Boolean, reflect: true },
     /** Inline: the component chosen whose intent comes next. */
@@ -132,6 +138,7 @@ export class GfBlockPicker extends LitElement {
     .ctl:last-child { border-bottom: 0; }
     .ctl > .name { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 0.88rem; font-weight: 600; }
     .ctl .note { font-size: 0.78rem; color: var(--gf-text-muted); font-weight: 400; }
+    .ctl .group-wide { font-size: 0.74rem; font-weight: 400; color: var(--gf-text-muted); }
     .seg { display: flex; flex-wrap: wrap; gap: 4px; }
     .seg button, .chipset button { min-height: 34px; padding: 4px 12px; font-size: 0.84rem; }
     .chipset { display: flex; flex-wrap: wrap; gap: 6px; }
@@ -181,6 +188,7 @@ export class GfBlockPicker extends LitElement {
     this.clearLabel = null;
     /** @type {number | null} */
     this.plant = null;
+    this.group = '';
     /** @type {Level | null} */
     this._level = null;
     /** @type {string | null} */
@@ -392,11 +400,13 @@ export class GfBlockPicker extends LitElement {
     const id = 'p-' + key;
     const note = r.implied.has(key) ? html`<span class="note">selon l’intention</span>` : changed(r, key) ? html`<span class="note">● modifié</span>`
       : v == null && ps.unset ? html`<span class="note">${ps.kind === 'list' ? 'aucune choisie' : 'par défaut'} : ${ps.unset}</span>` : nothing;
+    // A setting of the whole group (its radius, its period, its starting place: the first cell that says it wins).
+    const wide = ps.shared ? html` <small class="group-wide">${this.group ? 'pour tout le groupe ' + this.group : 'pour tout l’écran'}</small>` : nothing;
     const kind = controlOf(ps);
     /** @type {unknown} */
     let body = nothing;
     if (kind === 'switch') {
-      return html`<div class="ctl" data-param=${key}><div class="name"><span id=${id}>${ps.label} ${note}</span>
+      return html`<div class="ctl" data-param=${key}><div class="name"><span id=${id}>${ps.label}${wide} ${note}</span>
         <button type="button" class="switch" role="switch" aria-labelledby=${id} aria-checked=${v ? 'true' : 'false'} @click=${() => set(!v)}></button></div></div>`;
     }
     if (kind === 'segmented') {
@@ -428,7 +438,7 @@ export class GfBlockPicker extends LitElement {
         @change=${(/** @type {any} */ e) => { const t = e.target.value.trim(); set(/^\d+$/.test(t) ? Number(t) : null); }} />
         ${this.plant && this.plant !== v ? html`<div class="seg"><button type="button" data-act="fix" @click=${() => set(this.plant)}>${icon('pin-angle-fill')} Fixer la plante courante</button></div>` : nothing}`;
     }
-    return html`<div class="ctl" data-param=${key}><div class="name"><span id=${id}>${ps.label}</span>${note}</div>${body}</div>`;
+    return html`<div class="ctl" data-param=${key}><div class="name"><span id=${id}>${ps.label}${wide}</span>${note}</div>${body}</div>`;
   }
 
   /** Inline: the place's first level — the components, the sheet's blocks, the intents of the one chosen. */

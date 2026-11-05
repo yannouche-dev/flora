@@ -17,7 +17,7 @@
 //     plants only (a family:
 //     Orchidaceae), in each source's own numbers; `precise`: only the points that are where the plant was, at this
 //     radius (vagueAt(point, radius): the others, counted: `vague`); sourcesText(sources), failedText(failed),
-//     obsNotes(counts): in words.
+//     sampleWords(sample), obsNotes(counts): in words.
 // The filters and their translation are pure, tested under Node (tests/unit/observations.test.mjs).
 
 import * as cache from './cache.js';
@@ -61,6 +61,20 @@ export function failedText(failed) {
     off.length > 1 ? `Les modules ${off.join(' et ')} sont désactivés` : off.length ? `Le module ${off[0]} est désactivé` : '',
     down.length ? `${down.join(' et ')} ${down.length > 1 ? 'ne répondent pas' : 'ne répond pas'}` : ''
   ].filter(Boolean).join(' et ');
+}
+
+/**
+ * A zone's observations loaded in part (layout/state.js sample: a source that has more than it gives), in words, each
+ * source as it was asked: iNaturalist's by date (« les 1 000 observations les plus récentes d’iNaturalist sur 4 212 »),
+ * GBIF's one page in no order (« 287 des 5 000 occurrences de GBIF »); '': all of them.
+ * @param {{ inat: { shown: number, total: number } | null, gbif: { shown: number, total: number } | null } | null} sample
+ */
+export function sampleWords(sample) {
+  const n = (/** @type {number} */ v) => v.toLocaleString('fr-FR');
+  return [
+    sample?.inat ? `les ${n(sample.inat.shown)} observations les plus récentes d’iNaturalist sur ${n(sample.inat.total)}` : '',
+    sample?.gbif ? `${n(sample.gbif.shown)} des ${n(sample.gbif.total)} occurrences de GBIF` : ''
+  ].filter(Boolean).join(' ; ');
 }
 
 /**
@@ -193,7 +207,7 @@ export function obsParams(f) {
 export const obsKey = f => obsParams(f).map(([k, v]) => k + '=' + v).join('&');
 
 /**
- * The filters given against the defaults (a layout's sources: its maps'): only what differs, null when nothing does —
+ * The filters given against the defaults (a layout's group's: both sources, but one whose module is off): only what differs, null when nothing does —
  * what the address keeps. @param {ObsFilters} f @param {ObsFilters} defaults @returns {Readonly<Partial<ObsFilters>> | null}
  */
 export function obsChanges(f, defaults) {

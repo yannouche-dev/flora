@@ -15,6 +15,7 @@ const { store } = await import('../../app/core/store.js');
 const { LayoutState } = await import('../../app/layout/state.js');
 const { APP, SearchChannel, emptyQuery } = await import('../../app/core/search-channel.js');
 const { setModule } = await import('../../app/core/modules.js');
+const { sampleWords } = await import('../../app/core/observations.js');
 
 const AIL = { id: 81541, scientificName: 'Allium ursinum', vernacularNames: ['Ail des ours'] };
 const ORTIE = { id: 128268, scientificName: 'Urtica dioica', vernacularNames: ['Ortie dioïque'] };
@@ -117,6 +118,49 @@ test('une plante survolée (une ligne, un point) : son propre événement, jamai
   s.hoverOn(AIL.id, 'list');
   s.dispose();
   assert.equal(s.hover, null);
+});
+
+test('le lieu de départ du groupe : appliqué une fois chacun — une zone ôtée (✕) reste ôtée quand une autre carte en veut un autre', () => {
+  const s = new LayoutState();
+  // The first map's: applied (the address had no zone); a second map's, while the zone is there: not applied, counted.
+  assert.equal(s.applyOnce('lieu:Mirabel'), true);
+  s.set({ place: 'Mirabel' }, 'none');
+  assert.equal(s.applyOnce('lieu:Riom'), true);
+  // Asked again by each map drawn again: never twice.
+  assert.equal(s.applyOnce('lieu:Mirabel'), false);
+  // ✕: no zone. The maps drawn again, in either order: neither applies — the zone stays off.
+  s.setScope(null);
+  assert.equal(s.applyOnce('lieu:Riom'), false);
+  assert.equal(s.applyOnce('lieu:Mirabel'), false);
+  assert.equal(s.applyOnce(null), false);
+  assert.deepEqual([s.live.at, s.live.place], [null, null]);
+  s.dispose();
+});
+
+test('les observations de la zone en partie seulement (plus que la page d’iNaturalist ou de GBIF) : chaque source à part, combien montrées sur combien ; dites comme elles ont été demandées ; toutes, rien', () => {
+  const s = new LayoutState();
+  assert.equal(s.sample, null);
+  const points = (/** @type {number} */ inat, /** @type {number} */ gbif) => /** @type {any} */ ([...Array.from({ length: inat }, (_, i) => ({ id: 'i' + i, kind: 'inat' })),
+    ...Array.from({ length: gbif }, (_, i) => ({ id: 'g' + i, kind: 'gbif' }))]);
+  s.points = points(1000, 290);
+  s.totals = { inat: 1000, gbif: 300 };
+  assert.equal(s.sample, null);
+  assert.equal(sampleWords(s.sample), '');
+  // iNaturalist's past its 1 000: its most recent (asked by date).
+  s.points = points(1000, 0);
+  s.totals = { inat: 4212, gbif: null };
+  assert.deepEqual(s.sample, { inat: { shown: 1000, total: 4212 }, gbif: null });
+  assert.equal(sampleWords(s.sample), 'les 1\u202f000 observations les plus récentes d’iNaturalist sur 4\u202f212');
+  // GBIF's past its page: one page, asked in no order — never « the most recent »; iNaturalist's all, nothing said of it.
+  s.points = points(640, 287);
+  s.totals = { inat: 640, gbif: 5000 };
+  assert.deepEqual(s.sample, { inat: null, gbif: { shown: 287, total: 5000 } });
+  assert.equal(sampleWords(s.sample), '287 des 5\u202f000 occurrences de GBIF');
+  // Both.
+  s.points = points(1000, 287);
+  s.totals = { inat: 4212, gbif: 5000 };
+  assert.equal(sampleWords(s.sample), 'les 1\u202f000 observations les plus récentes d’iNaturalist sur 4\u202f212 ; 287 des 5\u202f000 occurrences de GBIF');
+  s.dispose();
 });
 
 test('ce que montre une carte de la zone : la liste gardée à ses plantes, la recherche relancée seulement quand elles changent ; tout le cercle : la zone ; un autre cercle lâche la vue, une autre période la garde ; « Toute la zone » recadre la carte', async t => {

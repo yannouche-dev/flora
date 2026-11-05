@@ -105,7 +105,7 @@ export class DlObsFilters extends LitElement {
   connectedCallback() { super.connectedCallback(); this.#watched?.addEventListener('change', this.#onChange); }
   disconnectedCallback() { super.disconnectedCallback(); this.#watched?.removeEventListener('change', this.#onChange); }
 
-  /** The layout's defaults (its maps' sources: state.js), against which the address keeps what differs. */
+  /** The group's defaults (both sources, but one whose module is off: state.js), against which the address keeps what differs. */
   get #defaults() { return { ...OBS_DEFAULTS, sources: /** @type {LayoutState} */ (this.state).defaultSources }; }
 
   /** The filters changed: the group's state, the address after it. @param {Partial<ObsFilters>} patch */
