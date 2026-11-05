@@ -23,7 +23,7 @@ import './gf-map-search.js';
 import './gf-point-card.js';
 import { attachGl } from './gf-map-gl.js';
 import { icon, iconHref, iconMarkup } from '../core/icons.js';
-import { inMiniApp } from '../miniapp/quiet-links.js';
+import { inActivity } from '../core/embed-links.js';
 import { cancelImages, chosenGroupMarker, chosenMarker, elem, fadeImg, leafGlyph, leafMarker, markClasses, obsCard, photoMarker, resumeImages, ringElement, speciesKey } from './map-style.js';
 
 /** @typedef {import('./map-style.js').MarkerSpec} MarkerSpec */
@@ -2138,7 +2138,7 @@ export class GfMap extends LitElement {
    */
   #onPoint(dot, p) {
     // Inside a mini-app, no record opened on another site: the point's card only.
-    const how = this.pointClick || (inMiniApp(this) ? 'none' : 'open');
+    const how = this.pointClick || (inActivity(this) ? 'none' : 'open');
     // 'pick' is read at the click: points kept from one step to the next (area.smooth: the games' map, 'none' on the
     // step « map », 'pick' beside the cards) answer as the map says now — not as it said when they were drawn.
     if (how === 'none' || how === 'pick') {

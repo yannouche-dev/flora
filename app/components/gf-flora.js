@@ -18,10 +18,11 @@ import { icon } from '../core/icons.js';
 import { blockTitle, hasColumns } from '../core/sheet-blocks.js';
 
 /**
- * The plant sheet (gf-plant-detail, its maps and media viewer: more code than the rest of the start), loaded the
- * first time a sheet shows, else once the search is ready, when the page is idle (a tap on a result then finds it):
- * the search comes first. Its modules asked all at once when the deployed index.html lists them (tools/preload-modules.mjs),
- * not one level of imports at a time. @type {Promise<unknown> | null}
+ * The plant sheet (gf-plant-detail, its maps and media viewer: more code than the rest of the start; it defines the
+ * pane's block alone too, gf-sheet-block), loaded the first time a sheet shows, else once the search is ready, when
+ * the page is idle (a tap on a result then finds it): the search comes first. Its modules asked all at once when the
+ * deployed index.html lists them (tools/preload-modules.mjs), not one level of imports at a time.
+ * @type {Promise<unknown> | null}
  */
 let sheetModule = null;
 const loadSheet = () => {
@@ -81,7 +82,7 @@ export class GfFlora extends LitElement {
     .pane.block-pane { flex: 1 1 0; }
     .pane.results[hidden] { display: none; }
     .pane.block-pane.full { position: absolute; inset: 0; z-index: 6; }
-    .block-pane gf-plant-detail, .sheet-pane gf-plant-detail { flex: 1; min-height: 0; }
+    .block-pane gf-sheet-block, .sheet-pane gf-sheet-block { flex: 1; min-height: 0; }
     .pane-plant { font-family: var(--gf-font-serif); font-style: italic; font-weight: 500; color: var(--gf-text-muted); margin-left: 4px; }
     .sheet-pane { position: fixed; inset: 0 0 calc(61px + env(safe-area-inset-bottom)) 0; z-index: 901; display: flex; flex-direction: column; background: var(--gf-surface); }
     .sheet-pane .back { font-weight: 600; }
@@ -601,8 +602,9 @@ export class GfFlora extends LitElement {
     // The block as the sheet beside shows it: in the mode arranged there while it is personalised.
     const view = arrangedMode('flore', this.#store.state.mode);
     const route = /** @type {any} */ (this.route);
+    // A photo touched in it (Photos, Médias GBIF): the pane turns to « Médias » at that image.
     return html`<section class=${phone ? 'sheet-pane' : `pane block-pane ${this._paneFull ? 'full' : ''}`} aria-label=${blockTitle(key)}
-        @media-index=${this.#mediaIndex} @media-close=${this.#closePane}>
+        @media-index=${this.#mediaIndex} @media-close=${this.#closePane} @open-pane=${this.#openPane}>
       <div class="pane-head">
         ${phone ? html`<button class="link back" type="button" @click=${this.#closePane}>${icon('arrow-left')} Fiche</button>` : nothing}
         <div class="title">${blockTitle(key)} <span class="pane-plant">${this.#paneName}</span></div>
@@ -610,7 +612,7 @@ export class GfFlora extends LitElement {
           aria-label="Plein écran" @click=${() => { this._paneFull = !this._paneFull; }}>${icon(this._paneFull ? 'fullscreen-exit' : 'arrows-fullscreen')}</button>`}
         <button class="icon-btn" type="button" title="Fermer le panneau" aria-label="Fermer le panneau" @click=${this.#closePane}>${icon('x-lg')}</button>
       </div>
-      <gf-plant-detail embedded only=${key} plant-id=${id} view=${view} .paneAt=${route.at ?? null} .paneStart=${this.#paneStart}></gf-plant-detail>
+      <gf-sheet-block key=${key} plant-id=${id} view=${view} .at=${route.at ?? null} .startUrl=${this.#paneStart}></gf-sheet-block>
     </section>`;
   }
 

@@ -47,8 +47,11 @@ const STAGES = ['Carte', 'Rencontres', 'Photos', 'Encyclopédie', 'Cueillette ou
 /** What each step brings, said on its button in the bar. */
 const STAGE_ABOUT = ['La carte : jusqu’où chercher', 'Les cartes des plantes d’ici, à côté de la carte', 'Les photos de la plante en vue',
   'Ce qu’en dit l’encyclopédie', 'La cueillette ou la science : à vous de choisir', 'Les plantes voisines, sous la carte'];
-/** The fork's pane: the blocks of the sheet that join the panes, picking or science (the first one shown). */
-const FORK_BLOCKS = { harvest: ['uses', 'lookalikes', 'calendar'], science: ['map', 'occurrences', 'climate', 'taxonomy'] };
+/**
+ * The fork's pane: the blocks of the sheet that join the panes, picking or science (the first one shown: « Plantes à
+ * confondre » before Usages, a sosie toxique first). A game already under way keeps the tree it stored.
+ */
+const FORK_BLOCKS = { harvest: ['lookalikes', 'uses', 'calendar'], science: ['map', 'occurrences', 'climate', 'taxonomy'] };
 
 /**
  * A block into the panes (once): a new pane beside another block's pane (or, if that one is in no pane, on the right

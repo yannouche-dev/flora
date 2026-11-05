@@ -12,7 +12,7 @@ const CUT = 'service GBIF coupé pour tout l’appareil';
 const gbifSwitch = page => page.locator('gf-settings').getByRole('checkbox', { name: 'Utilisé sur cet appareil : GBIF' });
 
 /** The sheet open (not the next plant's waiting under it, nor a block alone in a pane). @param {import('@playwright/test').Page} page */
-const sheetOf = page => page.locator('gf-plant-detail:not([preview]):not([only])').first();
+const sheetOf = page => page.locator('gf-plant-detail:not([preview])').first();
 
 /** @param {import('@playwright/test').Page} page @param {string} key */
 const block = (page, key) => sheetOf(page).locator(`.block[data-key="${key}"]`);

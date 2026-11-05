@@ -149,6 +149,8 @@ export class GfMediaViewer extends LitElement {
     :host { display: flex; flex-direction: column; min-height: 0; flex: 1; background: var(--gf-surface); container-type: inline-size; outline: none; }
     .bar { display: flex; align-items: center; gap: 6px; padding: 4px 6px 4px 12px; border-bottom: 1px solid var(--gf-border); min-height: 42px; flex: none; }
     .bar h2 { margin: 0; font-size: 0.95rem; font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+    /* No title (a pane names it): the same room, without an empty heading. */
+    .bar .grow { flex: 1; min-width: 0; }
     .bar .count { color: var(--gf-text-muted); font-variant-numeric: tabular-nums; font-size: 0.85rem; white-space: nowrap; }
     .bar select { font: inherit; font-size: 0.8rem; padding: 2px 6px; border: 1px solid var(--gf-border); border-radius: var(--gf-radius-sm); background: var(--gf-surface); color: var(--gf-text); max-width: 46%; }
     .icon-btn[aria-pressed="true"] { background: var(--gf-accent-soft); color: var(--gf-accent); }
@@ -648,7 +650,7 @@ export class GfMediaViewer extends LitElement {
 
   /** ⤢ (in the sheet): the viewer in the pane, at the image shown. */
   #toPane() {
-    this.dispatchEvent(new CustomEvent('open-pane', { detail: { key: 'media', url: this.#current?.src || null }, bubbles: true, composed: true }));
+    this.dispatchEvent(new CustomEvent('open-pane', { detail: { plantId: this.plantId, key: 'media', url: this.#current?.src || null }, bubbles: true, composed: true }));
   }
 
   /** Mosaic: the scene of an image opened from it; slideshow: the image alone. */
@@ -1093,7 +1095,7 @@ export class GfMediaViewer extends LitElement {
     const kinds = KINDS.filter(([k]) => k === 'all' || this.#alive.some(i => i.kind === k));
     return html`
       ${this.barOut ? nothing : html`<div class="bar">
-        ${this.compact || (this.local && this.label) ? html`${icon('images')}<h2>${this.label || 'Médias'}</h2>` : html`<h2></h2>`}
+        ${this.compact || (this.local && this.label) ? html`${icon('images')}<h2>${this.label || 'Médias'}</h2>` : html`<span class="grow"></span>`}
         ${this.#controls(kinds, item, shown, at)}
         ${this.compact ? html`<button class="icon-btn" type="button" title="Ouvrir en grand, à côté de la fiche" aria-label="Ouvrir les médias en panneau"
           @click=${() => this.#toPane()}>${icon('arrows-angle-expand')}</button>` : nothing}

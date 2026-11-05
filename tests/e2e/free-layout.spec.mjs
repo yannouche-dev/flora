@@ -159,7 +159,7 @@ test.describe('un grand écran', () => {
     const id = plantId(ORTIE);
     await expect.poll(() => param(page, 'p')).toBe(String(id));
     for (const comp of ['plant.wikipedia', 'plant.calendar']) {
-      await expect(cellOf(page, comp).locator('gf-plant-detail')).toHaveAttribute('plant-id', String(id));
+      await expect(cellOf(page, comp).locator('gf-sheet-block')).toHaveAttribute('plant-id', String(id));
       await expect(cellOf(page, comp).locator('.sub')).toContainText('Ortie dioïque');
     }
     // Its big points: its own among the zone's observations (its two, as its row counts) — never asked apart.
@@ -171,11 +171,11 @@ test.describe('un grand écran', () => {
     await expect(cellOf(page, 'plant.wikipedia').locator('.placeholder')).toBeVisible();
     await page.goForward();
     await expect.poll(() => param(page, 'p')).toBe(String(id));
-    await expect(cellOf(page, 'plant.calendar').locator('gf-plant-detail')).toHaveAttribute('plant-id', String(id));
+    await expect(cellOf(page, 'plant.calendar').locator('gf-sheet-block')).toHaveAttribute('plant-id', String(id));
     // A reload: the same screen (the plant, the search, the scope).
     await page.reload();
     await app.ready();
-    await expect(cellOf(page, 'plant.wikipedia').locator('gf-plant-detail')).toHaveAttribute('plant-id', String(id));
+    await expect(cellOf(page, 'plant.wikipedia').locator('gf-sheet-block')).toHaveAttribute('plant-id', String(id));
     await expect.poll(async () => (await screenSearch(page))?.query.q).toBe('ortie');
     expect(await app.state('query.q')).toBe('');
     await expect.poll(() => found(page)).toBe(1);
@@ -198,7 +198,7 @@ test.describe('un grand écran', () => {
     await expect.poll(() => param(page, 'p')).not.toBe(null);
     expect(NEAR.map(plantId).map(String)).toContain(await param(page, 'p'));
     await expect.poll(() => param(page, 'o')).toMatch(/^7\d\d$/);
-    await expect(cellOf(page, 'plant.status').locator('gf-plant-detail')).toHaveAttribute('plant-id', /** @type {string} */ (await param(page, 'p')));
+    await expect(cellOf(page, 'plant.status').locator('gf-sheet-block')).toHaveAttribute('plant-id', /** @type {string} */ (await param(page, 'p')));
     // No scope: the whole flora again.
     await page.locator('dl-map').getByRole('button', { name: 'Toute la France (sans zone)' }).click();
     await expect.poll(() => param(page, 'at')).toBe(null);
@@ -211,14 +211,14 @@ test.describe('un grand écran', () => {
     const top = page.locator('dl-deck ma-deck .swipe-card.top');
     await expect(top).toHaveAttribute('data-id', String(plantId(AIL)));
     await expect.poll(() => param(page, 'p')).toBe(String(plantId(AIL)));
-    await expect(cellOf(page, 'plant.status').locator('gf-plant-detail')).toHaveAttribute('plant-id', String(plantId(AIL)));
+    await expect(cellOf(page, 'plant.status').locator('gf-sheet-block')).toHaveAttribute('plant-id', String(plantId(AIL)));
     // A heart: a favourite, and the next card is the current plant.
     await page.locator('dl-deck ma-deck .round.like').click();
     await expect.poll(() => page.evaluate(async () => (await import('/app/core/collections.js')).isFavorite(81541))).toBe(true);
     await expect(top).not.toHaveAttribute('data-id', String(plantId(AIL)));
     const next = await top.getAttribute('data-id');
     await expect.poll(() => param(page, 'p')).toBe(next);
-    await expect(cellOf(page, 'plant.status').locator('gf-plant-detail')).toHaveAttribute('plant-id', /** @type {string} */ (next));
+    await expect(cellOf(page, 'plant.status').locator('gf-sheet-block')).toHaveAttribute('plant-id', /** @type {string} */ (next));
     // A plant chosen elsewhere (a link to it): on top of the deck.
     await app.go(`#/layout/[map(r=500m),deck,plant.status]?p=${plantId(ORTIE)}&${AT}&r=500m`);
     await expect(top).toHaveAttribute('data-id', String(plantId(ORTIE)));
@@ -604,7 +604,7 @@ test('une première visite : les cases de la plante attendent la flore, puis la 
   release();
   await app.ready();
   for (const comp of ['media', 'plant.name']) await expect(cellOf(page, comp).locator('.sub')).toContainText('Ail des ours');
-  await expect(cellOf(page, 'plant.name').locator('gf-plant-detail')).toContainText('Allium ursinum');
+  await expect(cellOf(page, 'plant.name').locator('gf-sheet-block')).toContainText('Allium ursinum');
   await expect(cellOf(page, 'media').locator('gf-media-viewer')).toHaveAttribute('plant-id', String(id));
   await expect(cellOf(page, 'media').locator('gf-media-viewer .empty', { hasText: 'introuvable' })).toHaveCount(0);
   await expect(cellOf(page, 'media')).not.toContainText('Plante introuvable');
@@ -688,7 +688,7 @@ test.describe('un téléphone', () => {
     await page.locator('dl-search gf-plant-card a.row').first().click();
     await expect(tabs.nth(2)).toHaveAttribute('aria-selected', 'true');
     await expect(tabs.nth(2)).toHaveClass(/\bbrought\b/);
-    await expect(cellOf(page, 'plant.wikipedia').locator('gf-plant-detail')).toHaveAttribute('plant-id', String(plantId(AIL)));
+    await expect(cellOf(page, 'plant.wikipedia').locator('gf-sheet-block')).toHaveAttribute('plant-id', String(plantId(AIL)));
     await expect(tabs.nth(2)).not.toHaveClass(/\bbrought\b/);
     // The rows of the tab, one under the other, side by side never.
     const [w, c] = await Promise.all([cellOf(page, 'plant.wikipedia'), cellOf(page, 'plant.calendar')].map(box));

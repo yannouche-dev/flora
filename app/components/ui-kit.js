@@ -7,6 +7,7 @@
 import { css, html, nothing } from 'lit';
 import { fr } from '../core/fr.js';
 import { icon } from '../core/icons.js';
+import { href } from '../core/router.js';
 
 /**
  * A sheet from the bottom (<dialog class="drawer">): the whole width on a phone, at most --drawer-w wide (520px) and
@@ -71,3 +72,9 @@ export const severityStyles = css`
   .sev-chip.danger { background: var(--gf-danger-bg); color: var(--gf-danger); }
   .sev-chip.deadly { background: var(--gf-deadly); color: var(--gf-deadly-contrast); }
 `;
+
+/**
+ * « Photos en ligne » switched off (Réglages › Modules): the one line said where photos would be — in the sheet (Photos,
+ * Médias, Médias GBIF), a block alone, a screen's Médias cell —, the way back to it in it.
+ */
+export const photosOffLine = () => html`Photos en ligne désactivées (<a href=${href.settings()}>Réglages › Modules</a>).`;

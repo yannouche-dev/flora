@@ -2,7 +2,7 @@
 // What to do after eating a plant: the Centres antipoison (their official list) and the emergency numbers, one line
 // (`.sos`) wherever a confusion or a toxicity is shown — the look-alikes (gf-lookalikes), the plant sheet, quick
 // capture, the mini-apps' lists and Faux amis. Kept out of core/lookalikes.js, which stays free of lit (tested under
-// Node, imported widely). The `.sos` class is what a mini-app keeps as a link (miniapp/quiet-links.js).
+// Node, imported widely). The `.sos` class is what a mini-app keeps as a link (core/embed-links.js).
 
 import { html } from 'lit';
 

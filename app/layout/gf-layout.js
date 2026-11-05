@@ -50,8 +50,8 @@
 //  - An « Emplacement » (slot), in use or modified: a place to build a component in — the block picker's first level
 //    drawn in it (its tiles, then the intents of the one chosen), one tap and the place is that component.
 //  - A link to a plant's sheet in a cell (a result, a look-alike in the sheet) makes it the current plant instead of
-//    leaving (unless the cell says otherwise: toucher=fiche, ecrit=0, toucher=rien); a block opened from the sheet (⤢)
-//    that a cell already shows: that cell, flashed.
+//    leaving (unless the cell says otherwise: toucher=fiche, ecrit=0, toucher=rien) (core/embed-links.js); a block
+//    opened from the sheet (⤢) that a cell already shows: that cell, flashed.
 //  - The frame every cell shares (registry.js#FRAME): its head whole, its title alone or none (tete), a title of its
 //    own (titre), the actions of its head (agrandir: over the screen, Échap returns; replier: folded to its head, its
 //    share to the others, never in the address; partager: a link to a layout of this cell alone, the same state), the
@@ -61,6 +61,7 @@
 import { LitElement, html, css, nothing, repeat } from 'lit';
 import { closeTo, depth, entryValue, markEntry, openView, pushHash, renewBehind, replaceHash, replaceView, sheetMark } from '../core/history.js';
 import { href } from '../core/router.js';
+import { embedLinks } from '../core/embed-links.js';
 import { letGoSuggestions, toHash } from '../core/query.js';
 import { arrivedAt } from '../core/discover.js';
 import { getPlant, nameOf } from '../core/plants.js';
@@ -335,7 +336,7 @@ export class GfLayout extends LitElement {
        the controls in use (dl-map, dl-results, dl-deck). */
     .cell-body { flex: 1; min-height: 0; display: flex; flex-direction: column; position: relative; }
     .cell-body > * { flex: 1; min-height: 0; }
-    .cell-body gf-plant-detail { overflow-y: auto; }
+    .cell-body gf-plant-detail, .cell-body gf-sheet-block { overflow-y: auto; }
     .cell-body .scroll { overflow-y: auto; }
     .cell-body .pad { padding: 0 12px; }
     .placeholder { display: grid; align-content: center; justify-items: center; gap: 6px; padding: 16px; text-align: center; font-size: 0.9rem; overflow-y: auto; }
@@ -482,20 +483,16 @@ export class GfLayout extends LitElement {
     this._copied = false;
     // A link to a plant's sheet in a cell: that plant becomes the current one, the layout stays — unless the cell says
     // otherwise (toucher=fiche, ecrit=0: the sheet opens, as a link; toucher=rien: nothing).
-    this.addEventListener('click', e => {
-      if (e.defaultPrevented || e.button !== 0 || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;
-      const path = e.composedPath();
-      const a = /** @type {HTMLAnchorElement | undefined} */ (path.find(n => n instanceof HTMLAnchorElement && n.hasAttribute('href')));
-      // One marked data-open (the map's current plant ↗): its sheet opened, as any link.
-      const m = a && !a.hasAttribute('data-open') && /^#\/plant\/(\d+)(?:\?|$)/.exec(a.getAttribute('href') || '');
-      if (!m) return;
+    // Picked from a block over the page (⤢): that dialog closed, Back returns to the plant before (toucher=rien: it stays).
+    embedLinks(this, { plant: (id, path) => {
       const at = /** @type {HTMLElement | undefined} */ (path.find(n => n instanceof HTMLElement && n.matches('section.cell[data-cell]')));
       const r = at ? this.#shown.cells.get(/** @type {string} */ (at.dataset.cell)) : undefined;
       const touch = r ? touchOf(r) : null;
-      if (touch === 'fiche') return;
-      e.preventDefault();
-      if (touch !== 'rien') (r ? this.#stateOf(r) : this.#state).pick(Number(m[1]));
-    });
+      if (touch === 'fiche') return false;
+      if (touch === 'rien') return 'kept';
+      (r ? this.#stateOf(r) : this.#state).pick(id);
+      return 'opened';
+    } });
     // A cell that has nothing to show, or something again (the deck: its cards), for a cell hidden meanwhile (vide=masque).
     this.addEventListener('cell-empty', e => {
       const at = /** @type {HTMLElement | undefined} */ (e.composedPath().find(n => n instanceof HTMLElement && n.matches('section.cell[data-cell]')));

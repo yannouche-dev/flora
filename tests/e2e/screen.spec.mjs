@@ -454,7 +454,7 @@ test.describe('un grand écran', () => {
     await expect(menu.getByRole('link', { name: 'Composer un écran' })).toBeVisible();
     release();
     // The deck's first card, the current plant: the sheet's photos block drawn — the focus left where it was, ⋯ open.
-    const viewer = cellAt(page, '1').locator('gf-plant-detail gf-media-viewer');
+    const viewer = cellAt(page, '1').locator('gf-sheet-block gf-media-viewer');
     await expect(viewer).toHaveAttribute('plant-id', /\d+/);
     await expect(viewer.locator('.bar')).toBeAttached();
     await expect(page.locator('gf-layout .more-menu summary')).toBeFocused();

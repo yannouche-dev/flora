@@ -4,7 +4,8 @@
 // blocks there once — a block moved stays where it was put), its ⋯ shows or hides the steps of that mini-app alone
 // (and says so on screen), the plants seen count in every mini-app, its guided way is decided as its game begins and
 // ends with the first steps, and the harvest mode never chosen follows the harvests that arrive (the value a version
-// before wrote by itself no choice).
+// before wrote by itself no choice). Its picking pane opens on « Plantes à confondre » (no map among its panes: nothing to
+// compare on one), and a sosie touched there is the plant chosen, in the game.
 // Rencontres' services answered here.
 import { test, expect, plantId, answerAround } from './fixtures.mjs';
 
@@ -164,6 +165,21 @@ test.describe('premier lancement', () => {
       expect(await whole(app)).toEqual(before);
     });
   }
+
+  test('la Cueillette s’ouvre sur « Plantes à confondre », sans carte à comparer ; un sosie touché devient la plante choisie, Flore toujours à venir', async ({ app, page }) => {
+    await app.open('#/app/rencontres');
+    const g = await toTheFork(page, 'harvest');
+    await expect(g.getByRole('tab', { name: 'Plantes à confondre' })).toHaveAttribute('aria-selected', 'true');
+    const box = g.locator('gf-plant-detail gf-lookalikes');
+    await expect(box).toContainText('Colchique');
+    // No map among its panes: the sosies' « Comparer sur la carte » would lead nowhere.
+    await expect(g.getByRole('button', { name: /Comparer sur la carte/ })).toHaveCount(0);
+    // Muguet (a species: a link to its sheet) touched: chosen in the game (core/embed-links.js), never Flore.
+    await box.getByRole('link', { name: 'Muguet' }).click();
+    await expect.poll(() => page.evaluate(() => new URLSearchParams(location.hash.split('?')[1] || '').get('p'))).toBe(String(plantId('Convallaria majalis')));
+    expect(await hash(page)).toMatch(/^#\/app\/rencontres\//);
+    expect((await discover(page)).unlocked).not.toContain('flore');
+  });
 
   test('la fiche d’une activité ne se personnalise pas : ni couronne ni barre de mise en page, même ouverte dans Flore ; la mise en page du mode intacte', async ({ app, page }) => {
     await app.open('#/app/rencontres');

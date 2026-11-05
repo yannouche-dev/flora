@@ -16,9 +16,9 @@
 //    panel, opened by the funnel) and its list; filters and results: each part alone. They read and write the search
 //    of their group (its channel, core/search-channel.js: the screen's own, never Flore's); the scope keeps it to its
 //    plants (state.js);
-//  - plant: the plant sheet (gf-plant-detail), whole or one block (plant.wikipedia: its `only`) — its maps about
-//    « Les résultats », those of its group's search; media: the photos' viewer (gf-media-viewer). Each shows the
-//    current plant;
+//  - plant: the plant sheet (gf-plant-detail), whole or one block (plant.wikipedia: a block alone, gf-sheet-block) —
+//    its maps about « Les résultats », those of its group's search; media: the photos' viewer (gf-media-viewer). Each
+//    shows the current plant;
 //  - deck: Rencontres' cards (miniapp/kit/ma-deck.js) for the plants found in the scope, the one on top the current
 //    plant; a heart: a favourite.
 // What is done in a cell with its own controls is kept in the layout (`cell-param` {key: value…}, gf-layout.js: the
@@ -26,7 +26,7 @@
 // period, « Seule », legend, binoculars (« Observations autour » in 3D), its points' sources and the current plant's
 // (« Sur cette carte » of its panel ▦), and its view (vue=: while the screen is modified, any map's; in use, the one
 // leading the list's); the search's filters opened; the results as a list or a grid.
-// A link to a plant's sheet anywhere in a cell (a result, a look-alike) makes it the current plant (gf-layout.js).
+// A link to a plant's sheet anywhere in a cell (a result, a look-alike) makes it the current plant (gf-layout.js, core/embed-links.js).
 // The frame every cell shares (registry.js#FRAME: its head, its actions, its empty state) is gf-layout.js'; its links
 // are honoured here: a plant of its own (plante=: renderCell), the whole flora instead of the zone (results zone=0:
 // DlResults, state.js#wholeOf), a card touched and the swipes (toucher, ecrit=0: DlDeck); the deck tells the layout
@@ -47,6 +47,7 @@ import { cachedThumb, thumbUrl } from '../core/thumb.js';
 import { hintView, takeHint } from '../core/hints.js';
 import { addFavorite, forgetFavoriteEntry, isFavorite } from '../core/collections.js';
 import { ui } from '../styles/ui.js';
+import { photosOffLine } from '../components/ui-kit.js';
 import { DISTANCES, distanceAt, distanceEvents, distanceKey } from '../miniapp/kit/cards.js';
 import { pushHash } from '../core/history.js';
 import { addCatalogLayer, defaultOpacity, isOverlay } from '../core/ign.js';
@@ -69,6 +70,7 @@ import '../components/gf-filter-panel.js';
 import './obs-filters.js';
 import '../components/gf-plant-list.js';
 import '../components/gf-plant-detail.js';
+import '../components/gf-sheet-block.js';
 import '../components/gf-media-viewer.js';
 import '../miniapp/kit/ma-deck.js';
 
@@ -1731,10 +1733,10 @@ export function renderCell(r, ctx) {
     // it is (⋯ open, a search being typed); nothing to close.
     return moduleOn('photos')
       ? html`<gf-media-viewer local plant-id=${plant} presentation=${r.params.style ?? blockStyle(/** @type {any} */ (view), 'media')}></gf-media-viewer>`
-      : html`<p class="placeholder quiet">Photos en ligne désactivées (<a href=${href.settings()}>Réglages › Modules</a>).</p>`;
+      : html`<p class="placeholder quiet">${photosOffLine()}</p>`;
   }
   // Among the cells (local): its photos block (plant.media) drawn by itself never takes the focus either.
   return r.view
-    ? html`<gf-plant-detail embedded subheading local only=${r.view.key} plant-id=${plant} view=${view} .channel=${channel}></gf-plant-detail>`
-    : html`<gf-plant-detail embedded subheading local plant-id=${plant} view=${view} .channel=${channel}></gf-plant-detail>`;
+    ? html`<gf-sheet-block local key=${r.view.key} plant-id=${plant} view=${view} .channel=${channel}></gf-sheet-block>`
+    : html`<gf-plant-detail embedded subheading plant-id=${plant} view=${view} .channel=${channel}></gf-plant-detail>`;
 }

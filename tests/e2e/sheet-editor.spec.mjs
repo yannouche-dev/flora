@@ -57,7 +57,7 @@ test('la couronne ouvre la mise en page sur sa fiche seulement, pour la visite',
 
   // A block alone, in the pane beside (⤢): read, not arranged.
   await app.go(`#/plant/${ORTIE}?pane=map`);
-  const alone = page.locator('gf-plant-detail[only]');
+  const alone = page.locator('gf-flora gf-sheet-block');
   await expect(alone).toHaveCount(1);
   await expect(alone.locator('.king-bar, .act.crown, .block-title .grip')).toHaveCount(0);
 
@@ -776,7 +776,7 @@ test('Réglages › « Tout rétablir » : tout revient par défaut, dans tous l
 test('Réglages › Mise en page de la fiche : le bouton, le fichier, « Tout rétablir », rien d’autre ; « Personnaliser la fiche » ouvre la dernière plante lue, la couronne allumée', async ({ app, page }) => {
   // The last plant read with a block alone beside it (?pane=): the sheet itself is opened.
   await app.open(`#/plant/${ORTIE}?pane=map`);
-  await expect(page.locator('gf-plant-detail[only]')).toHaveCount(1);
+  await expect(page.locator('gf-flora gf-sheet-block')).toHaveCount(1);
   await app.go('#/settings');
   const box = card(page);
   await expect(box.locator('button')).toHaveText([/Personnaliser la fiche/, /Exporter la mise en page/, /Tout rétablir/]);

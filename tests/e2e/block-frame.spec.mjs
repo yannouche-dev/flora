@@ -8,8 +8,8 @@
 // at its end, nor results zone=0 « Aucune plante… », its grid sorted from the keyboard keeping its focus, headers and rows —
 // twice before its answer, reversed; another screen's rows never shown; nor « Aucune plante… » of an empty search said of
 // the next one before its answer), its links (plante=: a plant of its own, whatever the current one; results zone=0: the whole flora whatever the
-// zone; toucher=fiche: a result opens its sheet; toucher=rien: nothing), and the editor's « Cadre » writing them in the
-// address. iNaturalist answered as in free-layout.spec.mjs: 12 plants around.
+// zone; toucher=fiche: a result — or a sosie in the sheet — opens its sheet; toucher=rien: nothing, a dialog over the page left
+// open; a sosie chosen over the page, ⤢, closes that dialog), and the editor's « Cadre » writing them in the address. iNaturalist answered as in free-layout.spec.mjs: 12 plants around.
 import { test, expect, plantId, answerAround } from './fixtures.mjs';
 import { layoutOf, screen, screenSearch } from './app.mjs';
 
@@ -154,7 +154,7 @@ test.describe('un grand écran', () => {
     await row.click();
     await expect.poll(() => param(page, 'p')).toBe(id);
     await expect(wiki).toBeVisible();
-    await expect(wiki.locator('gf-plant-detail')).toHaveAttribute('plant-id', id);
+    await expect(wiki.locator('gf-sheet-block')).toHaveAttribute('plant-id', id);
     expect((await box(wiki)).width).toBeGreaterThan(grid.width / 4);
     // Back: no plant, hidden again.
     await page.goBack();
@@ -334,8 +334,8 @@ test.describe('un grand écran', () => {
     const ortie = plantId(ORTIE), ail = plantId(AIL);
     await app.open(`#/layout/[results(list),plant.status(plante=${ail}),plant.calendar]?p=${ortie}&q=allium`);
     const fixed = cellOf(page, 'plant.status'), cal = cellOf(page, 'plant.calendar');
-    await expect(fixed.locator('gf-plant-detail')).toHaveAttribute('plant-id', String(ail));
-    await expect(cal.locator('gf-plant-detail')).toHaveAttribute('plant-id', String(ortie));
+    await expect(fixed.locator('gf-sheet-block')).toHaveAttribute('plant-id', String(ail));
+    await expect(cal.locator('gf-sheet-block')).toHaveAttribute('plant-id', String(ortie));
     // Its head: a pin, its own plant's names.
     await expect(fixed.locator('.cell-head .pin')).toBeVisible();
     await expect(fixed.locator('.cell-head .sub')).toContainText('Plante fixée');
@@ -344,8 +344,8 @@ test.describe('un grand écran', () => {
     await cellOf(page, 'results').locator('gf-plant-card a.row').first().click();
     await expect.poll(() => param(page, 'p')).not.toBe(String(ortie));
     const now = /** @type {string} */ (await param(page, 'p'));
-    await expect(cal.locator('gf-plant-detail')).toHaveAttribute('plant-id', now);
-    await expect(fixed.locator('gf-plant-detail')).toHaveAttribute('plant-id', String(ail));
+    await expect(cal.locator('gf-sheet-block')).toHaveAttribute('plant-id', now);
+    await expect(fixed.locator('gf-sheet-block')).toHaveAttribute('plant-id', String(ail));
   });
 
   test('zone=0 : des résultats sur toute la France, à côté d’une recherche gardée à la zone', async ({ app, page }) => {
@@ -418,6 +418,47 @@ test.describe('un grand écran', () => {
     await app.go('#/layout/[results(list,ecrit=0),plant.calendar]?q=ortie');
     await cellOf(page, 'results').locator('gf-plant-card a.row').first().click();
     await expect.poll(() => hash(page)).toMatch(/^#\/plant\/\d+/);
+  });
+
+  test('un sosie dans une case : la plante courante (ou sa fiche, ou rien, selon toucher) ; choisi par-dessus la page (⤢), ce panneau fermé', async ({ app, page }) => {
+    // Muguet: a species of the flora, a link to its sheet (Colchique, a genus, leads to Flore's search).
+    const ail = String(plantId(AIL)), muguet = String(plantId('Convallaria majalis'));
+    const sosie = (/** @type {string} */ comp) => cellOf(page, comp).locator('gf-lookalikes').getByRole('link', { name: 'Muguet' });
+    await app.open(`#/layout/[results(list),plant.lookalikes]?p=${ail}`);
+    await sosie('plant.lookalikes').click();
+    await expect.poll(() => param(page, 'p')).toBe(muguet);
+    expect(await hash(page)).toMatch(/^#\/layout\//);
+    await page.goBack();
+    await expect.poll(() => param(page, 'p')).toBe(ail);
+    await app.go(`#/layout/[plant.lookalikes(toucher=fiche)]?p=${ail}`);
+    await sosie('plant.lookalikes').click();
+    await expect.poll(() => hash(page)).toBe(`#/plant/${muguet}`);
+    await app.go(`#/layout/[plant.lookalikes(toucher=rien)]?p=${ail}`);
+    const still = await hash(page);
+    await sosie('plant.lookalikes').click();
+    await page.waitForTimeout(300);
+    expect(await hash(page)).toBe(still);
+    // Over the page (⤢) in a cell where a tap does nothing: nothing chosen, the block still read there.
+    await app.go(`#/layout/[plant(toucher=rien)]?p=${ail}`);
+    const quiet = cellOf(page, 'plant').locator('gf-plant-detail');
+    await quiet.getByRole('button', { name: 'Ouvrir « Plantes à confondre » en panneau' }).click();
+    await expect(quiet.locator('dialog.pane')).toHaveAttribute('open', '');
+    const kept = await hash(page);
+    await quiet.locator('dialog.pane gf-lookalikes').getByRole('link', { name: 'Muguet' }).click();
+    await page.waitForTimeout(300);
+    expect(await hash(page)).toBe(kept);
+    await expect(quiet.locator('dialog.pane')).toHaveAttribute('open', '');
+    // The whole sheet: ⤢ on « Plantes à confondre », over the page; a sosie chosen there closes it.
+    await app.go(`#/layout/[plant]?p=${ail}`);
+    const sheet = cellOf(page, 'plant').locator('gf-plant-detail');
+    await sheet.getByRole('button', { name: 'Ouvrir « Plantes à confondre » en panneau' }).click();
+    await expect(sheet.locator('dialog.pane')).toHaveAttribute('open', '');
+    await sheet.locator('dialog.pane gf-lookalikes').getByRole('link', { name: 'Muguet' }).click();
+    await expect.poll(() => param(page, 'p')).toBe(muguet);
+    await expect(sheet.locator('dialog.pane[open]')).toHaveCount(0);
+    await page.goBack();
+    await expect.poll(() => param(page, 'p')).toBe(ail);
+    await expect(sheet.locator('dialog.pane[open]')).toHaveCount(0);
   });
 
   test('en modification : « Cadre » et « Liens » dans le choix du contenu, écrits dans l’adresse ; l’écran en usage les montre', async ({ app, page }) => {
