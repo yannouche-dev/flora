@@ -1105,6 +1105,9 @@ export class SheetBase extends LitElement {
   /** ⤢ and a photo touched open a block at full size (_openPane). */
   get _canOpenPane() { return true; }
 
+  /** Usages shown alone (gf-sheet-block): « Plantes à confondre » under its Prudence. */
+  get _usesBox() { return false; }
+
   /**
    * A block at full size (⤢ on the block, a photo touched for « Médias »): asked to the host first (open-pane, cancelable)
    * — Flore shows it in a pane in place of the results (a phone: over the sheet), a screen flashes the cell that shows
@@ -2137,7 +2140,7 @@ export class SheetBase extends LitElement {
     // The pair's severity, on both sides: the toxic side is the dangerous plant itself, even without ANSM or TPPT data.
     const confusions = /** @type {import('../core/lookalikes.js').Lookalike[]} */ (Array.isArray(o.confusions) ? o.confusions : []);
     const toxicSide = confusions.filter(l => l.side === 'toxic'), edibleSide = confusions.filter(l => l.side === 'edible');
-    const see = html` Voir « ${blockTitle('lookalikes')} ». <span class="src">Anses, Centres antipoison</span>`;
+    const see = html` Voir « ${blockTitle('lookalikes')} »${this._usesBox ? ' ci-dessous' : ''}. <span class="src">Anses, Centres antipoison</span>`;
     if (toxicSide.length) out.push({ level: levelOf('toxic-side'), text: html`<b>Plante ${gravest(toxicSide).plant}</b>, confondue avec ${[...new Set(toxicSide.flatMap(l => l.others.map(x => x.label)))].join(', ')}.${see}` });
     // TPPT in French; the base's own words on hover (levelEn, partsEn). Level 0: listed, toxicity to humans unknown. A
     // plant kept toxic by hand against the base (`reviewed`): its reason on hover, and the review as its source.
@@ -2156,6 +2159,19 @@ export class SheetBase extends LitElement {
     return { verdict, items: out.sort((a, b) => rank(b.level) - rank(a.level)) };
   }
 
+  /**
+   * Usages shown alone: « Plantes à confondre » under its Prudence — the one never without the other. Direct children
+   * of the block's content: the box hidden, its line « Aucune confusion… » shown (.if-empty). Prudence's « Réessayer »
+   * reads it again (every gf-lookalikes of the block), its own asks Prudence again (safety-retry). @param {any} plant
+   */
+  #lookalikesBox(plant) {
+    const v = this._view;
+    return html`<h3>${blockTitle('lookalikes')}</h3>
+      <gf-lookalikes .plant=${plant} ?compact=${baseOf(v) === 'epure'} ?detailed=${baseOf(v) === 'scientific'}
+        @safety-retry=${() => this.#retrySafety(false)}></gf-lookalikes>
+      <p class="muted if-empty">${NO_CONFUSION}</p>`;
+  }
+
   /** « Usages et cuisine sauvage »: safety first, then sourced uses, parts and products, dishes and recipes. @param {any} ctx */
   #uses({ plant }) {
     const o = this._open;
@@ -2171,13 +2187,13 @@ export class SheetBase extends LitElement {
         const tox = (/** @type {any[]} */ (o.safety?.ansm || [])).some(a => a.list === 'B' || a.toxicParts) || o.safety?.tppt
           || (Array.isArray(o.confusions) && o.confusions.some(l => l.side === 'toxic'));
         const none = o.safety !== undefined && o.safety !== UNREAD && Array.isArray(o.confusions) && !tox;
-        if (!danger.length && !none) return nothing;
         // The verdict's chip on top: the same word and colour as the badge of Alertes and the plant's cards.
-        return html`${danger.length ? html`<div class="prudence ${rank(verdict.level) >= rank('danger') ? 'grave' : ''}">
+        const prudence = !danger.length && !none ? nothing : html`${danger.length ? html`<div class="prudence ${rank(verdict.level) >= rank('danger') ? 'grave' : ''}">
           <p class="verdict">${severityChip(verdict)}</p>
           <ul>${danger.map(d => html`<li data-level=${d.level}>${icon(rank(d.level) >= rank('danger') ? 'exclamation-octagon-fill' : 'exclamation-triangle-fill')}<span>${d.text}</span></li>`)}</ul>
           <p class="small">En cas de doute, ne la consommez pas. ${emergency()}. <span class="src">Anses</span></p>
         </div>` : nothing}${none ? html`<p class="small no-tox">Aucune donnée de toxicité dans nos sources (ANSM, TPPT) : cela ne veut pas dire qu’elle est comestible ni sans danger. En cas de doute, ne la consommez pas.</p>` : nothing}`;
+        return this._usesBox ? html`${prudence}${this.#lookalikesBox(plant)}` : prudence;
       },
       uses: () => {
         const head = html`<h3>${danger.length ? 'Usages rapportés (non vérifiés, voir Prudence)' : 'Usages rapportés (non vérifiés)'}</h3>`;

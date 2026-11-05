@@ -7,7 +7,8 @@
 // heading of level 2 that looks like the sheet's h1 (a block alone is always under its host's own title). It never
 // draws the sheet's layout (King, the crown, the action bar, the rubrics, the table of contents), never sets the
 // page's title, never writes the place read nor the panels opened (sheet-session.js: it reads the themes opened and
-// « Mes lieux » unfolded, as the sheet left them), never takes the « Page web » pane.
+// « Mes lieux » unfolded, as the sheet left them), never takes the « Page web » pane. Usages alone always carries the
+// « Plantes à confondre » box under its Prudence (out of sight, the sheet's own block warns no one).
 //  - key: a block of the sheet (BLOCKS), a Note block (note:<id>) or a Carte block (map:<id>);
 //  - view: the mode, as its host resolves it (Flore: the mode arranged on its sheet; a cell: its mode= or the app's;
 //    over the page: the sheet's; the simple sheet: Épuré);
@@ -90,6 +91,9 @@ export class GfSheetBlock extends SheetBase {
   /** No map beside it: what the sheet's map would show stays text (Occurrences' areas, months, sources; the sosies). */
   get _hasMap() { return false; }
 
+  /** Usages alone: « Plantes à confondre » under its Prudence, always. */
+  get _usesBox() { return this.key === 'uses'; }
+
   /** To a theme of the article (its menu): opened, then brought to the top of the block. @param {string} key */
   async goTo(key) {
     await super.goTo(key);
@@ -128,6 +132,7 @@ export class GfSheetBlock extends SheetBase {
       return ctx.photosOff ? html`<p class="muted only-pad">${photosOffLine()}</p>`
         : html`<gf-media-viewer ?local=${this.local} plant-id=${ctx.plant.id} presentation=${blockStyle(v, 'media')} .index=${this.at ?? 0} .startUrl=${this.startUrl}></gf-media-viewer>`;
     }
+    // Never Usages (its box hides itself when empty: never Prudence with it).
     const empty = this.titled && key !== 'uses' && hidesEmpty(v, key);
     if (empty && this._emptyHere(key, ctx)) return nothing;
     const title = this.titled && isTitleShown(v, key) ? html`<h3 class="block-title"><span class="name">${blockTitle(key)}</span></h3>` : nothing;
