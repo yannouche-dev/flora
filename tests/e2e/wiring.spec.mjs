@@ -1,10 +1,16 @@
 // « Écran sur mesure » : cells that mirror each other (state.js, cells.js dl-map). The list is the map's: the map
 // shows the zone's observations (iNaturalist's latest, of the period), the list their plants (one each, the flora's),
 // and a filter keeps both to its plants; the period is every cell's (periode= in the address: the zone's observations
-// that month, their plants the results); a map of France and one of the world (portee=) show where the same plants
-// were observed (iNaturalist's tiles, their taxa), the current plant's on top; a plant chosen outside the zone's list
-// still has its observations in the zone (its taxon found by its name). The zone's filters say which observations, every
-// one by default (no quality grade): the zone's, the current plant's, the tiles of France and the world alike.
+// that month, their plants the results) — while they come, the map, the list and their counts kept, dimmed (« Mise à
+// jour… »: the map's tiles and points, the list's rows, never the map's controls nor the line saying the wait), then
+// replaced together; another circle's map never the old one's points; a map of France and one of the world (portee=)
+// show where the same plants were observed (iNaturalist's tiles, their taxa), the current plant's on top — and say
+// what they leave out (without a zone, too many plants: every one, spoken once; names iNaturalist has not, never one it
+// did not answer for); a plant chosen outside the zone's list still has its observations in the zone (its taxon found
+// by its name), said on the map; the plant chosen stays chosen when another search no longer finds it (« hors du
+// résultat », whole on a phone's narrow head), Back takes it away. The
+// zone's filters say which observations, every one by default (no quality grade): the zone's, the current plant's, the
+// tiles of France and the world alike.
 // iNaturalist answered here: 12 plants around; GBIF: nothing of its own in the zone (both sources asked by default).
 import { test, expect, plantId, answerZoneGbif } from './fixtures.mjs';
 import { mapState } from './quiet.mjs';
@@ -111,6 +117,54 @@ test.describe('un grand écran', () => {
     await expect(page.locator('dl-map').getByRole('button', { name: 'Ce mois-ci' })).toHaveAttribute('aria-pressed', 'true');
   });
 
+  test('une autre période : la carte, la liste et leurs nombres gardés, estompés (« Mise à jour… »), puis remplacés ensemble ; un autre cercle : ses points partis aussitôt', async ({ app, page }) => {
+    await answer(page);
+    await app.open(`#/layout/[map(r=1km;ctl=rayon+periode),results]?${AT}`);
+    await expect.poll(() => found(page)).toBe(12);
+    const map = page.locator('gf-layout section.cell[data-comp="map"]'), list = page.locator('gf-layout section.cell[data-comp="results"]');
+    await expect(list.locator('.sub')).toHaveText('12 espèces');
+    /** The zone's observations asked for these words, held until let go. @param {RegExp} words */
+    const hold = async words => {
+      /** @type {() => void} */ let release = () => {};
+      const held = new Promise(resolve => { release = () => resolve(null); });
+      await page.route(words, async route => { await held; return route.fallback(); });
+      return release;
+    };
+    // This month's, held: what was shown stays — its 12 plants, their points —, dimmed, its counts « Mise à jour… ».
+    let release = await hold(/^https:\/\/api\.inaturalist\.org\/v1\/observations\?.*month=/);
+    await map.getByRole('group', { name: 'Période des observations' }).getByRole('button', { name: 'Ce mois-ci' }).click();
+    for (const cell of [map, list]) await expect(cell.locator('.cell-body')).toHaveAttribute('aria-busy', 'true');
+    await expect(list.locator('.sub')).toHaveText('Mise à jour…');
+    await expect(map.locator('.sub')).toHaveText('1 km autour du point choisi · Mise à jour…');
+    expect([await found(page), (await taxaOn(page, 0)).length]).toEqual([12, 12]);
+    // Dimmed: what the answer replaces — the map's tiles and points, the list's rows —, never the map's controls nor
+    // the line that says what is happening.
+    const opacity = (/** @type {import('@playwright/test').Locator} */ el) => el.evaluate(e => getComputedStyle(e).opacity);
+    await expect(page.locator('dl-map')).toHaveAttribute('updating', '');
+    await expect.poll(() => opacity(map.locator('gf-map .leaflet-map-pane'))).toBe('0.55');
+    await expect.poll(() => opacity(list.locator('dl-results gf-plant-list'))).toBe('0.55');
+    for (const el of [map.locator('gf-map'), map.locator('gf-map .gf-map-buttons'), map.locator('gf-map .leaflet-control-zoom'), list.locator('.cell-body'), list.locator('dl-results .scope').first()]) {
+      expect(await opacity(el)).toBe('1');
+    }
+    // Come: the list, its count and the map replaced together.
+    release();
+    await expect.poll(async () => [await found(page), (await taxaOn(page, 0)).length]).toEqual([6, 6]);
+    for (const cell of [map, list]) await expect(cell.locator('.cell-body')).not.toHaveAttribute('aria-busy');
+    await expect(page.locator('dl-map')).not.toHaveAttribute('updating');
+    await expect.poll(() => opacity(list.locator('dl-results gf-plant-list'))).toBe('1');
+    await expect(list.locator('.sub')).toHaveText('6 espèces');
+    // Another circle, its observations held: the old one's points gone at once, the list kept (dimmed) until they come.
+    release = await hold(/^https:\/\/api\.inaturalist\.org\/v1\/observations\?.*radius=0\.50/);
+    await map.locator('input[type="range"]').focus();
+    await page.keyboard.press('ArrowLeft');
+    await expect.poll(() => taxaOn(page, 0)).toEqual([]);
+    await expect(list.locator('.cell-body')).toHaveAttribute('aria-busy', 'true');
+    expect(await found(page)).toBe(6);
+    release();
+    await expect.poll(async () => (await taxaOn(page, 0)).length).toBe(6);
+    await expect(list.locator('.cell-body')).not.toHaveAttribute('aria-busy');
+  });
+
   test('trois cartes : la zone, la France, le monde — les mêmes plantes, les observations de la France et du monde en carreaux d’iNaturalist', async ({ app, page }) => {
     await answer(page);
     await app.open(`#/layout/[map(r=1km),map(france),map(monde),results]?${AT}`);
@@ -143,6 +197,45 @@ test.describe('un grand écran', () => {
     }
   });
 
+  test('une carte de la France sans zone dit ce qu’elle montre : trop de plantes, toutes montrées ; quelques-unes, chacune par son nom — celles qu’iNaturalist n’a pas, dites', async ({ app, page }) => {
+    await answer(page);
+    // iNaturalist does not know the nettle by its name.
+    await page.route(/^https:\/\/api\.inaturalist\.org\/v1\/taxa\?q=Urtica%20dioica&/, route => route.fulfill({ contentType: 'application/json', body: JSON.stringify({ results: [] }) }));
+    await app.open('#/layout/[map(france),results]');
+    await expect.poll(() => found(page)).toBe(300);
+    const map = mapAt(page, 0);
+    const TOO_MANY = 'Trop de plantes (300) pour cette carte : toutes montrées. Cherchez ou filtrez pour n’en voir que certaines.';
+    await expect.poll(() => mapState(map)).toContain(TOO_MANY);
+    // Another search, still too many: its count in « État », never spoken again for each new number (a word typed).
+    await map.evaluate(m => {
+      const w = /** @type {any} */ (window), live = /** @type {HTMLElement} */ (m.querySelector('.gf-map-live'));
+      w.__said = [];
+      new MutationObserver(() => w.__said.push(live.textContent)).observe(live, { childList: true, subtree: true, characterData: true });
+    });
+    await app.go('#/layout/[map(france),results]?q=a');
+    await expect.poll(async () => (await found(page)) ?? 0).toBeGreaterThan(40);
+    const many = /** @type {number} */ (await found(page));
+    expect(many).not.toBe(300);
+    await expect.poll(() => mapState(map)).toContain(`Trop de plantes (${many}) pour cette carte : toutes montrées. Cherchez ou filtrez pour n’en voir que certaines.`);
+    expect((await page.evaluate(() => /** @type {any} */ (window).__said)).filter((/** @type {string} */ t) => /Trop de plantes/.test(t))).toEqual([]);
+    // A few: each found by its name, the nettle not — absent, said; every plant no more.
+    await app.go('#/layout/[map(france),results]?q=ortie');
+    await expect.poll(() => mapState(map)).toContain('1 plante sans équivalent iNaturalist : absente de cette carte.');
+    expect(await mapState(map)).not.toContain(TOO_MANY);
+  });
+
+  test('une carte de la France sans zone : un nom qu’iNaturalist n’a pas répondu (en panne) n’est jamais dit « sans équivalent iNaturalist »', async ({ app, page }) => {
+    await answer(page);
+    // Every Allium but the wild garlic: iNaturalist does not answer.
+    await page.route(/^https:\/\/api\.inaturalist\.org\/v1\/taxa\?q=Allium%20(?!ursinum&)/, route => route.fulfill({ status: 503, body: '' }));
+    await app.open('#/layout/[map(france),results]?q=allium');
+    await expect.poll(async () => (await found(page)) ?? 0).toBeGreaterThan(1);
+    const map = mapAt(page, 0);
+    // The garlic found: its taxon on the tiles — the others left out, nothing said of them.
+    await expect.poll(async () => (await map.evaluate(m => (/** @type {any} */ (m).tiles ?? []).map((/** @type {any} */ t) => t.url))).find(u => u.includes('/v1/grid/')) ?? '').toContain('taxon_id=5555');
+    expect((await mapState(map)).filter(t => /sans équivalent iNaturalist/.test(t))).toEqual([]);
+  });
+
   test('les liens en modification : une pastille par lien ; touchée, la case se détache ou se relie (le réglage écrit)', async ({ app, page }) => {
     await answer(page);
     const ortie = plantId('Urtica dioica');
@@ -173,6 +266,31 @@ test.describe('un grand écran', () => {
     await expect.poll(grid).toBe('[map(portee=france,r=1km,suit=0),results(zone=0),plant.wikipedia]');
   });
 
+  test('la plante choisie est un choix, jamais un filtre : une autre recherche ne la trouve plus, elle reste choisie — « hors du résultat » sur la carte et dans l’en-tête de la fiche ; Retour l’enlève', async ({ app, page }) => {
+    await answer(page);
+    await app.open(`#/layout/[map(r=1km),search,plant.status]?${AT}`);
+    await expect.poll(() => found(page)).toBe(12);
+    const said = page.locator('dl-map .ctl.bl .outside'), head = page.locator('gf-layout section.cell[data-comp="plant.status"] .cell-head .sub');
+    await page.locator('dl-search gf-plant-card').filter({ hasText: 'Ortie dioïque' }).locator('a.row').click();
+    await expect.poll(() => param(page, 'p')).toBe(String(plantId('Urtica dioica')));
+    await expect(head).toContainText('Ortie dioïque');
+    await expect(said).toHaveCount(0);
+    await expect(page.locator('gf-layout section.cell[data-comp="plant.status"] .cell-head .off')).toHaveCount(0);
+    // Another search, the nettle not in it: still chosen — the map's chip, the sheet's head say it.
+    await page.locator('dl-search gf-plant-search input').fill('chêne');
+    await expect.poll(() => found(page)).toBe(1);
+    expect(await param(page, 'p')).toBe(String(plantId('Urtica dioica')));
+    await expect(said).toHaveText('Ortie dioïque : hors du résultat');
+    await expect(said).toHaveAttribute('title', 'La plante choisie n’est pas parmi les plantes trouvées : elle reste choisie (Retour l’enlève)');
+    await expect(head).toContainText('Ortie dioïque · Urtica dioica');
+    await expect(page.locator('gf-layout section.cell[data-comp="plant.status"] .cell-head .off')).toHaveText('· hors du résultat');
+    await expect(page.locator('dl-map .chip .name')).toHaveText('Ortie dioïque');
+    // Back: the entry before the choice — no plant, nothing said.
+    await page.goBack();
+    await expect.poll(() => param(page, 'p')).toBe(null);
+    await expect(said).toHaveCount(0);
+  });
+
   test('une plante hors de la liste de la zone : son taxon trouvé par son nom, ses observations dans la zone demandées', async ({ app, page }) => {
     const asked = await answer(page);
     const acanthe = plantId('Acanthus arboreus');
@@ -180,11 +298,42 @@ test.describe('un grand écran', () => {
     await expect.poll(() => asked.some(u => u.includes('/v1/taxa?q=Acanthus'))).toBe(true);
     await expect.poll(() => asked.some(u => /\/v1\/observations\?taxon_id=5555&/.test(u))).toBe(true);
     expect(await param(page, 'p')).toBe(String(acanthe));
+    // Said on the map: not among the zone's observations, iNaturalist's alone (drawn).
+    await expect.poll(() => mapState(mapAt(page, 0))).toContain('Acanthe arboré : hors des observations de la zone (iNaturalist seul)');
     // As the zone's filters say: every observation by default (no quality grade); the verified ones when they say so.
     const own = () => asked.filter(u => /\/v1\/observations\?taxon_id=5555&/.test(u)).map(u => new URL(u).searchParams.get('quality_grade'));
     expect(own().length).toBeGreaterThan(0);
     expect(own().every(g => g === null)).toBe(true);
     await app.go(`#/layout/[map(r=1km),results]?${AT}&p=${acanthe}&qualite=recherche`);
     await expect.poll(() => own().at(-1)).toBe('research');
+    // A plant of the zone: nothing said of it.
+    await app.go(`#/layout/[map(r=1km),results]?${AT}&p=${plantId('Urtica dioica')}`);
+    await expect.poll(async () => (await mapState(mapAt(page, 0))).filter(t => /^(Acanthe|Ortie)/.test(t))).toEqual([]);
+    // Another, which iNaturalist never saw there: said too.
+    await page.route(/^https:\/\/api\.inaturalist\.org\/v1\/taxa\?q=Tetragonia/, route => route.fulfill({ contentType: 'application/json', body: JSON.stringify({ results: [{ id: 5556, name: 'Tetragonia tetragonoides' }] }) }));
+    await page.route(/^https:\/\/api\.inaturalist\.org\/v1\/observations\?taxon_id=5556&/, route => route.fulfill({ contentType: 'application/json', body: JSON.stringify({ total_results: 0, results: [] }) }));
+    await app.go(`#/layout/[map(r=1km),results]?${AT}&p=${plantId('Tetragonia tetragonoides')}`);
+    await expect.poll(() => mapState(mapAt(page, 0))).toContain('Tétragone fausse tétragone : aucune observation dans la zone');
+  });
+});
+
+test.describe('un téléphone', () => {
+  test.skip(({ isMobile }) => !isMobile, 'a phone: the columns as tabs');
+
+  test('la plante choisie hors du résultat : « hors du résultat » entier dans l’en-tête étroit de la fiche, ses noms coupés avant lui', async ({ app, page }) => {
+    await answer(page);
+    const ortie = plantId('Urtica dioica');
+    await app.open(`#/layout/[map(r=1km),search,plant.status]?${AT}&p=${ortie}&q=chêne`);
+    await expect.poll(() => found(page)).toBe(1);
+    await page.getByRole('tablist', { name: 'Colonnes' }).getByRole('tab').nth(2).click();
+    const head = page.locator('gf-layout section.cell[data-comp="plant.status"] .cell-head');
+    const off = head.locator('.off');
+    await expect(off).toHaveText('· hors du résultat');
+    await expect(off).toBeVisible();
+    await expect(head.locator('.sub')).toContainText('Ortie dioïque');
+    // Whole, inside the head: never cut nor pushed out.
+    const [box, within] = await Promise.all([off.boundingBox(), head.boundingBox()]);
+    expect(box && within && box.x >= within.x && box.x + box.width <= within.x + within.width + 0.5).toBe(true);
+    expect(await off.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
   });
 });

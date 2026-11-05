@@ -3,11 +3,12 @@
 // observées » (workers/search-core.js `observed`) — in the sort menu and the grid's « Observations » column, written in
 // the address (sort=obs) — and never in Flore, which has no zone; the cross hover (state.js hover): a row hovered or
 // reached by the keyboard lights its plant's points on the map (gf-map litKeys), a point hovered lights its plant's row
-// (gf-plant-card lit); the list kept to what the map shows once moved by hand (state.js setView, workers/search-core.js
-// within), « Toute la zone » back, never for a move the map makes itself, nor with liste=zone; on a phone too, the map
-// in its tab and the list in another. iNaturalist answered here: the zone's observations of 12 plants, each a
+// (gf-plant-card lit), and its plant's points on the other maps (the one hovered lights them itself); the list kept to
+// what the map shows once moved by hand (state.js setView, workers/search-core.js within), « Toute la zone » back,
+// never for a move the map makes itself, nor with liste=zone, nor by a map of the current plant alone (plante=seule);
+// on a phone too, the map in its tab and the list in another. iNaturalist answered here: the zone's observations of 12 plants, each a
 // different number of times (1 to 12), each plant's in a column of its own (the first plant's the westmost).
-import { test, expect, answerAround } from './fixtures.mjs';
+import { test, expect, answerAround, plantId } from './fixtures.mjs';
 import { screenSearch } from './app.mjs';
 
 /** @typedef {import('@playwright/test').Page} Page */
@@ -196,6 +197,37 @@ test('la liste suit la carte déplacée à la main : les plantes de ce qu’elle
   await expect.poll(async () => holdsZone(await bounds(page))).toBe(true);
   await expect.poll(async () => (await names(page)).length).toBe(12);
   await expect(line).toHaveCount(0);
+});
+
+test('survol d’une carte à l’autre : un point survolé sur l’une allume les points de sa plante sur l’autre — celle survolée les allume elle-même ; partis, plus rien', async ({ app, page, isMobile }) => {
+  test.skip(isMobile, WIDE);
+  await app.open(`#/layout/[map(pts=pastille),map(pts=pastille),results(view=list)]?${AT}`);
+  await expect.poll(async () => (await names(page)).length).toBe(12);
+  const one = page.locator('dl-map').nth(0).locator('gf-map'), two = page.locator('dl-map').nth(1).locator('gf-map');
+  for (const map of [one, two]) await expect(map.locator('.leaflet-overlay-pane path.gf-obs')).toHaveCount(78);
+  // The northmost point of the first map's westmost column: the first plant's (Urtica dioica: 3 observations).
+  const at = await one.locator('.leaflet-overlay-pane path.gf-obs').evaluateAll(els => els.map(e => { const r = e.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; }));
+  const west = Math.min(...at.map(b => b.x));
+  const north = at.filter(b => b.x - west < 2).sort((a, b) => a.y - b.y)[0];
+  await page.mouse.move(north.x, north.y);
+  await expect(two.locator('path.gf-lit')).toHaveCount(3);
+  await expect(one.locator('path.gf-kin')).toHaveCount(3);
+  await expect(one.locator('path.gf-lit')).toHaveCount(0);
+  await expect(page.locator('dl-results gf-plant-card[lit]')).toHaveCount(1);
+  await page.mouse.move(2, 2);
+  await expect(two.locator('path.gf-lit')).toHaveCount(0);
+  await expect(page.locator('dl-results gf-plant-card[lit]')).toHaveCount(0);
+});
+
+test('plante=seule : la carte de la plante courante seule ne mène pas la liste — déplacée, la liste reste toute la zone, rien n’est dit', async ({ app, page, isMobile }) => {
+  test.skip(isMobile, WIDE);
+  await app.open(`#/layout/[map(pts=pastille,plante=seule),results(view=list)]?${AT}&p=${plantId('Urtica dioica')}`);
+  await expect.poll(async () => (await names(page)).length).toBe(12);
+  await wheel(page);
+  await page.waitForTimeout(1500);
+  expect((await names(page)).length).toBe(12);
+  await expect(page.locator('dl-results .scope.view')).toHaveCount(0);
+  await expect(page.locator('section.cell[data-comp="results"] .cell-head .sub')).not.toContainText('dans la vue');
 });
 
 test('liste=zone : la carte zoomée laisse la liste à toute la zone ; menée par la carte, un autre rayon lâche sa vue', async ({ app, page, isMobile }) => {

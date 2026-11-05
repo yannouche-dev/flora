@@ -45,7 +45,8 @@ test.beforeEach(async ({ context, page }) => {
   await page.route(/^https:\/\/api\.inaturalist\.org\/v1\/observations\?/, route => {
     const url = new URL(route.request().url());
     const taxon = Number(url.searchParams.get('taxon_id')) || 0;
-    // The zone's: two of each of its plants (within 500 m, three of them); a plant's own (taxon_id): three.
+    // The zone's: two of each of its plants (within 500 m, three of them); a plant's own (taxon_id, a plant outside
+    // the zone's): three.
     const plants = Number(url.searchParams.get('radius')) <= 0.5 ? 3 : 12;
     const n = Number(url.searchParams.get('page') || 1) > 1 ? 0 : taxon ? 3 : plants * 2;
     const results = Array.from({ length: n }, (_, i) => ({
@@ -161,7 +162,8 @@ test.describe('un grand écran', () => {
       await expect(cellOf(page, comp).locator('gf-plant-detail')).toHaveAttribute('plant-id', String(id));
       await expect(cellOf(page, comp).locator('.sub')).toContainText('Ortie dioïque');
     }
-    await expect(page.locator('dl-map .leaflet-marker-pane .gf-obs-leaf.hl')).toHaveCount(3);
+    // Its big points: its own among the zone's observations (its two, as its row counts) — never asked apart.
+    await expect(page.locator('dl-map .leaflet-marker-pane .gf-obs-leaf.hl')).toHaveCount(2);
     await expect(page.locator('dl-search gf-plant-card[current]')).toHaveCount(1);
     // Back: no plant; Forward: the plant again (and the search kept throughout).
     await page.goBack();

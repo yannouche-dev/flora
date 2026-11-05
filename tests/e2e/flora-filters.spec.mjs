@@ -421,7 +421,7 @@ test('la colonne « Espèce » trie par l’épithète, un hybride à la sienne 
     ['Ophrys', 'Dactylorhiza', '× Dactylodenia', 'Epipactis', 'Orchis', '× Serapicamptis', 'Traunsteinera']);
 });
 
-test('le menu de tri des cartes nomme un tri de colonne (« Espèce ») et le garde choisi d’un tri hors menu à l’autre', async ({ app, page }) => {
+test('un téléphone : le menu de tri des cartes nomme un tri de colonne (« Espèce ») et le garde choisi d’un tri hors menu à l’autre', async ({ app, page }) => {
   test.skip(!app.phone, 'les cartes et leur menu : sur un téléphone');
   await app.open('#/?sort=-sci');
   const menu = page.locator('gf-flora gf-results-bar select');

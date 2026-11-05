@@ -129,6 +129,9 @@ test('les liens d’une case (en modification) : ce qu’elle suit et change, et
     ['liste', false, null]]);
   // The list: the zone's all (liste=zone), then what the map shows again; a map of France never leads it, said.
   assert.deepEqual(links('map(liste=zone)').at(-1), ['liste', false, { liste: null }]);
+  // A map of the current plant alone never leads it: said, neither lit nor a switch.
+  assert.deepEqual(links('map(plante=seule)').at(-1), ['liste', false, null]);
+  assert.equal(linksOf(resolve(cellOf('map(plante=seule)'))).at(-1)?.why, 'Ne mène pas la liste : la carte ne montre que la plante courante');
   assert.deepEqual(links('results(zone=0)').map(l => l.slice(0, 2)), [['recherche', true], ['zone', false], ['periode', false], ['plante', true]]);
   assert.deepEqual(links('plant.wikipedia'), [['plante', true, { plante: CURRENT }]]);
   assert.deepEqual(links('plant(plante=128268)'), [['plante', false, { plante: null }]]);

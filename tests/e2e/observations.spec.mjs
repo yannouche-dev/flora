@@ -6,7 +6,8 @@
 // photo_license, captive; GBIF: mediaType, datasetKey, its datasets counted); GBIF's datasets in the zone with their
 // titles and counts (iNaturalist's copy left out), « Tout cocher » (the focus kept); an address of before naming those
 // asked alone (jeux=): those ticked, one ticked more added to them; a plant seen by GBIF alone in the list and on the
-// map; reloaded, the same; « effacer »: the layout's own again; the plants' origin, the « Statut en France » below; a
+// map; the chosen plant's big points, its own among the zone's (as many as its row says, GBIF's too, nothing asked
+// more); reloaded, the same; « effacer »: the layout's own again; the plants' origin, the « Statut en France » below; a
 // source that fails said, the other shown; a source whose module is off left out by default (never said missing on
 // the map), said when the address asks it; the zone's only dataset said so; the deck, iNaturalist down, when the search
 // leaves none of GBIF's plants.
@@ -246,6 +247,47 @@ test('fusionnées : une plante vue par GBIF seul dans la liste et sur la carte, 
   // The elder touched on the map: its plant chosen.
   await app.go(`${LAYOUT}?${AT}&p=${plantId('Sambucus nigra')}`);
   await expect.poll(() => param(page, 'p')).toBe(String(plantId('Sambucus nigra')));
+});
+
+test('les gros points de la plante choisie : ses observations de la zone — toutes qualités, GBIF compris —, autant que le « n obs. » de sa ligne, rien demandé de plus', async ({ app, page }) => {
+  await answerZone(page, { each: 3 });
+  await answerGbif(page);
+  // A plant's own observations: never asked for a plant of the zone.
+  /** @type {string[]} */ const own = [];
+  await page.route(/^https:\/\/api\.inaturalist\.org\/v1\/observations\?/, route => {
+    const url = route.request().url();
+    if (new URL(url).searchParams.get('taxon_id')) own.push(url);
+    return route.fallback();
+  });
+  const big = page.locator('dl-map .leaflet-marker-pane .gf-obs-leaf.hl');
+  // The nettle (iNaturalist's three; GBIF's copy left out), the elder (GBIF's two alone).
+  for (const [i, [q, sci]] of [['ortie', 'Urtica dioica'], ['sureau', 'Sambucus nigra']].entries()) {
+    const at = `${LAYOUT}?${AT}&qualite=toutes&q=${q}`;
+    await (i ? app.go(at) : app.open(at));
+    // Its row's count (a card's « 3 obs. », the grid's column: its title says it whole) — its own row: the search
+    // before's stay until the new answer.
+    const row = page.locator('dl-search gf-plant-card').filter({ has: page.locator(`a.row[href="#/plant/${plantId(sci)}"]`) });
+    await expect(row.locator('.obs')).toHaveAttribute('title', /^\d+ observations? dans la zone/);
+    const n = Number((await row.locator('.obs').getAttribute('title'))?.match(/^\d+/)?.[0]);
+    expect(n).toBe(i ? 2 : 3);
+    await row.locator('a.row').click();
+    await expect.poll(() => param(page, 'p')).toBe(String(plantId(sci)));
+    await expect(big).toHaveCount(n);
+  }
+  expect(own).toEqual([]);
+});
+
+test('une carte de la France sur la zone : les plantes de la liste qu’iNaturalist y a vues, celles vues par GBIF seul dites absentes — jamais « sans équivalent iNaturalist »', async ({ app, page }) => {
+  await answerZone(page);
+  await answerGbif(page);
+  await app.open(`#/layout/[map,map(france),search]?${AT}`);
+  await expect.poll(async () => (await names(page)).includes('Sambucus nigra')).toBe(true);
+  const zone = page.locator('dl-map').nth(0).locator('gf-map'), france = page.locator('dl-map').nth(1).locator('gf-map');
+  // The elder, seen by GBIF alone in the zone: no iNaturalist taxon of it here, absent from the tiles — said so.
+  await expect.poll(() => mapState(france)).toContain('1 plante vue par GBIF seul dans la zone : absente de cette carte.');
+  expect((await mapState(france)).filter(t => /sans équivalent iNaturalist/.test(t))).toEqual([]);
+  // The zone's map says nothing of it.
+  expect((await mapState(zone)).filter(t => /GBIF seul|sans équivalent|premières plantes/.test(t))).toEqual([]);
 });
 
 test('une source en panne : dite dans la section et sur la carte, l’autre montrée', async ({ app, page }) => {

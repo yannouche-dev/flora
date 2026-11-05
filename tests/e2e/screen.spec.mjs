@@ -458,6 +458,24 @@ test.describe('un grand écran', () => {
     await expect(menu.getByRole('link', { name: 'Composer un écran' })).toBeVisible();
   });
 
+  test('⋯ reste ouvert quand le bloc Photos de la fiche (plant.media) se dessine de lui-même : il ne prend pas le focus non plus', async ({ app, page }) => {
+    /** @type {() => void} */
+    let release = () => {};
+    const held = new Promise(done => { release = () => done(undefined); });
+    await page.route(/^https:\/\/api\.inaturalist\.org\/v1\/observations\?/, async route => { await held; await route.fallback(); });
+    await app.open(screen('[deck,plant.media]', `${AT}&r=1km`));
+    await expect(cellAt(page, '1').locator('gf-media-viewer')).toHaveCount(0);
+    const menu = await more(page);
+    await expect(menu.getByRole('link', { name: 'Composer un écran' })).toBeVisible();
+    release();
+    // The deck's first card, the current plant: the sheet's photos block drawn — the focus left where it was, ⋯ open.
+    const viewer = cellAt(page, '1').locator('gf-plant-detail gf-media-viewer');
+    await expect(viewer).toHaveAttribute('plant-id', /\d+/);
+    await expect(viewer.locator('.bar')).toBeAttached();
+    await expect(page.locator('gf-layout .more-menu summary')).toBeFocused();
+    await expect(menu.getByRole('link', { name: 'Composer un écran' })).toBeVisible();
+  });
+
   test('⋯ « Ouvrir dans Flore » seulement quand le premier groupe a une recherche à emporter : ni sur un paquet et sa carte, ni la recherche de Flore touchée', async ({ app, page }) => {
     await app.open('#/?family=Rosaceae');
     await expect.poll(() => app.state('query.filters.family')).toEqual(['Rosaceae']);
@@ -620,6 +638,43 @@ test.describe('un grand écran', () => {
     await expect(favorites.locator('.count')).toHaveText('0');
   });
 
+  test('♥ ou une nouvelle flore : des résultats sur toute la France (zone=0) cherchent à nouveau eux aussi — ses favoris cochés, sa liste suit', async ({ app, page }) => {
+    await app.open(screen('[results(list,zone=0),plant]', `${AT}&mine=favorites&p=${plantId('Urtica dioica')}`));
+    const whole = cellAt(page, '0');
+    await expect(whole.locator('gf-plant-list .empty')).toBeVisible();
+    // A favourite: its search over the whole flora asked again, the nettle in it.
+    const heart = cellAt(page, '1').locator('.action-bar button.fav');
+    await heart.click();
+    await expect(heart).toHaveAttribute('aria-pressed', 'true');
+    await expect(whole.locator('gf-plant-card')).toHaveCount(1);
+    await expect(whole.locator('.cell-head .sub')).toHaveText('1 espèce · toute la France');
+    // A new flora: asked again (its answer slowed), what it lists kept meanwhile — at every frame, its row there.
+    await page.evaluate(() => {
+      const w = /** @type {any} */ (window);
+      Object.assign(w, { __searches: 0, __held: false, __bare: 0 });
+      const post = Worker.prototype.postMessage;
+      Worker.prototype.postMessage = function (/** @type {any} */ message, /** @type {any} */ options) {
+        // The search over the whole flora (core/search.js searchWhole): neither kept to plants nor counting them.
+        if (message?.type !== 'search' || 'observed' in message) return post.call(this, message, options);
+        w.__searches++;
+        w.__held = true;
+        setTimeout(() => { post.call(this, message, options); setTimeout(() => { w.__held = false; }, 200); }, 400);
+      };
+      const watch = () => {
+        const list = /** @type {any} */ (document.querySelector('gf-app')?.shadowRoot?.querySelector('gf-layout'))?.shadowRoot
+          ?.querySelector('section.cell[data-cell="0"] dl-results')?.shadowRoot?.querySelector('gf-plant-list');
+        if (w.__held && !list?.shadowRoot?.querySelectorAll('gf-plant-card').length) w.__bare++;
+        requestAnimationFrame(watch);
+      };
+      watch();
+    });
+    await page.evaluate(async () => { const { store } = await import('/app/core/store.js'); store.set({ meta: { ...store.state.meta } }); });
+    await expect.poll(() => page.evaluate(() => /** @type {any} */ (window).__searches)).toBe(1);
+    await expect.poll(() => page.evaluate(() => /** @type {any} */ (window).__held)).toBe(false);
+    expect(await page.evaluate(() => /** @type {any} */ (window).__bare)).toBe(0);
+    await expect(whole.locator('gf-plant-card')).toHaveCount(1);
+  });
+
   test('une nouvelle flore : la recherche de l’écran cherche à nouveau, celle de Flore inchangée ; l’accueil ne cherche rien', async ({ app, page }) => {
     await app.open('#/?family=Rosaceae');
     await expect.poll(() => app.state('results.total')).toBeGreaterThan(0);
@@ -678,6 +733,19 @@ test.describe('un grand écran', () => {
     await page.waitForTimeout(300);
     const searches = await page.evaluate(() => /** @type {any} */ (window).__searches);
     expect([searches.ortie, searches.allium]).toEqual([1, 1]);
+  });
+
+  test('une réponse de la recherche venue entre un lien et le changement d’écran ne réécrit jamais l’adresse de l’écran quitté', async ({ app, page }) => {
+    await app.open(screen('[search(list=0),results(list)]', 'q=ortie'));
+    await expect.poll(async () => (await screenSearch(page))?.total).toBeGreaterThan(0);
+    // Another screen in the address and, in the same moment (before its hashchange), the search telling a change.
+    await page.evaluate(() => {
+      const results = /** @type {any} */ (document.querySelector('gf-app')?.shadowRoot?.querySelector('gf-layout')?.shadowRoot?.querySelector('dl-results'));
+      location.hash = '#/layout/[results(list)]?q=ail';
+      results.channel.dispatchEvent(new Event('change'));
+    });
+    await expect.poll(async () => (await screenSearch(page))?.query.q).toBe('ail');
+    expect(await hash(page)).toBe('#/layout/[results(view=list)]?q=ail');
   });
 
   test('un texte encore en frappe dans « Avancé » ne s’écrit pas dans l’adresse de la vue suivante', async ({ app, page }) => {

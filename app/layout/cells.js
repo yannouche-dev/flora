@@ -56,7 +56,7 @@ import { loadCatalog } from '../core/ign-catalog.js';
 import { RADII_3D } from '../core/around3d.js';
 import { nearestStop } from '../core/distance.js';
 import { cellIcon, distanceLabel } from './registry.js';
-import { COMPACT_WIDTH, MAP_INTENTS, MAP_LANDMARKS, MAP_LAYERS, WIDE_FRAMES, catalogLayers, inatTiles, inWhen, layersOf, mapControls, opacitiesOf, opacText, overlaysOf, snapRadius, uiMode, viewOf, viewText } from './map-options.js';
+import { COMPACT_WIDTH, MAP_INTENTS, MAP_LANDMARKS, MAP_LAYERS, WIDE_FEW, WIDE_FRAMES, catalogLayers, inatTiles, inWhen, layersOf, mapControls, opacitiesOf, opacText, overlaysOf, snapRadius, uiMode, viewOf, viewText, wideWords, zoneTaxa } from './map-options.js';
 import { periodQuery, plantOfPoint, taxonIdOf } from '../core/nearby.js';
 import { OBS_DEFAULTS, SOURCES, SOURCE_NAMES, defaultSources, failedText, inatQuery, obsNotes, sourcesText } from '../core/observations.js';
 import { obsId } from './state.js';
@@ -214,14 +214,15 @@ const counted = (n, word) => `${n.toLocaleString('fr-FR')} ${word}${n > 1 ? 's' 
 
 /**
  * iNaturalist's taxa of names of the flora (families, genera, species), each found once (core/nearby.js#taxonIdOf,
- * cached), four at a time — never forty requests at once; those not found left out.
- * @param {string[]} names @returns {Promise<number[]>}
+ * cached), four at a time — never forty requests at once; those not found left out, and counted (`missing`) — those
+ * not answered for (offline, iNaturalist down, its module off) left out too, never counted as names it has not.
+ * @param {string[]} names @returns {Promise<{ ids: number[], missing: number }>}
  */
 async function namesToTaxa(names) {
-  /** @type {(number | null)[]} */
+  /** @type {(number | null | undefined)[]} */
   const ids = [];
-  for (let i = 0; i < names.length; i += 4) ids.push(...await Promise.all(names.slice(i, i + 4).map(n => taxonIdOf(n).catch(() => null))));
-  return /** @type {number[]} */ (ids.filter(Boolean));
+  for (let i = 0; i < names.length; i += 4) ids.push(...await Promise.all(names.slice(i, i + 4).map(n => taxonIdOf(n).catch(() => undefined))));
+  return { ids: /** @type {number[]} */ (ids.filter(Boolean)), missing: ids.filter(t => t === null).length };
 }
 
 export class DlMap extends LitElement {
@@ -240,6 +241,14 @@ export class DlMap extends LitElement {
        (in the panel it made it taller, over the map's own controls). */
     .stage { flex: 1; min-height: 0; position: relative; }
     .stage > gf-map { position: absolute; inset: 0; display: block; }
+    /* A new answer of the zone coming (state.js updating): what the map draws (its tiles, its points: Leaflet's panes,
+       MapLibre's canvas) dimmed until it is replaced (after a moment: a quick one never flashes) — never the controls
+       over it, in use (its zoom, its buttons, its address search, the radius being dragged). */
+    gf-map .leaflet-map-pane, gf-map .maplibregl-canvas { transition: opacity 0.2s; }
+    :host([updating]) gf-map .leaflet-map-pane, :host([updating]) gf-map .maplibregl-canvas { opacity: 0.55; transition: opacity 0.2s 0.15s; }
+    /* Its count too (« n observations · k espèces »): the old answer's, replaced with it. */
+    .ctl .count { transition: opacity 0.2s; }
+    :host([updating]) .ctl .count { opacity: 0.55; transition: opacity 0.2s 0.15s; }
     .press-hint { flex: none; margin: 6px 8px; box-shadow: none; background: var(--gf-surface-2); }
     /* Under the map's own address search (whose place picked moves the scope too: its point, below). */
     .panel { position: absolute; z-index: 500; left: 8px; top: 60px; width: min(300px, calc(100% - 64px)); display: grid; gap: 6px; padding: 8px 10px; border-radius: 12px;
@@ -308,6 +317,9 @@ export class DlMap extends LitElement {
     .chip button { flex: none; min-height: 32px; min-width: 32px; padding: 0 8px; border-radius: var(--gf-radius-pill); font-size: 0.78rem; }
     .chip button[aria-pressed='true'] { background: var(--gf-accent); color: var(--gf-accent-contrast); border-color: transparent; }
     :host([ctl-compact]) .chip .name { max-width: 9em; }
+    /* The current plant no longer found by the search (state.js outside): still chosen, said above its chip. */
+    .outside { max-width: 100%; box-sizing: border-box; padding: 3px 10px; border-radius: var(--gf-radius-pill); font-size: 0.78rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+      background: color-mix(in srgb, var(--gf-warn-bg, var(--gf-surface)) 96%, transparent); box-shadow: 0 1px 3px rgb(0 0 0 / 14%); }
     /* The legend (legende): its button, its lines once opened. */
     .legend > button { min-height: 32px; padding: 2px 12px; border-radius: var(--gf-radius-pill); font-size: 0.8rem; box-shadow: var(--gf-shadow); background: color-mix(in srgb, var(--gf-surface) 95%, transparent); }
     .legend ul { list-style: none; margin: 6px 0 0; padding: 8px 10px; display: grid; gap: 4px; border-radius: 12px; font-size: 0.8rem;
@@ -445,52 +457,69 @@ export class DlMap extends LitElement {
   }
   /** @type {any} */ #areaMemo = null;
 
-  /** The current plant's observations in the scope, large, its photo in each (those of the period: when). */
+  /**
+   * The current plant's observations in the scope, large, its photo in each (state.js plantObs: its own among the
+   * zone's points — the same as its row counts —, or iNaturalist's for a plant outside the zone): those of the sources
+   * this map shows (src), of the period (when).
+   */
   get #highlight() {
     const s = /** @type {LayoutState} */ (this.state);
-    const obs = s.plantObs, info = s.plantInfo, when = this.#p.when;
-    // Its own observations are iNaturalist's (state.js): a map that shows only GBIF's has none of them.
-    if (!obs || !info || !obs.points.length || !this.#p.src.includes('inat') || !s.filters.sources.includes('inat')) return null;
-    if (this.#hlMemo?.key === obs.key + ':' + info.name + ':' + when) return this.#hlMemo.value;
+    const obs = s.plantObs, info = s.plantInfo, P = this.#p;
+    if (!obs || !info || !obs.points.length) return null;
+    const key = obs.key + ':' + info.name + ':' + P.when + ':' + P.src.join('+');
+    if (this.#hlMemo?.key === key && this.#hlMemo.obs === obs) return this.#hlMemo.value;
     const sp = s.species?.byPlant.get(info.id);
     const photo = sp?.photo && moduleOn('photos') ? sp.photo.replace(/\/square\./, '/small.') : null;
-    const points = obs.points.filter(p => inWhen(p.date, when));
-    const value = !points.length ? null : { key: obs.key + ':' + when, photo, credit: photo ? sp?.credit ?? null : null, common: info.name, sci: info.sci, taxonId: sp?.taxonId ?? null,
+    const points = obs.points.filter(p => P.src.includes(p.kind) && inWhen(p.date, P.when));
+    const value = !points.length ? null : { key: obs.key + ':' + P.when + ':' + P.src.join('+'), photo, credit: photo ? sp?.credit ?? null : null, common: info.name, sci: info.sci, taxonId: sp?.taxonId ?? null,
       points: points.map(p => ({ coordinates: p.coordinates, title: info.name, url: p.url, date: p.date, taxonId: sp?.taxonId ?? null, sci: info.sci, plantId: info.id })) };
-    this.#hlMemo = { key: obs.key + ':' + info.name + ':' + when, value };
+    this.#hlMemo = { key, obs, value };
     return value;
   }
-  /** @type {{ key: string, value: any } | null} */ #hlMemo = null;
+  /** @type {{ key: string, obs: import('./state.js').PlantObs, value: any } | null} */ #hlMemo = null;
 
   /**
    * A map of France or of the world (portee=): the iNaturalist taxa of the plants it shows — the plants found in the
-   * zone (the zone's list, as the search keeps it); without a zone, those the search keeps: its families and genera
-   * when it filters by them, else its plants when they are few (40 at most), each name found once on iNaturalist
-   * (core/nearby.js#taxonIdOf); else every plant (null). undefined: still being found; []: none found.
+   * zone (the zone's list, as the search keeps it: its first WIDE_MAX); without a zone, those the search keeps: its
+   * families and genera when it filters by them, else its plants when they are few (WIDE_FEW at most), each name found
+   * once on iNaturalist (core/nearby.js#taxonIdOf); else every plant (null). undefined: still being found; []: none
+   * found. What it leaves out is counted for its « État » (#wideSaid, map-options.js wideWords).
    * @returns {number[] | null | undefined}
    */
   #wideTaxa() {
     const s = /** @type {LayoutState} */ (this.state), P = this.#p;
     const list = s.species?.list;
+    this.#wideSaid = {};
     if (s.live.at && list) {
       const found = this.#found;
       // iNaturalist's tiles: the plants it knows here (a plant seen by GBIF alone has no taxon of it).
-      return /** @type {number[]} */ ((P.suit ? list.filter(x => found.has(/** @type {number} */ (x.plantId))) : list).map(x => x.taxonId).filter(t => t != null).slice(0, 400));
+      const kept = P.suit ? list.filter(x => found.has(/** @type {number} */ (x.plantId))) : list;
+      const { taxa, said } = zoneTaxa(kept);
+      this.#wideSaid = said;
+      return taxa;
     }
     if (!P.suit) return null;
     const st = this.#store.state;
     const facets = [...st.query.filters.family, ...st.query.filters.genus];
-    const few = st.results.total > 0 && st.results.total <= 40 && st.results.items.length === st.results.total;
+    const few = st.results.total > 0 && st.results.total <= WIDE_FEW && st.results.items.length === st.results.total;
     const names = facets.length ? facets : few ? st.results.items.map(i => i.scientificName) : [];
-    if (!names.length) return st.results.total === 0 && st.status === 'ready' && (st.query.q || facets.length) ? [] : null;
+    if (!names.length) {
+      // Every plant: more than a few kept, none by family or genus — said, without a zone (its plants still coming: not yet).
+      if (!s.live.at && st.status === 'ready' && this.#store.answered) this.#wideSaid = { many: st.results.total };
+      return st.results.total === 0 && st.status === 'ready' && (st.query.q || facets.length) ? [] : null;
+    }
     const key = names.join('|');
     if (this.#named?.key !== key) {
-      const named = this.#named = { key, ids: /** @type {number[] | undefined} */ (undefined) };
-      namesToTaxa(names).then(ids => { if (this.#named === named) { named.ids = ids; this.requestUpdate(); } });
+      const named = this.#named = { key, ids: /** @type {number[] | undefined} */ (undefined), missing: 0 };
+      // The plants' names not found on iNaturalist: absent from its tiles, said (a family or a genus not found: not).
+      namesToTaxa(names).then(({ ids, missing }) => { if (this.#named === named) { named.ids = ids; named.missing = facets.length ? 0 : missing; this.requestUpdate(); } });
     }
+    this.#wideSaid = { missing: this.#named.missing };
     return this.#named.ids;
   }
-  /** @type {{ key: string, ids: number[] | undefined } | null} */ #named = null;
+  /** @type {{ key: string, ids: number[] | undefined, missing: number } | null} */ #named = null;
+  /** What a map of France or of the world leaves out, as last drawn (map-options.js wideWords). @type {{ many?: number, listed?: number, missing?: number, gbif?: number }} */
+  #wideSaid = {};
 
   /** The current plant's iNaturalist taxon (its points over a map of France or the world), found once by its name. */
   get #plantTaxon() {
@@ -533,14 +562,15 @@ export class DlMap extends LitElement {
     const s = /** @type {LayoutState} */ (this.state);
     const id = s.live.obs;
     if (!id) return null;
-    if (this.#focusMemo?.id === id) return this.#focusMemo.value;
-    const p = s.points.find(x => obsId(x.url) === id) ?? s.plantObs?.points.find(x => obsId(x.url) === id);
-    if (!p) return null;
-    const value = { coordinates: p.coordinates, title: /** @type {any} */ (p).title ?? s.plantInfo?.name ?? 'Observation', url: p.url, photo: /** @type {any} */ (p).photo ?? null };
-    this.#focusMemo = { id, value };
+    // Found again among other points (another answer of the zone, the current plant's): the same while they are.
+    const pts = s.points, own = s.plantObs?.points ?? null;
+    if (this.#focusMemo?.id === id && this.#focusMemo.pts === pts && this.#focusMemo.own === own) return this.#focusMemo.value;
+    const p = pts.find(x => x.url && obsId(x.url) === id) ?? own?.find(x => x.url && obsId(x.url) === id);
+    const value = p ? { coordinates: p.coordinates, title: /** @type {any} */ (p).title ?? s.plantInfo?.name ?? 'Observation', url: p.url, photo: /** @type {any} */ (p).photo ?? null } : null;
+    this.#focusMemo = { id, pts, own, value };
     return value;
   }
-  /** @type {{ id: string, value: any } | null} */ #focusMemo = null;
+  /** @type {{ id: string, pts: any[], own: any[] | null, value: any } | null} */ #focusMemo = null;
 
   /**
    * The cell's own look (core/map-settings.js), as its address says it: its background (base=, and annee= the year or
@@ -697,8 +727,11 @@ export class DlMap extends LitElement {
     else if (this.#leads && (!s.view || s.view.by === this)) s.setView(bounds, { kinds: this.#p.src, by: this });
   }
 
-  /** It leads the list (what it shows of the zone, once moved): a map of the zone (portee=zone), liste=vue, a zone. */
-  get #leads() { return this.#p.portee === 'zone' && this.params?.liste !== 'zone' && Boolean(this.state?.live.at); }
+  /**
+   * It leads the list (what it shows of the zone, once moved): a map of the zone (portee=zone), liste=vue, a zone — not
+   * one that shows the current plant alone (plante=seule: its points are not the list's).
+   */
+  get #leads() { return this.#p.portee === 'zone' && this.params?.liste !== 'zone' && this.#p.plante !== 'seule' && Boolean(this.state?.live.at); }
 
   /** The cell's map (gf-map: what the cell says goes through it — the quiet-map rule). @returns {any} */
   get #map() { return this.renderRoot.querySelector('gf-map'); }
@@ -717,23 +750,26 @@ export class DlMap extends LitElement {
     s.pick(id, { obs: p.url ? obsId(p.url) : null });
   }
 
-  /** A point under the mouse, or none (gf-map `point-hover`): its plant's row lit in the lists (state.js hover). @param {CustomEvent} e */
+  /**
+   * A point under the mouse, or none (gf-map `point-hover`): its plant's row lit in the lists, its points on the other
+   * maps (state.js hover, by this map). @param {CustomEvent} e
+   */
   #onHover(e) {
     const s = /** @type {LayoutState} */ (this.state);
     const p = e.detail.point;
     const id = p ? this.#plantOf(p) ?? p.plantId ?? null : null;
-    if (id == null) s.hoverOff(null, 'map');
-    else s.hoverOn(id, 'map');
+    if (id == null) s.hoverOff(null, 'map', this);
+    else s.hoverOn(id, 'map', this);
   }
 
   /**
-   * A plant hovered in a list (state.js hover): its points lit as the map's own hover lights them — set on the map,
-   * the cell not drawn again. Hovered on a map: that map lights it itself.
+   * A plant hovered in a list or on another map of the group (state.js hover): its points lit as the map's own hover
+   * lights them — set on the map, the cell not drawn again. Hovered on this map: it lights it itself (gf-kin).
    */
   #lightHovered() {
     const map = this.#map, h = this.state?.hover;
     if (!map) return;
-    const keys = h?.from === 'list' ? this.#keysOf(h.plant) : null;
+    const keys = h && h.by !== this ? this.#keysOf(h.plant) : null;
     map.litKeys = keys?.size ? keys : null;
   }
 
@@ -813,9 +849,10 @@ export class DlMap extends LitElement {
     this.setAttribute('ctl', [...ctl.on].join(' '));
     this.toggleAttribute('ctl-compact', ctl.compact);
     this.toggleAttribute('big-gps', this.params?.intent === 'terrain' && ctl.on.has('gps'));
+    this.toggleAttribute('updating', Boolean(s?.updating));
     if (!s || !map) return;
     this.#defaultScope();
-    // No longer leading the list (liste=zone, France or the world now): it shows the whole zone again.
+    // No longer leading the list (liste=zone, plante=seule, France or the world now): it shows the whole zone again.
     if (s.view?.by === this && !this.#leads) s.setView(null);
     // The zone moved while modified: the view kept was the old zone's — framed on the new one.
     const zone = s.live.at ? s.live.at.join(',') + ':' + s.radius : '';
@@ -833,11 +870,30 @@ export class DlMap extends LitElement {
     const said = s.live.at && s.speciesState !== 'loading' && s.speciesState !== 'error' ? scopeNote(s) : '';
     if (said && said !== this.#said) map.announce(said);
     this.#said = said;
+    // The current plant's own observations (its big points, state.js plantObs): none in the zone, or — a plant not
+    // among the zone's — iNaturalist's alone, said in the map's « État ».
+    // « (iNaturalist seul) » only when this map draws them (its sources, src=, may leave iNaturalist's out).
+    const P = this.#p;
+    const obs = P.portee === 'zone' && P.plante !== 'non' && s.live.at ? s.plantObs : null;
+    const name = obs && s.plantInfo?.id === s.live.plant ? s.plantInfo.name : null;
+    const drawn = obs ? obs.points.some(p => P.src.includes(p.kind) && inWhen(p.date, P.when)) : false;
+    map.setStatus('plant', !obs || !name ? '' : !obs.points.length ? `${name} : aucune observation dans la zone`
+      : obs.outside ? `${name} : hors des observations de la zone${drawn ? ' (iNaturalist seul)' : ''}` : '');
+    // A map of France or of the world: what it shows of the plants, when not those of the list one by one — every plant
+    // (too many to find by name), the zone's list cut, its plants GBIF alone saw, the names iNaturalist has not
+    // (#wideTaxa). In its « État »; spoken once when a line comes — never again for each new count (a word typed).
+    const wide = wideWords(P.portee === 'zone' ? {} : this.#wideSaid);
+    for (const key of /** @type {const} */ (['wide', 'cut', 'gbif', 'names'])) {
+      map.setStatus(key, wide[key], { quiet: true });
+      if (wide[key] && !this.#wideHad.has(key)) map.announce(wide[key]);
+      if (wide[key]) this.#wideHad.add(key); else this.#wideHad.delete(key);
+    }
     this.#placeControls();
     // Once the map's own controls are drawn (a frame later: a rebuilt search pill, the 3D map's controls).
     requestAnimationFrame(() => this.#placeControls());
   }
   #said = '';
+  /** The lines a map of France or of the world says (wideWords' keys), as last drawn: spoken when they come. @type {Set<string>} */ #wideHad = new Set();
   /** The zone at the last update (undefined: none yet). @type {string | undefined} */ #zoneWas;
 
   /**
@@ -969,13 +1025,18 @@ export class DlMap extends LitElement {
     </div>`;
   }
 
-  /** Bottom left, over the zoom: the current plant's chip, the legend. @param {LayoutState} s @param {Set<string>} on */
+  /**
+   * Bottom left, over the zoom: the current plant's chip — and, above it, « hors du résultat » when its group's search
+   * no longer finds it (state.js outside: it stays chosen) —, the legend. @param {LayoutState} s @param {Set<string>} on
+   */
   #bottomLeft(s, on) {
     const id = s.live.plant, info = s.plantInfo;
     const chip = on.has('plante') && id != null && info?.id === id;
     if (!chip && !on.has('legende')) return nothing;
+    const name = chip ? /** @type {{ name: string }} */ (info).name : '';
     return html`<div class="ctl bl">
-      ${chip ? this.#chip(id, /** @type {{ name: string }} */ (info).name) : nothing}
+      ${chip && s.outside ? html`<span class="outside" role="note" title="La plante choisie n’est pas parmi les plantes trouvées : elle reste choisie (Retour l’enlève)">${name} : hors du résultat</span>` : nothing}
+      ${chip ? this.#chip(id, name) : nothing}
       ${on.has('legende') ? this.#legendView(s) : nothing}
     </div>`;
   }
@@ -1144,7 +1205,10 @@ export class DlResults extends LitElement {
 
   static styles = [ui, css`
     :host { display: flex; flex-direction: column; min-height: 0; }
-    gf-plant-list { flex: 1; min-height: 0; }
+    gf-plant-list { flex: 1; min-height: 0; transition: opacity 0.2s; }
+    /* A new answer of the zone coming (state.js updating): its rows dimmed until they are replaced (after a moment: a
+       quick one never flashes) — never the lines that say what is happening (the zone, « recherche… »), nor their buttons. */
+    :host([updating]) gf-plant-list { opacity: 0.55; transition: opacity 0.2s 0.15s; }
     .scope { flex: none; display: flex; align-items: center; gap: 6px; padding: 4px 12px; font-size: 0.78rem; color: var(--gf-text-muted); border-bottom: 1px solid var(--gf-border); background: var(--gf-bg); }
     .scope span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .scope.error { color: var(--gf-danger); }
@@ -1171,7 +1235,11 @@ export class DlResults extends LitElement {
   get grid() { const v = this.params?.view ?? 'auto'; return v === 'grid' || (v === 'auto' && this._wide); }
 
   /** @param {Map<string, any>} changed */
-  updated(changed) { if (changed.has('_wide')) this.dispatchEvent(new CustomEvent('results-shown', { bubbles: true, composed: true })); }
+  updated(changed) {
+    // (zone=0: the whole flora's rows, which no answer of the zone replaces.)
+    this.toggleAttribute('updating', Boolean(this.state?.updating) && this.params?.zone !== false);
+    if (changed.has('_wide')) this.dispatchEvent(new CustomEvent('results-shown', { bubbles: true, composed: true }));
+  }
   disconnectedCallback() { super.disconnectedCallback(); this.#size.disconnect(); }
 
   render() {
@@ -1179,12 +1247,13 @@ export class DlResults extends LitElement {
     if (!s) return nothing;
     const grid = this.grid;
     // zone=0: the search over the whole flora, whatever the zone (state.js#wholeOf, asked by the layout), said so — its
-    // plants once it answered the search on screen (until then, none and « Aucune plante… » never said; the list stays,
-    // its headers and its focus with it).
+    // plants once it answered the search on screen; until then, the rows of its answer before (another text, another
+    // sort: the list stays, its rows, its headers and its focus with it; another screen's never: state.js forgetWhole),
+    // and « Aucune plante… » never said.
     if (this.params.zone === false) {
       const whole = s.whole, answered = whole?.key === s.wholeFor;
       return html`${s.live.at ? html`<div class="scope" role="note">${icon('globe-europe-africa')}<span>Toute la France : cette case ne suit pas la zone.</span></div>` : nothing}
-        <gf-plant-list ?grid=${grid} .current=${s.live.plant} .items=${answered ? whole.items : []} .answered=${answered} .channel=${this.channel}
+        <gf-plant-list ?grid=${grid} .current=${s.live.plant} .items=${whole?.items ?? []} .answered=${answered} .channel=${this.channel}
           .lit=${s.hover?.plant ?? null} @plant-hover=${(/** @type {CustomEvent} */ e) => this.#onHover(e)}></gf-plant-list>`;
     }
     const note = s.live.at ? scopeNote(s) : '';
@@ -1235,6 +1304,7 @@ export class DlSearch extends LitElement {
     gf-results-bar { flex: none; }
     .filters { flex: none; max-height: 45%; overflow-y: auto; padding: 0 12px; border-bottom: 1px solid var(--gf-border); background: var(--gf-surface); }
     :host([no-list]) .filters { flex: 1; max-height: none; min-height: 8rem; }
+    /* (A new answer of the zone coming: dl-results dims its own rows — its bar, being typed in, never.) */
     dl-results { flex: 1; min-height: 8rem; }
   `];
 
@@ -1266,7 +1336,7 @@ export class DlSearch extends LitElement {
     const list = this.params.list !== false;
     return html`<gf-results-bar .wide=${false} count-above .channel=${this.channel} @open-filters=${(/** @type {Event} */ e) => { e.stopPropagation(); this._filters = !open; setCell(this, { filters: !open }); }}></gf-results-bar>
       ${open ? html`<div class="filters" role="region" aria-label="Filtres">${filterPanel(this.state, this.channel)}</div>` : nothing}
-      ${list ? html`<dl-results .state=${this.state} .params=${{ view: 'auto' }} .channel=${this.channel}></dl-results>` : nothing}`;
+      ${list ? html`<dl-results .state=${this.state} .params=${{ view: 'auto' }} .channel=${this.channel} aria-busy=${this.state?.updating ? 'true' : nothing}></dl-results>` : nothing}`;
   }
 }
 customElements.define('dl-search', DlSearch);
@@ -1340,6 +1410,10 @@ export class DlDeck extends LitElement {
     .empty { display: grid; gap: 10px; justify-items: center; padding: 24px 12px; text-align: center; color: var(--gf-text-muted); }
     .empty .big { font-size: 2rem; color: var(--gf-accent); margin: 0; }
     .empty .big.warn { color: var(--gf-warn, #b45309); }
+    /* A new answer of the zone coming (state.js updating): its cards dimmed until they are replaced (after a moment: a
+       quick one never flashes) — never what it says (« Les cartes arrivent… »). */
+    ma-deck { transition: opacity 0.2s; }
+    :host([updating]) ma-deck { opacity: 0.55; transition: opacity 0.2s 0.15s; }
   `];
 
   #store = new SearchController(this);
@@ -1382,6 +1456,7 @@ export class DlDeck extends LitElement {
    */
   updated() {
     const s = this.state;
+    this.toggleAttribute('updating', Boolean(s?.updating));
     if (!s) return;
     const empty = !s.live.at || s.speciesState === 'error' || (s.speciesState === 'ready' && this.#store.answered && !this._loading && !this.#session.cards.length);
     if (empty === this.#empty) return;
@@ -1556,7 +1631,8 @@ export function renderCell(r, ctx) {
       ? html`<gf-media-viewer local plant-id=${plant} presentation=${r.params.style ?? blockStyle(/** @type {any} */ (view), 'media')}></gf-media-viewer>`
       : html`<p class="placeholder quiet">Photos en ligne désactivées (<a href=${href.settings()}>Réglages › Modules</a>).</p>`;
   }
+  // Among the cells (local): its photos block (plant.media) drawn by itself never takes the focus either.
   return r.view
-    ? html`<gf-plant-detail embedded subheading only=${r.view.key} plant-id=${plant} view=${view} .channel=${channel}></gf-plant-detail>`
-    : html`<gf-plant-detail embedded subheading plant-id=${plant} view=${view} .channel=${channel}></gf-plant-detail>`;
+    ? html`<gf-plant-detail embedded subheading local only=${r.view.key} plant-id=${plant} view=${view} .channel=${channel}></gf-plant-detail>`
+    : html`<gf-plant-detail embedded subheading local plant-id=${plant} view=${view} .channel=${channel}></gf-plant-detail>`;
 }

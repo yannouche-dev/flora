@@ -167,19 +167,21 @@ export async function speciesAround(point, radius, signal, periode = null) {
 /**
  * Where one species was observed in the circle (up to 600 most recent observations): research grade, unless `filters`
  * say otherwise (iNaturalist's own words, core/observations.js inatQuery: a layout's zone; '' every observation: a
- * sheet's map).
+ * sheet's map) — of a period (periodQuery: this year, this month; a layout's zone).
  * @param {number} taxonId
  * @param {[number, number]} point
  * @param {number} radius
  * @param {AbortSignal} [signal]
  * @param {string} [filters]
+ * @param {string | null} [periode]
  * @returns {Promise<NearbyObservation[]>}
  */
-export function observationsAround(taxonId, point, radius, signal, filters = RESEARCH) {
+export function observationsAround(taxonId, point, radius, signal, filters = RESEARCH, periode = null) {
   if (!moduleOn('inaturalist')) return Promise.reject(new ModuleOffError('inaturalist'));
+  const when = periodQuery(periode);
   let partial = false;
-  return cached(`around-obs2:${taxonId}:${area(point, radius)}${filtersKey(filters)}`, async () => {
-    const page = await paged(`taxon_id=${taxonId}&${area(point, radius)}${filters}&order_by=observed_on`, 600, signal);
+  return cached(`around-obs2:${taxonId}:${area(point, radius)}${when}${filtersKey(filters)}`, async () => {
+    const page = await paged(`taxon_id=${taxonId}&${area(point, radius)}${filters}&order_by=observed_on${when}`, 600, signal);
     partial = page.partial;
     return page.results.map(toObservation);
   }, () => partial);
