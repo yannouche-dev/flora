@@ -307,7 +307,7 @@ test('les largeurs des volets : chaque clé de mise en page est dans config.pane
 });
 
 test('prefs : les clés que l’app n’a plus, oubliées au lancement — jamais les notes de fiche d’avant', () => {
-  const gone = ['geoflora.sheetBlocks', 'geoflora.sheetHidden', 'geoflora.trails'];
+  const gone = ['geoflora.sheetBlocks', 'geoflora.sheetHidden', 'geoflora.trails', 'geoflora.zoomPanel', 'geoflora.contextBar'];
   for (const key of gone) {
     assert.ok(config.obsoleteKeys.includes(key), key);
     assert.ok(!Object.values(config.storageKeys).includes(key), key);

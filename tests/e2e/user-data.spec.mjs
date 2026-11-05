@@ -1,7 +1,8 @@
 // The user's data (audit, chantier « Données utilisateur »): the plant sheet's notes moved from localStorage to
 // IndexedDB without loss, in the GeoJSON export and back (STO-6), alone too (the transfer link names them); a write
 // refused for lack of room said on screen, never a false « Enregistré » (STO-5, STO-4); two tabs: a deletion is not
-// undone by the other (GAP1-2), a module switched off in one stays off when the other changes another (GAP1-7).
+// undone by the other (GAP1-2), a module switched off in one stays off when the other changes another (GAP1-7); a
+// device left on an old version: its favourites, lists, lieux, parcours and notes read, its old settings forgotten.
 import { readFileSync } from 'node:fs';
 import { test, expect, plantId } from './fixtures.mjs';
 
@@ -33,6 +34,55 @@ test('notes de fiche : celles des versions précédentes passent dans IndexedDB,
   await page.reload();
   await app.ready();
   await expect.poll(() => noteText(page, ail)).toBe('Station de 30 pieds, cueilli le 3 avril');
+});
+
+test('un appareil resté sur une vieille version : ses favoris, listes, lieux, parcours et notes là ; ses vieux réglages oubliés au lancement', async ({ app, page, context }) => {
+  const ail = plantId('Allium ursinum');
+  const OLD = ['geoflora.sheetBlocks', 'geoflora.sheetHidden', 'geoflora.trails', 'geoflora.zoomPanel', 'geoflora.contextBar'];
+  await context.addInitScript(([note, id, old]) => {
+    if (sessionStorage.getItem('seeded')) return;
+    sessionStorage.setItem('seeded', '1');
+    localStorage.setItem('geoflora.sheetLayout', JSON.stringify({ notes: [note] }));
+    localStorage.setItem('geoflora.plantNotes', JSON.stringify({ [note.id]: { [id]: 'Station de 30 pieds' } }));
+    for (const k of old) localStorage.setItem(k, '{"standard":["map"]}');
+    localStorage.setItem('geoflora.discover', JSON.stringify({ done: true, point: [2.35, 48.85], place: 'Paris', radius: 2000, matches: [id], passed: [], tips: ['x'] }));
+    localStorage.setItem('geoflora.context', JSON.stringify({ map: '#/map?spot=x', mapPlants: [id] }));
+    localStorage.setItem('geoflora.modules', JSON.stringify({ gbif: { epure: false } }));
+  }, /** @type {const} */ ([NOTE, ail, OLD]));
+  await app.open(`#/plant/${ail}`);
+  await expect(page.locator('gf-plant-detail textarea.note-text').first()).toHaveValue('Station de 30 pieds');
+  expect(await page.evaluate(keys => keys.map(k => localStorage.getItem(k)), OLD)).toEqual(OLD.map(() => null));
+  // Découvrir: its fields only (the games' session and the tips of before gone, given to none).
+  const discover = await page.evaluate(() => JSON.parse(localStorage.getItem('geoflora.discover') || '{}'));
+  expect(Object.keys(discover).every(k => ['done', 'unlocked', 'announced', 'seen', 'step', 'firstMatch', 'branch'].includes(k))).toBe(true);
+  expect(discover.done).toBe(true);
+  expect(await page.evaluate(() => localStorage.getItem('geoflora.app.rencontres.state'))).toBeNull();
+  expect(await app.state('context.map')).toBe('#/map?spot=x');
+  // A module cut in one mode: cut for the whole device.
+  expect(await page.evaluate(async () => (await import('/app/core/modules.js')).moduleOn('gbif'))).toBe(false);
+
+  // Mes plantes as versions 3 to 5 of the base kept them: a list, a lieu whose plant has no position of its own, a
+  // parcours the Parcours made before its mark.
+  const at = '2026-10-08T09:00:00.000Z';
+  const [ortie, benoite, lierre] = ['Urtica dioica', 'Geum urbanum', 'Hedera helix'].map(plantId);
+  await page.evaluate(async ([t, a, b, c]) => {
+    const db = await import('/app/core/db.js');
+    await db.put('spots', { type: 'Feature', id: 'v4-liste', geometry: null,
+      properties: { kind: 'list', name: 'Liste d’avant', notes: '', createdAt: t, updatedAt: t, plantIds: [a], plants: [{ plantId: a, scientificName: 'Urtica dioica', addedAt: t }] } });
+    await db.put('spots', { type: 'Feature', id: 'v3-lieu', geometry: { type: 'Point', coordinates: [2.4, 48.9] },
+      properties: { name: 'Bois d’avant', notes: '', accuracy: null, createdAt: t, updatedAt: t, plantIds: [b], plants: [{ plantId: b, scientificName: 'Geum urbanum', notes: 'sous les chênes' }] } });
+    await db.put('spots', { type: 'Feature', id: 'v5-parcours', geometry: { type: 'Point', coordinates: [2.41, 48.91] },
+      properties: { kind: 'place', name: 'Parcours d’avant', notes: '', origin: { app: 'parcours' }, createdAt: t, updatedAt: t, plantIds: [c],
+        plants: [{ id: 'e1', plantId: c, scientificName: 'Hedera helix', coordinates: [2.411, 48.911], addedAt: t }] } });
+  }, /** @type {const} */ ([at, ortie, benoite, lierre]));
+  await page.reload();
+  await app.ready();
+  await app.go('#/collections');
+  const mine = page.locator('gf-collections');
+  for (const name of ['Liste d’avant', 'Bois d’avant', 'Parcours d’avant']) await expect(mine).toContainText(name);
+  const read = (/** @type {string} */ id) => page.evaluate(async i => (await (await import('/app/core/collections.js')).getPlace(i))?.properties, id);
+  expect((await read('v5-parcours'))?.walk).toBe(true);
+  expect((await read('v3-lieu'))?.plants.map((/** @type {any} */ e) => [e.plantId, e.coordinates, e.notes])).toEqual([[benoite, [2.4, 48.9], 'sous les chênes']]);
 });
 
 test('notes de fiche : dans l’export GeoJSON de Réglages, et de retour sur un autre appareil (STO-6)', async ({ app, page, context, newDevice }) => {

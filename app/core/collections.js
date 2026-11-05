@@ -976,7 +976,7 @@ export function restorePending() {
   return readText(config.storageKeys.restorePending) !== null;
 }
 
-/** Why it waits (a mark of before the reason was noted: the repair's). @returns {RestoreReason} */
+/** Why it waits (none said: the repair's). @returns {RestoreReason} */
 export function restoreReason() {
   return readJSON(config.storageKeys.restorePending, null)?.reason === 'lost' ? 'lost' : 'repair';
 }

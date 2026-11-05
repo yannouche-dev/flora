@@ -103,10 +103,10 @@ export const config = {
    * choice: « auto » again (storageKeys.harvestMode), King (« Personnaliser la fiche ») kept until left: it
    * now lasts for the visit (core/store.js KingState); the plant sheet's order and folded blocks of before sheetLayout
    * (sheetBlocks, sheetHidden); the walks to take up again as this device listed them before 2.8 (read from Mes plantes
-   * since).
+   * since); the zoom panel's and the context bar's choices of the first days (never read since).
    */
   obsoleteKeys: ['geoflora.plantView', 'geoflora.target', 'geoflora.harvestMode', 'geoflora.kingMode',
-    'geoflora.sheetBlocks', 'geoflora.sheetHidden', 'geoflora.trails'],
+    'geoflora.sheetBlocks', 'geoflora.sheetHidden', 'geoflora.trails', 'geoflora.zoomPanel', 'geoflora.contextBar'],
 
   /**
    * The keys of the panes' widths (core/panes.js), one per screen: the first steps (core/discover.js) never read

@@ -135,6 +135,22 @@ test('Mes écrans ne fait pas un habitué : un écran gardé, rien d’autre, le
   expect(await app.tabs()).toEqual(bar(app, []));
 });
 
+test('une clé d’une vieille version dit qu’on connaît l’app — tous les onglets —, puis elle est oubliée', async ({ app, page }) => {
+  // A device whose only trace is a key of the first days: read as « used before » (core/discover.js usedBefore, as it
+  // loads) before main.js forgets it (config.obsoleteKeys).
+  await page.addInitScript(() => {
+    if (sessionStorage.getItem('seeded')) return;
+    sessionStorage.setItem('seeded', '1');
+    localStorage.setItem('geoflora.zoomPanel', '1');
+  });
+  await app.open('#/');
+  expect(await app.tabs()).toEqual(bar(app, ['Flore', 'Carte', 'Mes plantes']));
+  expect(await page.evaluate(() => localStorage.getItem('geoflora.zoomPanel'))).toBeNull();
+  await page.reload();
+  await app.ready();
+  expect(await app.tabs()).toEqual(bar(app, ['Flore', 'Carte', 'Mes plantes']));
+});
+
 test('un lien de l’application mène à l’écran de son onglet : « Voir ses plantes dans Flore »', async ({ app, page }) => {
   await app.open('#/discover');
   await seed(page);

@@ -92,7 +92,7 @@ export class MaTrailRecap extends LitElement {
     if (!s || !t) return nothing;
     const plants = t.properties.plants, groups = groupsOf(t);
     const markers = plantMarkers([t]);
-    // Its point (none: made a list elsewhere, by an older version), then its plants.
+    // Its point (none: nothing to frame but its plants), then its plants.
     const points = [t.geometry?.coordinates, ...markers.map(m => m.coordinates)].filter(Boolean);
     const frame = { key: 'done:' + t.id, points, maxZoom: 17 };
     const { profile, time, dist } = recapOf(t);
