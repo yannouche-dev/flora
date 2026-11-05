@@ -182,9 +182,15 @@ export class SwipeCore extends EventTarget {
     return this.#favourites.has(id);
   }
 
-  /** A card back in the deck (a plant touched elsewhere, brought on top); ↺'s history left alone. @param {number} id */
-  restore(id) {
+  /**
+   * A card back in the deck (a plant touched elsewhere, brought on top); ↺'s history left alone — `dropSwipes` (a
+   * screen's deck): its swipes out of it too, each a ↺ that would bring nothing back (the next ↺ goes to the swipe
+   * before them), but a heart's that made a favourite (kept: its ↺ takes it back).
+   * @param {number} id @param {{ dropSwipes?: boolean }} [o]
+   */
+  restore(id, { dropSwipes = false } = {}) {
     this.#store.write(unswipe(this.swipes, id));
+    if (dropSwipes) this.history = this.history.filter(e => e.id !== id || e.fav);
     this.#changed();
   }
 

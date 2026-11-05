@@ -232,7 +232,7 @@ test('l’indice du glissé, une fois par clé ; de nouveau une fois oublié («
   assert.equal(hintOnce('swipes-test'), true);
 });
 
-test('le paquet : la plante courante dessus si elle y est (décidée : non) ; une carte remise dans le paquet, ↺ intact', () => {
+test('le paquet : la plante courante dessus si elle y est (décidée : non) ; une carte remise dans le paquet, ↺ intact — ou, d’un écran, ses glissés hors de ↺ sauf le cœur qui a fait un favori', async () => {
   const { core: c } = core();
   const cards = [1, 2, 3].map(card);
   const ids = (/** @type {any[]} */ deck) => deck.map(x => x.plant.id);
@@ -243,6 +243,19 @@ test('le paquet : la plante courante dessus si elle y est (décidée : non) ; un
   c.restore(3);
   assert.deepEqual(ids(c.deck(cards, 3)), [3, 1, 2]);
   assert.deepEqual(c.history, [{ id: 3, liked: false, fav: false }]);
+  // A screen's deck, a plant chosen elsewhere: its passes out of ↺'s history (their ↺ would bring nothing back) — the
+  // next ↺ goes to the swipe before; a heart's entry that made a favourite stays, its ↺ taking it back.
+  const s = core();
+  s.core.decide(card(1), false);
+  s.core.decide(card(2), true);
+  s.core.decide(card(3), false);
+  s.core.restore(3, { dropSwipes: true });
+  s.core.restore(2, { dropSwipes: true });
+  assert.deepEqual(s.core.history.map(e => e.id), [1, 2]);
+  assert.equal(s.core.undo()?.id, 2);
+  assert.equal(s.core.undo()?.id, 1);
+  await s.fav.settle();
+  assert.deepEqual(s.fav.log, ['add 2', 'forget 2 e1']);
 });
 
 test('un `change` par opération, à sa fin ; aucun pour un choix ignoré', async () => {

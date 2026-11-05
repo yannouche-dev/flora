@@ -1582,8 +1582,9 @@ export class DlDeck extends LitElement {
   get #writes() { return this.params?.ecrit !== false; }
 
   /**
-   * What touching a card does, as the cell says (toucher, ecrit: registry.js#touchOf): its sheet, or nothing — the
-   * current plant (toucher=plante) is the card on top already: its touch, ↑ and « ⋯ » are no use, none shown.
+   * What touching a card does, as the cell says (toucher, ecrit: registry.js#touchOf): its sheet, or nothing — with
+   * toucher=plante, the deck chooses by its swipes (the card on top, most often the current plant already; not when a
+   * plant loved here was chosen elsewhere: it stays out): its touch, ↑ and « ⋯ » do nothing, none shown.
    * @returns {'plante' | 'fiche' | 'rien'}
    */
   get #touch() {
@@ -1692,9 +1693,10 @@ export class DlDeck extends LitElement {
     if (plant !== this.#plantSeen) {
       this.#plantSeen = plant;
       this.#undone = null;
-      // Chosen elsewhere, passed here before: back in the deck, on top — as in Rencontres. One loved stays out (its
-      // heart made it a favourite). The deck's own choices (its next card, its first) are never a card passed.
-      if (plant != null && ses.core.swipes.passed.includes(plant)) ses.core.restore(plant);
+      // Chosen elsewhere, passed here before: back in the deck, on top — as in Rencontres —, its pass out of ↺ (a ↺
+      // of it would show nothing: the next one goes to the swipe before). One loved stays out (its heart made it a
+      // favourite). The deck's own choices (its next card, its first) are never a card passed.
+      if (plant != null && ses.core.swipes.passed.includes(plant)) ses.core.restore(plant, { dropSwipes: true });
     }
     ses.top = this.#undone ?? plant;
     ses.radius = s.radius;
