@@ -286,6 +286,17 @@ test.describe('un grand écran', () => {
     await expect.poll(favourite).toBe(4);
   });
 
+  test('les cartes de Rencontres : chaque choix dit, avec les mots des activités', async ({ app, page }) => {
+    await app.open(`#/layout/[map(r=500m),deck,plant.status]?${AT}`);
+    const deck = page.locator('dl-deck'), top = deck.locator('ma-deck .swipe-card.top'), said = deck.getByRole('status');
+    await expect(top).toHaveAttribute('data-id', String(plantId(AIL)));
+    // A heart, then a pass: each said, with the card now on top.
+    await deck.locator('ma-deck .round.like').click();
+    await expect(said).toHaveText('Match : Ail des ours, ajoutée aux favoris. Carte suivante : Ciguë maculée.');
+    await deck.locator('ma-deck .round.pass').click();
+    await expect(said).toHaveText('Passée : Ciguë maculée. Carte suivante : Ortie dioïque.');
+  });
+
   test('les cartes de Rencontres, ← → depuis la page : seulement un paquet visible — replié, rien ; deux à l’écran, celui qui a le focus', async ({ app, page }) => {
     const ail = plantId(AIL);
     const favourite = () => page.evaluate(async id => (await import('/app/core/collections.js')).isFavorite(id), ail);

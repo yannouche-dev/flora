@@ -20,8 +20,8 @@
 //    its maps about « Les résultats », those of its group's search; media: the photos' viewer (gf-media-viewer). Each
 //    shows the current plant;
 //  - deck: Rencontres' cards (miniapp/kit/ma-deck.js) for the plants found in the scope, the one on top the current
-//    plant; a heart: a favourite. On the swipe core (miniapp/kit/swipes.js), its swipes in memory, its favourites
-//    without origin, taken back as left (DeckSession).
+//    plant; a heart: a favourite; each choice said aloud, in the activities' words. On the swipe core
+//    (miniapp/kit/swipes.js), its swipes in memory, its favourites without origin, taken back as left (DeckSession).
 // What is done in a cell with its own controls is kept in the layout (`cell-param` {key: value…}, gf-layout.js: the
 // address is the app, sent as it is): a map's 3D, background, layers (their order, IGN's catalogue, their opacity),
 // period, « Seule », legend, binoculars (« Observations autour » in 3D), its points' sources and the current plant's
@@ -48,7 +48,7 @@ import { hintView, takeHint } from '../core/hints.js';
 import { addFavorite, forgetFavoriteEntry, isFavorite } from '../core/collections.js';
 import { ui } from '../styles/ui.js';
 import { photosOffLine } from '../components/ui-kit.js';
-import { DISTANCES, cardOf, distanceAt, distanceEvents, distanceKey } from '../miniapp/kit/cards.js';
+import { DISTANCES, cardOf, distanceAt, distanceEvents, distanceKey, nameOf, saidOf } from '../miniapp/kit/cards.js';
 import { SwipeCore, memoryStore } from '../miniapp/kit/swipes.js';
 import { pushHash } from '../core/history.js';
 import { addCatalogLayer, defaultOpacity, isOverlay } from '../core/ign.js';
@@ -1531,7 +1531,7 @@ class DeckSession extends EventTarget {
 const DECK_MAX = 60;
 
 export class DlDeck extends LitElement {
-  static properties = { state: { attribute: false }, params: { attribute: false }, channel: { attribute: false }, _loading: { state: true } };
+  static properties = { state: { attribute: false }, params: { attribute: false }, channel: { attribute: false }, _loading: { state: true }, _said: { state: true } };
 
   static styles = [ui, css`
     :host { display: block; overflow-y: auto; padding: 12px 8px; container-type: size; --deck-max: calc(100cqh - 150px); --deck-min: 220px; }
@@ -1559,6 +1559,8 @@ export class DlDeck extends LitElement {
     /** The search of its group (core/search-channel.js); none: the app's. @type {import('../core/search-channel.js').Channel | null} */ this.channel = null;
     /** @type {Record<string, any>} */ this.params = {};
     this._loading = false;
+    /** What the last swipe did, said aloud (kit/cards.js#saidOf: the activities' words). */
+    this._said = '';
     this.#session.widen = m => this.state?.set({ r: m }, 'replace');
     this.#session.addEventListener('change', () => this.requestUpdate());
     this.addEventListener('deck-decide', e => { e.stopPropagation(); this.#decide(/** @type {CustomEvent} */ (e).detail); });
@@ -1636,7 +1638,8 @@ export class DlDeck extends LitElement {
   /**
    * A card swiped (kit/swipes.js): a heart (a favourite — added only if it is not one: a heart never removes a
    * favourite) and its heart flying off, or passed; a card decided already (a second click while it flew): nothing.
-   * The next one on top is the current plant. @param {{ card: Card, liked: boolean }} d
+   * Said aloud, as in the activities (« Match : Ail des ours, ajoutée aux favoris. Carte suivante : … »). The next one
+   * on top is the current plant. @param {{ card: Card, liked: boolean }} d
    */
   #decide({ card, liked }) {
     const ses = this.#session;
@@ -1645,6 +1648,7 @@ export class DlDeck extends LitElement {
     if (r.side === 'match') ses.core.heart();
     ses.top = null;
     const next = ses.deck[0];
+    this._said = saidOf({ name: nameOf(card.plant), side: r.side, fav: r.fav, next: next ? nameOf(next.plant) : null });
     if (next && this.#writes) this.state?.pick(next.plant.id, { how: 'replace' });
   }
 
@@ -1691,7 +1695,8 @@ export class DlDeck extends LitElement {
     const cut = this.#of > DECK_MAX;
     return html`<ma-deck active .session=${ses} .cards=${ses.deck} .c=${ses.c}
       .endTitle=${cut ? `Vous avez rencontré les ${DECK_MAX} premières plantes du coin (sur ${this.#of.toLocaleString('fr-FR')}).` : ''}
-      .endNote=${cut ? 'Cherchez ou filtrez pour voir les autres.' : ''}></ma-deck>`;
+      .endNote=${cut ? 'Cherchez ou filtrez pour voir les autres.' : ''}></ma-deck>
+      <p class="visually-hidden" role="status">${this._said}</p>`;
   }
 
   /**
