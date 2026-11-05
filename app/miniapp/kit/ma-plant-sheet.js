@@ -3,8 +3,9 @@
 // beside it on a wide screen (its width the user's: a separator, core/panes.js, kept in the mini-app's own storage,
 // `layout-key`, which « Recommencer » forgets); « ‹ Préc. » and « Suivante › » through the cards it was opened from, a quick sideways
 // swipe or ← → too; Échap or its × (« Fermer la fiche ») closes it. Over a start screen (a link with a plant), the sheet
-// alone. It never navigates: the event `ma-plant` (detail.id: the plant to show, null: closed) goes up to the box,
-// which keeps the address (another plant: a new entry, Back returns to it). It keeps no plant of its own: the one it
+// alone. It never navigates (a plant link in it neither: the box opens it, core/embed-links.js): the event `ma-plant`
+// (detail.id: the plant to show, null: closed) goes up to the box, which keeps the address (another plant: a new entry,
+// Back returns to it). It keeps no plant of its own: the one it
 // shows is `open`, the pager's place is that plant's among the cards. Its « Médias » open at `mediaAt` (&m=), and say
 // the image shown (the event media-index, for the address). `simple` (Orchidées de Mirabel): only its « Médias » (the
 // viewer, a block of the sheet: it takes ← → once touched, never the focus by itself, and Échap still closes the sheet

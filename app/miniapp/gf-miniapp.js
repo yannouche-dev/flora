@@ -16,6 +16,8 @@
 //    plant chosen and its sheet open, or its sheet closed (the plant stays chosen); the others, the plant open (?p=:
 //    its sheet), or closed — back to the entry it was opened from. Over a start screen, the plant of a link (?p=)
 //    shows in a sheet of its own (ma-plant-sheet).
+//  - A plant link in a sheet it shows (a sosie): opened in the activity (#plant), never in Flore — Parcours, which opens
+//    no sheet, lets it lead there (core/embed-links.js).
 //  - The way out: exit.confirm(c) asks first if it says something; then back to where it was opened from (else Flore
 //    as it was left: context.js floreHref). An activity launched from another (Découvrir over its box: its film icon, « Autres activités »)
 //    takes that one's starting point, so « Quitter » leaves both; Back still returns to it. Doing or leaving it
@@ -159,6 +161,17 @@ export class GfMiniapp extends LitElement {
   }
 
   /**
+   * A plant link in one of its sheets (a sosie, in « Plantes à confondre » or Usages): opened here, as its components
+   * open plants (ma-plant) — a new entry, its sheet mark carried, « Fermer la fiche » back past it. False: an activity
+   * that opens no sheet (no `focus`: Parcours) lets it lead to Flore. @param {number} id
+   */
+  #openFromLink = id => {
+    if (!this._app || !('focus' in this._app.m.context)) return false;
+    this.#plant(id);
+    return true;
+  };
+
+  /**
    * The depth of the entry it was opened from, or the one the activity it was launched from had (Quitter goes back to
    * it); null: nothing behind (Flore as it was left then). @type {number | null}
    */
@@ -168,8 +181,8 @@ export class GfMiniapp extends LitElement {
 
   connectedCallback() {
     super.connectedCallback();
-    // No way out to another site from inside (but the credits a licence asks for).
-    embedLinks(this, { quiet: true });
+    // No way out to another site from inside (but the credits a licence asks for); a plant link opened inside.
+    embedLinks(this, { quiet: true, plant: this.#openFromLink });
     // « Recommencer » in another tab: emptied here too.
     this.#unsync = subscribe('miniapp', d => { if (d.op === 'replay' && d.id === this._app?.m.id) this._app.replay(true); });
   }

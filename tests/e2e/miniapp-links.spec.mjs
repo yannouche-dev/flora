@@ -2,7 +2,8 @@
 // clicked opens nothing — its small card only (hovered with a mouse, touched on a phone, reached with the keyboard;
 // Échap, the mouse gone, a touch on the map hide it). In every screen of the games, each link to another origin left
 // is a credit a licence asks for (rel="license" / "author", in a credit line or the map's attribution) or the
-// emergency's (the poison centres, 15, 112); outside the mini-apps the plant's sheet keeps its links to its sources.
+// emergency's (the poison centres, 15, 112); outside the mini-apps the plant's sheet keeps its links to its sources. A
+// plant link in an activity's sheet (a sosie) opens that plant there, never Flore: a new entry, « Fermer la fiche » past it.
 import { test, expect, plantId, answerAround } from './fixtures.mjs';
 
 /** @typedef {import('@playwright/test').Page} Page */
@@ -169,4 +170,34 @@ test('dans les activités, seuls les crédits mènent ailleurs ; hors d’elles,
   // Outside the games: the plant's sheet with its links to its sources.
   await app.go(`#/plant/${ail}`);
   await expect.poll(async () => (await linksOut(page)).filter(l => !l.credit).length, { timeout: 15_000 }).toBeGreaterThan(0);
+});
+
+test('un sosie touché dans la fiche d’une activité s’y ouvre : une nouvelle étape, Retour, « Fermer la fiche » au-delà des deux', async ({ app, page }) => {
+  // Muguet: a species of the flora, a link to its sheet (Colchique, a genus, leads to Flore's search).
+  const ail = String(plantId('Allium ursinum')), muguet = String(plantId('Convallaria majalis'));
+  const p = () => page.evaluate(() => new URLSearchParams(location.hash.split('?')[1] || '').get('p'));
+  await app.open('#/app/cueillette');
+  await page.getByRole('button', { name: 'Autour de moi' }).click();
+  await page.locator('ma-distance').getByRole('button', { name: 'Qui pousse par ici ?' }).click();
+  await expect.poll(() => hash(page)).toBe('#/app/cueillette/cards');
+  const list = page.locator('ma-around-list');
+  await list.getByRole('tab', { name: 'Toutes' }).click();
+  await list.locator('.grid .card').filter({ hasText: 'Ail des ours' }).click();
+  await expect.poll(p).toBe(ail);
+  const sheet = page.locator('ma-plant-sheet');
+  const entries = await page.evaluate(() => history.length);
+  await sheet.locator('gf-lookalikes').getByRole('link', { name: 'Muguet' }).first().click();
+  await expect.poll(p).toBe(muguet);
+  expect(await hash(page)).toMatch(/^#\/app\/cueillette\/cards\?/);
+  expect(await page.evaluate(() => history.length)).toBe(entries + 1);
+  await expect(sheet.locator('.sheet-head')).toContainText('Muguet');
+  await page.goBack();
+  await expect.poll(p).toBe(ail);
+  await page.goForward();
+  await expect.poll(p).toBe(muguet);
+  await sheet.getByRole('button', { name: 'Fermer la fiche' }).click();
+  await expect.poll(p).toBe(null);
+  expect(await hash(page)).toMatch(/^#\/app\/cueillette\/cards/);
+  await expect(page.locator('gf-miniapp')).toHaveCount(1);
+  await expect(sheet).toHaveCount(0);
 });
