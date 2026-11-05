@@ -146,12 +146,8 @@ export function migrateTree(l) {
   return { ...rest, tree };
 }
 
-/** The saved layout, or the one of earlier versions (block order and folded blocks only). @returns {SheetLayout} */
-const readLayout = () => {
-  const saved = readObject(config.storageKeys.sheetLayout);
-  if (saved) return { ...emptyLayout(), ...migrateTree(migratePlaces(saved)) };
-  return { ...emptyLayout(), order: readObject(config.storageKeys.sheetBlocks) || {}, hidden: readObject(config.storageKeys.sheetHidden) || {} };
-};
+/** The saved layout (none: the defaults). @returns {SheetLayout} */
+const readLayout = () => ({ ...emptyLayout(), ...migrateTree(migratePlaces(readObject(config.storageKeys.sheetLayout) || {})) });
 
 const initialMode = readMode(config.storageKeys.mode) || 'standard';
 /** An override equal to the mode is no override. @param {string} key */

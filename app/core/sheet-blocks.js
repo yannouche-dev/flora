@@ -15,7 +15,7 @@ import { MODULES, moduleOn } from './modules.js';
 import { baseOf, importModes, modeKeys, ownModes } from './modes.js';
 import { emptyLayout, migratePlaces, migrateTree, store } from './store.js';
 import { deleteNoteTexts, fromPortable, mergeNoteTexts, noteText as storedText, portableNotes, setNoteText as storeText } from './sheet-notes.js';
-import { writeJSON, writeText } from './prefs.js';
+import { writeJSON } from './prefs.js';
 import { cleanOwnLook } from './map-settings.js';
 import { SHEET, dock, normalize, patchStack, setSizes, sheetInRow, stackOf, undock, validTree } from './pane-tree.js';
 
@@ -150,9 +150,6 @@ const hiddenList = view => (layout().hidden[view] ?? DEFAULT_HIDDEN[baseOf(view)
  */
 export const foldedByHand = (view, key) => hiddenList(view).includes(key);
 
-/** Keys of earlier versions (one list per mode) → today's block. */
-const RENAMED = { photo: 'photos', about: 'taxonomy', statuses: 'status', description: 'wikipedia' };
-
 const layout = () => store.state.sheetLayout;
 
 /** Note blocks created by hand. @returns {SheetBlock[]} */
@@ -211,8 +208,7 @@ function merge(saved, keys) {
 }
 
 /** The block keys of a view, in the order chosen on this device. @param {Mode} view @returns {string[]} */
-export const blockOrder = view =>
-  merge((layout().order[view] || []).map(k => RENAMED[/** @type {keyof typeof RENAMED} */ (k)] || k), defaults(view));
+export const blockOrder = view => merge(layout().order[view] || [], defaults(view));
 
 /** Has this view been arranged by hand? @param {Mode} view */
 export function isCustom(view) {
@@ -232,11 +228,7 @@ function save(patch) {
   const isEmpty = !next.notes.length && !Object.keys(next.titles).length && !next.mapBlocks?.length && !Object.keys(next.maps || {}).length
     && ['order', 'hidden', 'subOrder', 'subHidden', 'styles', 'titleShown', 'hideEmpty', 'tree'].every(p => !Object.keys(/** @type {any} */ (next)[p] || {}).length);
   // A refusal for lack of room is said on screen (quota.js); the layout still applies to this session.
-  if (writeJSON(config.storageKeys.sheetLayout, isEmpty ? null : next)) {
-    // Earlier versions' keys: carried over once, then gone.
-    writeText(config.storageKeys.sheetBlocks, null);
-    writeText(config.storageKeys.sheetHidden, null);
-  }
+  writeJSON(config.storageKeys.sheetLayout, isEmpty ? null : next);
   store.set({ sheetLayout: next });
 }
 

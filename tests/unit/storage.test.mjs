@@ -310,3 +310,18 @@ test('les largeurs des volets : chaque clé de mise en page est dans config.pane
   const layouts = keys.filter(k => /Layout$/.test(k) && k !== config.storageKeys.sheetLayout);
   assert.deepEqual([...layouts].sort(), [...config.paneLayouts].sort());
 });
+
+test('prefs : les clés que l’app n’a plus, oubliées au lancement — jamais les notes de fiche d’avant', () => {
+  const gone = ['geoflora.sheetBlocks', 'geoflora.sheetHidden'];
+  for (const key of gone) {
+    assert.ok(config.obsoleteKeys.includes(key), key);
+    assert.ok(!Object.values(config.storageKeys).includes(key), key);
+    localStorage.setItem(key, '{"standard":["map"]}');
+  }
+  localStorage.setItem(config.storageKeys.plantNotes, '{}');
+  prefs.forgetObsolete(config.obsoleteKeys);
+  assert.deepEqual(gone.map(k => localStorage.getItem(k)), gone.map(() => null));
+  assert.equal(localStorage.getItem(config.storageKeys.plantNotes), '{}', 'les notes d’avant : déplacées par sheet-notes.js, jamais effacées ici');
+  assert.ok(!config.obsoleteKeys.includes(config.storageKeys.plantNotes));
+  localStorage.removeItem(config.storageKeys.plantNotes);
+});
