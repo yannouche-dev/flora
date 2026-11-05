@@ -286,7 +286,7 @@ test.describe('un grand écran', () => {
     await expect.poll(favourite).toBe(4);
   });
 
-  test('les cartes de Rencontres : chaque choix dit, avec les mots des activités ; une carte passée puis choisie ailleurs, ou reprise par ↺, sur le dessus', async ({ app, page }) => {
+  test('les cartes de Rencontres : chaque choix dit, avec les mots des activités ; une carte passée puis choisie ailleurs, ou reprise par ↺, sur le dessus ; la fin compte les coups de cœur', async ({ app, page }) => {
     const ail = plantId(AIL), cigue = plantId('Conium maculatum');
     await app.open(`#/layout/[map(r=500m),deck,plant.status]?${AT}`);
     const deck = page.locator('dl-deck'), top = deck.locator('ma-deck .swipe-card.top'), said = deck.getByRole('status');
@@ -300,6 +300,13 @@ test.describe('un grand écran', () => {
     await app.go(`#/layout/[map(r=500m),deck,plant.status]?p=${cigue}&${AT}&r=500m`);
     await expect(top).toHaveAttribute('data-id', String(cigue));
     await expect(deck.locator('ma-deck .left')).toHaveText('2 plantes à rencontrer');
+    // To the end: the heart counted, in the favourites — never « Matchs » (a screen has no such tab).
+    await deck.locator('ma-deck .round.pass').click();
+    await expect(top).toHaveAttribute('data-id', String(plantId(ORTIE)));
+    await deck.locator('ma-deck .round.pass').click();
+    const end = deck.locator('ma-deck .deck-end');
+    await expect(end).toContainText('1 coup de cœur dans vos favoris.');
+    await expect(end).not.toContainText('Matchs');
     // ecrit=0 (the deck following the current plant, never changing it): the current plant's card passed, another
     // plant chosen in the results, ↺ — the card taken back on top, not the current plant.
     await app.go(`#/layout/[deck(ecrit=0),results(list)]?p=${ail}&${AT}&r=500m`);

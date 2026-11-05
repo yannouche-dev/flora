@@ -74,7 +74,7 @@ import '../components/gf-plant-list.js';
 import '../components/gf-plant-detail.js';
 import '../components/gf-sheet-block.js';
 import '../components/gf-media-viewer.js';
-import '../miniapp/kit/ma-deck.js';
+import { NO_MATCH } from '../miniapp/kit/ma-deck.js';
 
 /**
  * @typedef {import('./state.js').LayoutState} LayoutState
@@ -1531,6 +1531,9 @@ class DeckSession extends EventTarget {
 /** Cards past this many results are not made (the deck is a walk through the first ones: its end says so). */
 const DECK_MAX = 60;
 
+/** The hearts counted at the end of the deck (a screen has no tab « Matchs »). @param {number} n */
+const heartsKept = n => (n ? `${n} coup${n > 1 ? 's' : ''} de cœur dans vos favoris.` : NO_MATCH);
+
 export class DlDeck extends LitElement {
   static properties = { state: { attribute: false }, params: { attribute: false }, channel: { attribute: false }, _loading: { state: true }, _said: { state: true } };
 
@@ -1552,6 +1555,8 @@ export class DlDeck extends LitElement {
   #cardsFor = '';
   /** The zone's plants the cards are the first of (DECK_MAX): their end says it when there are more. */
   #of = 0;
+  /** What the deck's end says (ma-deck DeckEnd), made again only when the plants it counts change. @type {{ of: number, end: import('../miniapp/kit/ma-deck.js').DeckEnd } | null} */
+  #endFor = null;
 
   constructor() {
     super();
@@ -1709,12 +1714,21 @@ export class DlDeck extends LitElement {
     // A source failing, no card from the others (no plant — GBIF's own, often none where iNaturalist's are —, or none
     // the search keeps): said as a failure, never the deck's end (« toutes les plantes du coin »).
     if (s.speciesState === 'ready' && s.failed.length && !ses.cards.length) return this.#failed(s);
-    // More plants than cards: its end says it met the first ones, and the way to the others (never « toutes »).
-    const cut = this.#of > DECK_MAX;
-    return html`<ma-deck active .session=${ses} .cards=${ses.deck} .c=${ses.c}
-      .endTitle=${cut ? `Vous avez rencontré les ${DECK_MAX} premières plantes du coin (sur ${this.#of.toLocaleString('fr-FR')}).` : ''}
-      .endNote=${cut ? 'Cherchez ou filtrez pour voir les autres.' : ''}></ma-deck>
+    return html`<ma-deck active .session=${ses} .cards=${ses.deck} .c=${ses.c} .end=${this.#end()}></ma-deck>
       <p class="visually-hidden" role="status">${this._said}</p>`;
+  }
+
+  /**
+   * What its end says: the hearts counted, in the favourites (never « Matchs »: a screen has no such tab); more plants
+   * than cards, that it met the first ones, and the way to the others (never « toutes »).
+   */
+  #end() {
+    const of = this.#of > DECK_MAX ? this.#of : 0;
+    if (this.#endFor?.of !== of) {
+      this.#endFor = { of, end: of ? { title: `Vous avez rencontré les ${DECK_MAX} premières plantes du coin (sur ${of.toLocaleString('fr-FR')}).`,
+        kept: heartsKept, note: 'Cherchez ou filtrez pour voir les autres.' } : { kept: heartsKept } };
+    }
+    return this.#endFor.end;
   }
 
   /**

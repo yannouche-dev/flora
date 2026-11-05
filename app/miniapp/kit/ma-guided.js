@@ -33,7 +33,7 @@ import { ui } from '../../styles/ui.js';
 import { nameOf, saidOf } from './cards.js';
 import { sessionOf } from './session.js';
 import './ma-around-map.js';
-import './ma-deck.js';
+import { NO_MATCH } from './ma-deck.js';
 import '../../components/gf-plant-detail.js';
 
 /**
@@ -47,6 +47,8 @@ const STAGES = ['Carte', 'Rencontres', 'Photos', 'Encyclopédie', 'Cueillette ou
 /** What each step brings, said on its button in the bar. */
 const STAGE_ABOUT = ['La carte : jusqu’où chercher', 'Les cartes des plantes d’ici, à côté de la carte', 'Les photos de la plante en vue',
   'Ce qu’en dit l’encyclopédie', 'La cueillette ou la science : à vous de choisir', 'Les plantes voisines, sous la carte'];
+/** The end of the cards: the matches in the favourites — no tab « Matchs » on this way (kit/ma-deck.js DeckEnd). */
+const DECK_END = { kept: (/** @type {number} */ n) => (n ? `${n} match${n > 1 ? 's' : ''} dans vos favoris.` : NO_MATCH) };
 /**
  * The fork's pane: the blocks of the sheet that join the panes, picking or science (the first one shown: « Plantes à
  * confondre » before Usages, a sosie toxique first). A game already under way keeps the tree it stored.
@@ -588,7 +590,7 @@ export class MaGuided extends LitElement {
           .card=${panelCard} .focusId=${id} @map-launch=${() => this.#toCards()}
           @around-pick=${(/** @type {CustomEvent} */ e) => this.#aroundGo(e.detail.id)}></ma-around-map>
         ${asking ? nothing : panes ? this.#sizer.split('map', 'left', () => this.#paneMax('map')) : this.#sizer.split('cards', 'right', () => this.#paneMax('cards'))}
-        <div class="g-deck">${asking ? nothing : s.cards ? html`<ma-deck guided .session=${s} .cards=${s.deck} .c=${c} active
+        <div class="g-deck">${asking ? nothing : s.cards ? html`<ma-deck guided .session=${s} .cards=${s.deck} .c=${c} .end=${DECK_END} active
             @deck-decide=${this.#onDecide} @deck-undo=${this.#onUndo}></ma-deck>` : html`<p class="muted g-wait">Recherche des plantes observées autour…</p>`}</div>
         ${panes ? this.#sizer.split('deck', 'left', () => this.#paneMax('deck')) : nothing}
         ${panes ? html`<div class="g-plant" aria-label=${card ? 'Panneaux : ' + nameOf(card.plant) : 'Panneaux'}>

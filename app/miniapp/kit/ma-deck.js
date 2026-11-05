@@ -11,10 +11,11 @@
 // are never loved: their right says « Je la reconnais : à ne pas cueillir » (stamp À ÉVITER, ⛔ for ♥, a tag on the
 // card).
 // The first time, the top card leans right then left: it can be swiped.
-// The hint once per app open (and again after « Recommencer »: kit/session.js#forgetGame). No more cards: further (« Chercher jusqu’à … »), or the ones passed again
-// (and those recognised to avoid, counted apart from the matches). A deck cut short (a screen's: its cards the first
-// ones of more) says so instead (`endTitle`, `endNote`), without « Chercher jusqu’à … » (further, its cards would
-// still be the first ones).
+// The hint once per app open (and again after « Recommencer »: kit/session.js#forgetGame). No more cards: the matches
+// counted, in its host's words (`end.kept`: « à retrouver dans « Matchs » » only where there is such a tab), further
+// (« Chercher jusqu’à … »), or the ones passed again (and those recognised to avoid, counted apart from the matches).
+// A deck cut short (a screen's: its cards the first ones of more) says so instead (`end.title`, `end.note`), without
+// « Chercher jusqu’à … » (further, its cards would still be the first ones).
 // It decides nothing itself: the card flown off, the event `deck-decide` (detail { card, liked }); `deck-open`
 // (detail { id }), `deck-undo`, `deck-photos` (detail { id }). Its host (`session`, DeckHost: an activity's game,
 // kit/session.js, or a screen's deck, layout/cells.js — both on the swipe core, kit/swipes.js) gives the rest.
@@ -41,6 +42,18 @@ import { bio, distLabel, nameOf, nextDistance } from './cards.js';
  *   nothing), further (« Chercher jusqu’à … »), the cards passed again; `change` when any of it changed
  */
 
+/**
+ * @typedef {{ title?: string, kept?: (n: number) => string, note?: string }} DeckEnd
+ *   what the end of the deck says, by its host: `title` a deck cut short's headline (and no « Chercher jusqu’à … »),
+ *   `kept` the matches counted (n, maybe 0), `note` a line besides; none given: as an activity's list says them
+ */
+
+/** No match at the end of the deck: the same words for every host. */
+export const NO_MATCH = 'Aucun coup de cœur ? Le prochain se cache peut-être un peu plus loin, derrière la haie.';
+
+/** The matches at the end of the deck, as the activities' list says them (its tab « Matchs »). @param {number} n */
+const keptInMatches = n => (n ? `${n} match${n > 1 ? 's' : ''} dans vos favoris — à retrouver dans « Matchs ».` : NO_MATCH);
+
 /** A pointer still this long (ms) before it is let go: the card was held, not thrown. */
 const REST_MS = 60;
 
@@ -62,11 +75,11 @@ export class MaDeck extends LitElement {
     /** A button for the photos of the card on top (Rencontres, once they were shown: kit/ma-meet-media.js). */
     photos: { type: Boolean },
     /**
-     * A deck cut short (a screen's: its cards the first ones of more, layout/cells.js): its end's headline instead of
-     * « toutes les plantes du coin », and a line besides; '': none (its end as always).
+     * What its end says, by its host (DeckEnd): the matches counted in its words (a screen's, Rencontres while
+     * discovering: no tab « Matchs »); a deck cut short (a screen's: its cards the first ones of more, layout/cells.js),
+     * its headline instead of « toutes les plantes du coin », and a line besides. null: as the activities' list says it.
      */
-    endTitle: { attribute: false },
-    endNote: { attribute: false }
+    end: { attribute: false }
   };
 
   static styles = [ui, css`
@@ -163,8 +176,8 @@ export class MaDeck extends LitElement {
     this.guided = false;
     this.active = false;
     this.photos = false;
-    this.endTitle = '';
-    this.endNote = '';
+    /** @type {DeckEnd | null} */
+    this.end = null;
   }
 
   #onChange = () => this.requestUpdate();
@@ -364,15 +377,16 @@ export class MaDeck extends LitElement {
     const deck = this.cards;
     if (!deck.length) {
       // Cut short: no wider search (further, its cards would still be the first ones).
-      const next = this.endTitle ? null : nextDistance(c.radius);
+      const end = this.end;
+      const next = end?.title ? null : nextDistance(c.radius);
       const matches = s.matchCards.length;
       // Cueillette prudente: the toxic look-alikes recognised, counted apart — never with the matches.
       const avoided = s.avoidCards.length;
       return html`<div class="deck-end">
         <p class="big">${icon('flower3')}</p>
-        <p><b>${this.endTitle || 'Vous avez rencontré toutes les plantes du coin !'}</b></p>
-        <p class="muted">${matches ? `${matches} match${matches > 1 ? 's' : ''} dans vos favoris — à retrouver dans « Matchs ».` : 'Aucun coup de cœur ? Le prochain se cache peut-être un peu plus loin, derrière la haie.'}</p>
-        ${this.endNote ? html`<p class="muted">${this.endNote}</p>` : nothing}
+        <p><b>${end?.title || 'Vous avez rencontré toutes les plantes du coin !'}</b></p>
+        <p class="muted">${(end?.kept ?? keptInMatches)(matches)}</p>
+        ${end?.note ? html`<p class="muted">${end.note}</p>` : nothing}
         ${avoided ? html`<p class="avoided">${icon('exclamation-octagon-fill')}${avoided} plante${avoided > 1 ? 's' : ''} reconnue${avoided > 1 ? 's' : ''} à ne pas cueillir.</p>` : nothing}
         <div class="row">${next ? html`<button class="primary" type="button" @click=${() => s.widen(next)}>Chercher jusqu’à ${distLabel(next)}</button>` : nothing}
           ${c.passed.length || c.avoided?.length ? html`<button class="secondary" type="button" @click=${() => s.resetPassed()}>Revoir les plantes passées</button>` : nothing}</div>
