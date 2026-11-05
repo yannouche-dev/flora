@@ -127,18 +127,27 @@ test('les liens d’une case (en modification) : ce qu’elle suit et change, et
     ['plante', true, { plante: 'non' }], ['liste', true, { liste: 'zone' }]]);
   assert.deepEqual(links('map(france,suit=0,plante=non)'), [['zone', false, { portee: null }], ['recherche', false, { suit: null }], ['periode', true, null],
     ['observations', true, null], ['plante', false, { plante: null }], ['liste', false, null]]);
-  // Its observations: some sources only (src=), a pin — let go, every source of its group; both (an intent's), none.
+  // Its observations: some sources only (src=), a pin — its own choice, whatever its group's (the map's pin says it in
+  // use: no pin in its head) —, let go, every source of its group; both (an intent's), none.
+  const why = (/** @type {string} */ text, /** @type {number} */ i) => linksOf(resolve(cellOf(text)))[i];
   assert.deepEqual(links('map(src=inat)')[3], ['observations', false, { src: null }]);
-  assert.equal(linksOf(resolve(cellOf('map(src=gbif)')))[3].why, 'GBIF seul : les autres sources du groupe ne sont pas sur cette carte');
+  assert.deepEqual([why('map(src=gbif)', 3).why, why('map(src=gbif)', 3).said], ['Ses points : GBIF seul, quelles que soient les sources du groupe', true]);
   assert.deepEqual(links('map(repartition)')[3], ['observations', true, null]);
+  // A map of France or of the world: iNaturalist's tiles, whatever src= says — said, never a switch.
+  assert.deepEqual(links('map(france,src=inat)')[3], ['observations', true, null]);
+  assert.equal(why('map(monde)', 3).why, 'Ses points : les carreaux d’iNaturalist, aux filtres du groupe (GBIF n’en a pas)');
   // The list: the zone's all (liste=zone), then what the map shows again; a map of France never leads it, said.
   assert.deepEqual(links('map(liste=zone)').at(-1), ['liste', false, { liste: null }]);
   // A map of the current plant alone never leads it: said, neither lit nor a switch.
   assert.deepEqual(links('map(plante=seule)').at(-1), ['liste', false, null]);
   assert.equal(linksOf(resolve(cellOf('map(plante=seule)'))).at(-1)?.why, 'Ne mène pas la liste : la carte ne montre que la plante courante');
   assert.deepEqual(links('results(zone=0)').map(l => l.slice(0, 2)), [['recherche', true], ['zone', false], ['periode', false], ['plante', true]]);
+  assert.equal(why('results(zone=0)', 2).why, 'Toute la France : la période de la zone ne s’y applique pas');
   assert.deepEqual(links('plant.wikipedia'), [['plante', true, { plante: CURRENT }]]);
   assert.deepEqual(links('plant(plante=128268)'), [['plante', false, { plante: null }]]);
+  // Fixed: « Plante fixée » in its head says it — no pin besides.
+  assert.equal(why('plant(plante=128268)', 0).said, true);
+  assert.equal(why('map(plante=non)', 4).said, undefined);
   assert.deepEqual(links('slot'), []);
   // The map's reach: read, written short, a bare word.
   assert.equal(read('map(france)').text, '[map(portee=france)]');

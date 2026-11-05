@@ -70,13 +70,14 @@ import { spotEvents } from '../core/collections.js';
 import { store, StoreController, whenReady } from '../core/store.js';
 import { share } from '../core/share.js';
 import { icon } from '../core/icons.js';
+import { ACTION_TOAST_MS, briefToast } from '../core/toast.js';
 import { BP, MediaController } from '../core/media.js';
 import { gripStyles, shareGrip } from '../core/split-grip.js';
 import { ui } from '../styles/ui.js';
 import { cell as makeCell, cells as cellsOf, dirAt, moveAt, nodeAt, parse, replaceAt, serialize, setShares, shapeKey, shares } from './grammar.js';
 import { COMPONENTS, CURRENT, LINKS, cellIcon, cellMark, cellName, linksOf, menuLooks, resolveTree, touchOf, withParam } from './registry.js';
 import { cleanText, DEFAULT_RADIUS, groupPrefix, LayoutState, liveSearch, readLive, readQuery, sameLive } from './state.js';
-import { groupDefaults, groupNotes } from './group-defaults.js';
+import { groupDefaults, groupNotes, startToFind } from './group-defaults.js';
 import { SearchChannel } from '../core/search-channel.js';
 import { defaultSources } from '../core/observations.js';
 import { forgetShares, savedShares, saveShares } from './sizes.js';
@@ -236,6 +237,11 @@ export class GfLayout extends LitElement {
     /* The groups' settings (two cells that disagree, the address against a cell): said, never an error. */
     .notes { margin: 0; padding: 8px 12px 8px 30px; font-size: 0.85rem; border-radius: 10px; background: var(--gf-warn-bg); }
     .notes li + li { margin-top: 4px; }
+    /* A finger: « Prendre celui de la case » a 44 px target (32 px drawn). */
+    @media (pointer: coarse) {
+      .notes button.link { position: relative; min-height: 32px; padding: 0 6px; }
+      .notes button.link::before { content: ''; position: absolute; inset: -6px 0; }
+    }
     .advanced { display: grid; gap: 8px; padding: 10px 12px; border: 1px solid var(--gf-border); border-radius: 10px; background: var(--gf-surface); }
     .advanced .head { display: flex; align-items: center; gap: 8px; }
     .advanced h2 { flex: 1; margin: 0; font-size: 0.95rem; }
@@ -302,9 +308,14 @@ export class GfLayout extends LitElement {
     .cell-head .link-chip[aria-pressed='true'], .cell-head .link-chip[data-on='true'] { border-style: solid; border-color: transparent;
       background: color-mix(in srgb, var(--gf-accent) 18%, transparent); color: var(--gf-accent); }
     .cell-head button.link-chip:focus-visible { outline: none; box-shadow: var(--gf-focus); }
-    /* In use, an axis the cell is detached from (a pin): said, never a switch — dashed, in the warning's tint. */
-    .cell-head .pin-chip { width: 22px; height: 22px; display: inline-grid; place-items: center; border-radius: 50%; font-size: 0.68rem;
+    /* In use, an axis the cell is detached from (a pin): said, never a switch — dashed, in the warning's tint; touched,
+       its words (a finger: a 32 px target, the head no taller). */
+    .cell-head .pin-chip { width: 22px; height: 22px; min-height: 0; padding: 0; display: inline-grid; place-items: center; border-radius: 50%; font-size: 0.68rem;
       border: 1px dashed var(--gf-text-muted); color: var(--gf-text-muted); background: var(--gf-warn-bg); }
+    @media (pointer: coarse) {
+      .cell-head .pin-chip { position: relative; }
+      .cell-head .pin-chip::before { content: ''; position: absolute; inset: -5px; }
+    }
     /* A results cell's list / grid switch (view=). */
     .cell-head .cell-views { flex: none; display: inline-flex; gap: 2px; padding: 2px; border-radius: 8px; background: var(--gf-surface-2, var(--gf-bg)); }
     .cell-head .cell-views .icon-btn { width: 28px; height: 26px; min-height: 0; padding: 0; font-size: 0.85rem; border-radius: 6px; }
@@ -1050,8 +1061,28 @@ export class GfLayout extends LitElement {
     const groups = this.#groups(), many = groups.length > 1;
     return groups.flatMap(g => {
       const d = this.#given.get(g), state = this.#group(g).state;
-      return d ? groupNotes(d, state.live, { letter: many ? g.toUpperCase() : '', zone: scopeWords(state) }).map(n => ({ ...n, state })) : [];
+      if (!d) return [];
+      const lieu = startToFind(d, state.live);
+      const startAt = lieu ? this.#startAt(state, lieu) : undefined;
+      return groupNotes(d, state.live, { letter: many ? g.toUpperCase() : '', zone: scopeWords(state), startAt }).map(n => ({ ...n, state }));
     });
+  }
+
+  /** Where each starting place's words lead (#startAt), by its words: undefined while being found. @type {Map<string, [number, number] | null | undefined>} */
+  #starts = new Map();
+
+  /**
+   * Where a starting place's words lead (its group's find: the IGN geocoder, cached — core/geoservices.js), asked once;
+   * null: nowhere (not found, offline, the module off); undefined: being found (the strip drawn again once it is).
+   * @param {LayoutState} state @param {string} lieu
+   */
+  #startAt(state, lieu) {
+    if (!this.#starts.has(lieu)) {
+      this.#starts.set(lieu, undefined);
+      Promise.resolve().then(() => state.find(lieu)).then(found => found?.coordinates ?? null, () => null)
+        .then(at => { this.#starts.set(lieu, at); this.requestUpdate(); });
+    }
+    return this.#starts.get(lieu);
   }
 
   /**
@@ -1459,16 +1490,19 @@ export class GfLayout extends LitElement {
    * How a cell is wired to the others (registry.js#linksOf), in its head being modified: a chip each — the zone, the
    * search, the period, the observations, the current plant, the list —, lit when it follows (and changes) it; touched, it detaches the cell or
    * attaches it again (the setting that does it, written: a plant cell fixed on its group's plant). One that cannot be
-   * changed is said, never a switch. In use, its pins alone: a chip for each axis it is detached from, said, never a
-   * switch (none: nothing). @param {string} key @param {Resolved} r @param {string} title
+   * changed is said, never a switch. In use, its pins alone: a chip for each axis it is detached from, never a switch —
+   * touched, its words in a brief toast over it (a finger has no hover: its title would stay unread) —, but those the
+   * cell says itself (registry.js `said`: a map's sources, its pin on the map; a fixed plant, « Plante fixée »): none,
+   * nothing. @param {string} key @param {Resolved} r @param {string} title
    */
   #links(key, r, title) {
     const ICONS = /** @type {const} */ ({ zone: 'geo-alt', recherche: 'search', periode: 'sun-fill', observations: 'binoculars', plante: 'flower1', liste: 'list-ul' });
     if (!this.editing) {
-      const pins = linksOf(r).filter(l => !l.on);
+      const pins = linksOf(r).filter(l => !l.on && !l.said);
       return pins.length ? html`<span class="cell-links" role="group" aria-label=${'Détachée : « ' + title + ' »'}>${pins.map(l => {
         const words = `${LINKS[l.link]} : détachée — ${l.why}`;
-        return html`<span class="pin-chip" data-link=${l.link} role="img" aria-label=${words} title=${words}>${icon(ICONS[l.link])}</span>`;
+        return html`<button type="button" class="pin-chip" data-link=${l.link} aria-label=${words} title=${words}
+          @click=${(/** @type {Event} */ e) => briefToast(words, { near: /** @type {Element} */ (e.currentTarget), at: 'above', offset: 6, ms: ACTION_TOAST_MS })}>${icon(ICONS[l.link])}</button>`;
       })}</span>` : nothing;
     }
     const all = linksOf(r);

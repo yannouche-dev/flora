@@ -5,7 +5,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { resolve } from '../../app/layout/registry.js';
 import { parse } from '../../app/layout/grammar.js';
-import { groupDefaults, groupNotes } from '../../app/layout/group-defaults.js';
+import { groupDefaults, groupNotes, startToFind } from '../../app/layout/group-defaults.js';
 
 /** A layout's cells, in reading order, as gf-layout.js gives them (path, number, title, resolved). @param {string} text */
 function cells(text) {
@@ -54,7 +54,8 @@ test('le lieu de départ : la première carte qui en dit un (lieu=, sinon autour
 
 test('l’adresse contre une case : dite, avec de quoi prendre celle de la case', () => {
   const d = groupDefaults(cells('[map(r=5km,when=mois,lieu=Mirabel),results]'));
-  const notes = groupNotes(d, { r: 2000, periode: 'toujours', at: [2.35, 48.85], place: 'Paris' }, { zone: '2 km autour de Paris' });
+  // (Mirabel's words lead near Ménétrol: far from Paris.)
+  const notes = groupNotes(d, { r: 2000, periode: 'toujours', at: [2.35, 48.85], place: 'Paris' }, { zone: '2 km autour de Paris', startAt: [3.1116, 45.8726] });
   assert.deepEqual(notes.map(n => [n.text, n.take?.label, n.take?.patch]), [
     ['Rayon : l’adresse dit 2 km, la case « Carte » 5 km.', 'Prendre celui de la case', { r: 5000 }],
     ['Période : l’adresse dit « Toujours », la case « Carte » « Ce mois-ci ».', 'Prendre celle de la case', { periode: null }],
@@ -65,4 +66,22 @@ test('l’adresse contre une case : dite, avec de quoi prendre celle de la case'
   assert.deepEqual(groupNotes(d, NONE), []);
   // A cell that says nothing: the address' own is no conflict.
   assert.deepEqual(groupNotes(groupDefaults(cells('[map,results]')), { r: 5000, periode: 'mois', at: [2.35, 48.85], place: 'Paris' }), []);
+});
+
+test('le lieu de départ trouvé sous un autre nom (un code postal) : dit d’après où il mène, jamais d’après son nom seul', () => {
+  const d = groupDefaults(cells('[map(lieu=63100),results]'));
+  const live = { r: null, periode: null, at: /** @type {[number, number]} */ ([3.08707, 45.77722]), place: 'Clermont-Ferrand' };
+  // Its name does not tell: where its words lead is asked; being found, nothing said yet.
+  assert.equal(startToFind(d, live), '63100');
+  assert.deepEqual(groupNotes(d, live), []);
+  // They lead there (a reload, a shared link of its own zone): nothing to say.
+  assert.deepEqual(groupNotes(d, live, { startAt: [3.0871, 45.7772] }), []);
+  // Elsewhere, or nowhere (not found): said, with the way to take it.
+  const far = groupNotes(d, live, { zone: '2 km autour de Clermont-Ferrand', startAt: [2.35, 48.85] });
+  assert.deepEqual(far.map(n => [n.key, n.take?.patch]), [['address:start', { at: null, place: '63100', obs: null }]]);
+  assert.equal(groupNotes(d, live, { startAt: null }).length, 1);
+  // Named as it: nothing asked. No zone, no start: nothing asked either.
+  assert.equal(startToFind(groupDefaults(cells('[map(lieu=Mirabel)]')), { at: [3.11, 45.87], place: 'Puy de Mirabel (Ménétrol)' }), null);
+  assert.equal(startToFind(d, { at: null, place: null }), null);
+  assert.equal(startToFind(groupDefaults(cells('[map(autour)]')), live), null);
 });

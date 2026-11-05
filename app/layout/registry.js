@@ -306,7 +306,8 @@ export const COMPONENTS = [
     id: 'map', title: 'Carte', icon: 'map', aliases: ['carte'],
     about: 'La zone (cercle autour d’un lieu), les observations des plantes trouvées, celles de la plante courante en grand. Toucher un point : sa plante devient la plante courante ; appui long : la zone s’y centre.',
     params: MAP_PARAMS,
-    main: 'r', reads: ['zone', 'periode', 'observations', 'recherche', 'plante', 'regard'], writes: ['zone', 'periode', 'regard', 'plante'], min: { w: 240, h: 180 }
+    // (Its observations written too: « Cocher » on its pin ticks for its group a source it shows — cells.js.)
+    main: 'r', reads: ['zone', 'periode', 'observations', 'recherche', 'plante', 'regard'], writes: ['zone', 'periode', 'observations', 'regard', 'plante'], min: { w: 240, h: 180 }
   },
   {
     id: 'search', title: 'Recherche', icon: 'search', aliases: ['recherche', 'chercher', 'flore'],
@@ -794,9 +795,10 @@ export function menuLooks(columns) {
 
 /**
  * @typedef {'zone' | 'recherche' | 'periode' | 'observations' | 'plante' | 'liste'} LinkKey
- * @typedef {{ link: LinkKey, on: boolean, why: string, toggle: Record<string, unknown> | null }} Link
+ * @typedef {{ link: LinkKey, on: boolean, why: string, toggle: Record<string, unknown> | null, said?: boolean }} Link
  *   `on`: the cell follows (and changes) that shared state; `toggle`: its settings detached or attached again (null:
- *   always so — said, never a switch); `why`: what it does, in French
+ *   always so — said, never a switch); `why`: what it does, in French; `said`: detached, the cell says it itself in use
+ *   (a map's sources: its pin on the map, cells.js; a fixed plant: « Plante fixée » in its head) — no pin in its head then
  */
 
 /** In a link's toggle: the current plant's number, put there by the layout (a plant cell fixed on it). */
@@ -817,7 +819,8 @@ export function linksOf(r) {
   const p = r.params, id = r.spec.id;
   /** @type {Link[]} */
   const out = [];
-  const add = (/** @type {LinkKey} */ link, /** @type {boolean} */ on, /** @type {string} */ why, /** @type {Record<string, unknown> | null} */ toggle = null) => out.push({ link, on, why, toggle });
+  const add = (/** @type {LinkKey} */ link, /** @type {boolean} */ on, /** @type {string} */ why, /** @type {Record<string, unknown> | null} */ toggle = null, said = false) =>
+    out.push({ link, on, why, toggle, ...(said ? { said } : {}) });
   // The current plant: shown (a fixed one detaches it), chosen by a touch (toucher, ecrit).
   const chooses = (/** @type {string} */ what) => p.ecrit === false ? `Toucher ${what} ouvre sa fiche, sans changer la plante courante`
     : p.toucher === 'rien' ? `Toucher ${what} ne fait rien` : p.toucher === 'fiche' ? `Toucher ${what} ouvre sa fiche` : `Toucher ${what} en fait la plante courante`;
@@ -827,14 +830,17 @@ export function linksOf(r) {
       { portee: zone ? 'france' : null });
     add('recherche', p.suit !== false, p.suit !== false ? 'Ses points : les plantes que garde la recherche' : 'Ses points : toutes les plantes de la zone', { suit: p.suit === false ? null : false });
     add('periode', true, 'Ses points : ceux de la période de toutes les cases');
-    // Its observations: its group's, every source of it — or some only (src=: a pin, « iNaturalist seul »), let go.
-    const src = Array.isArray(p.src) ? /** @type {string[]} */ (p.src) : null;
+    // Its observations: its group's, every source of it — or some only (src=: its own choice, whatever its group's —
+    // said on the map in use, against its group's: its pin, cells.js), let go. A map of France or of the world:
+    // iNaturalist's tiles, as its group's filters say (GBIF has none), whatever src= says.
+    const src = zone && Array.isArray(p.src) ? /** @type {string[]} */ (p.src) : null;
     const all = Object.keys(MAP_PARAMS.src.values ?? {});
     const pinned = src !== null && !all.every(x => src.includes(x));
     const names = (src ?? []).map(x => MAP_PARAMS.src.values?.[x] ?? x).join(' et ');
-    add('observations', !pinned, !pinned ? 'Ses points : les observations de son groupe, de toutes ses sources'
-      : names ? `${names} seul : les autres sources du groupe ne sont pas sur cette carte` : 'Aucune source : aucun point sur cette carte',
-    pinned ? { src: null } : null);
+    add('observations', !pinned, !zone ? 'Ses points : les carreaux d’iNaturalist, aux filtres du groupe (GBIF n’en a pas)'
+      : !pinned ? 'Ses points : les observations de son groupe, de toutes ses sources'
+      : names ? `Ses points : ${names} seul, quelles que soient les sources du groupe` : 'Ses points : aucune source, aucun point sur cette carte',
+    pinned ? { src: null } : null, pinned);
     add('plante', p.plante !== 'non', p.plante === 'non' ? 'La plante courante n’y est pas montrée' : 'La plante courante en grand ; toucher un point la choisit',
       { plante: p.plante === 'non' ? null : 'non' });
     // The list: what it shows of the zone, once moved by hand — never a map of France or the world's, nor one that
@@ -854,7 +860,7 @@ export function linksOf(r) {
   } else if (id === 'results') {
     add('recherche', true, 'Les plantes que garde la recherche');
     add('zone', p.zone !== false, p.zone !== false ? 'Ses plantes : celles de la zone' : 'Toute la France, quelle que soit la zone', { zone: p.zone === false ? null : false });
-    add('periode', p.zone !== false, 'Celles de la zone pendant la période de toutes les cases');
+    add('periode', p.zone !== false, p.zone !== false ? 'Celles de la zone pendant la période de toutes les cases' : 'Toute la France : la période de la zone ne s’y applique pas');
     add('plante', p.ecrit !== false, chooses('une plante'), { ecrit: p.ecrit === false ? null : false });
   } else if (id === 'deck') {
     add('zone', true, 'Ses cartes : les plantes de la zone');
@@ -864,7 +870,7 @@ export function linksOf(r) {
     // A plant's sheet, one of its blocks, its photos: the current plant, or one of its own (fixed: plante=).
     const fixed = p.plante != null;
     // Attached again: the current plant followed; detached: the current one fixed (gf-layout.js puts its number for CURRENT).
-    add('plante', !fixed, fixed ? 'Montre toujours sa plante fixée' : 'Montre la plante courante', { plante: fixed ? null : CURRENT });
+    add('plante', !fixed, fixed ? 'Montre toujours sa plante fixée' : 'Montre la plante courante', { plante: fixed ? null : CURRENT }, fixed);
   }
   return out;
 }

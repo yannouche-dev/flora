@@ -9,6 +9,7 @@
 // (tests/unit/group-defaults.test.mjs).
 
 import { fold } from '../core/fold.js';
+import { metres } from '../core/distance.js';
 import { distanceLabel } from './registry.js';
 
 /**
@@ -96,24 +97,40 @@ function conflictWords(c, of) {
 
 /**
  * Whether a zone's place seems to be the start's own (« Puy de Mirabel (Ménétrol) » for lieu=Mirabel): its name holds the
- * start's first word. @param {string | null} place @param {string} lieu
+ * start's first word — a quick look only: a start found under another name (lieu=63100 → « Clermont-Ferrand ») is told
+ * by where it is (groupNotes `startAt`). @param {string | null} place @param {string} lieu
  */
 function namesStart(place, lieu) {
   const first = fold(lieu).split(' ').find(w => w.length > 2);
   return Boolean(place && first && ` ${fold(place)} `.includes(` ${first} `));
 }
 
+/** How near the address' zone is to its starting place's own for it to be that place (m): its at= has 5 decimals. */
+const START_NEAR = 100;
+
+/**
+ * The starting place (its words) whose position the strip needs (groupNotes `startAt`): the group's address has a zone
+ * whose name does not tell it is that place; null: none needed.
+ * @param {GroupDefaults} d @param {{ at: unknown, place: string | null }} live
+ */
+export function startToFind(d, live) {
+  const lieu = d.from.start && d.start?.startsWith('lieu:') ? d.start.slice(5) : null;
+  return lieu && live.at && !namesStart(live.place, lieu) ? lieu : null;
+}
+
 /**
  * The lines the edit strip says of a group's settings (« Réglages du groupe »): its cells that disagree; then its
  * address against its cells — another radius (r=, written in use from the cell's, then the cell changed), another
- * period, a zone of its own that keeps its starting place from applying —, each with the way to take the cell's.
+ * period, a zone of its own that keeps its starting place from applying (neither named as it, nor where its words lead:
+ * a reload, a shared link of the start's own zone says nothing) —, each with the way to take the cell's.
  * @param {GroupDefaults} d
- * @param {{ r: number | null, periode: string | null, at: unknown, place: string | null }} live the group's address
- * @param {{ letter?: string, zone?: string }} [o] `letter`: the group's (A, B), '' with one group; `zone`: the address'
- *   zone in words (cells.js scopeWords)
+ * @param {{ r: number | null, periode: string | null, at: [number, number] | null, place: string | null }} live the group's address
+ * @param {{ letter?: string, zone?: string, startAt?: [number, number] | null }} [o] `letter`: the group's (A, B), ''
+ *   with one group; `zone`: the address' zone in words (cells.js scopeWords); `startAt`: where the starting place's
+ *   words lead (startToFind: [lon, lat]; null: nowhere, not found; undefined: not known yet — said once known)
  * @returns {GroupNote[]}
  */
-export function groupNotes(d, live, { letter = '', zone = '' } = {}) {
+export function groupNotes(d, live, { letter = '', zone = '', startAt } = {}) {
   const of = letter ? ` du groupe ${letter}` : '';
   /** @type {GroupNote[]} */
   const out = d.conflicts.map(c => ({ key: 'conflict:' + c.key, text: conflictWords(c, of) }));
@@ -127,7 +144,9 @@ export function groupNotes(d, live, { letter = '', zone = '' } = {}) {
       take: { label: 'Prendre celle de la case', patch: { periode: null } } });
   }
   const lieu = start && d.start?.startsWith('lieu:') ? d.start.slice(5) : null;
-  if (lieu && (live.at || live.place) && !namesStart(live.place, lieu)) {
+  // A zone: the start's own when named as it, or where its words lead (being found: nothing said yet).
+  const own = !live.at ? false : startAt === undefined || (startAt !== null && metres(live.at, startAt) <= START_NEAR);
+  if (lieu && (live.at || live.place) && !namesStart(live.place, lieu) && !own) {
     out.push({ key: 'address:start', text: `Lieu${of} : l’adresse a sa zone (${zone}) ; le lieu de départ « ${lieu} » ne s’applique pas.`,
       take: { label: 'Prendre celui de la case', patch: { at: null, place: lieu, obs: null } } });
   }

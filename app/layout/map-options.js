@@ -1,10 +1,14 @@
 // @ts-check
 // The map cell's settings (« Écran sur mesure », registry.js `map`) that need words of their own: its IGN layers by
 // short names (layers=znieff+n2000), its « Noms et réseaux » (noms=lieux+routes), its intents (one word, a bundle of
-// settings: map(terrain)), the dates its points keep (when=mois), its controls by the cell's width (ui=auto). Pure (no
-// DOM, no Leaflet), tested under Node; the rendering is cells.js' (dl-map).
+// settings: map(terrain)), the dates its points keep (when=mois), its controls by the cell's width (ui=auto), its pin
+// (its sources against its group's: mapPin). Pure (no DOM, no Leaflet), tested under Node; the rendering is cells.js'
+// (dl-map).
 
 import { CATALOG_ROWS, LANDMARKS, LANDMARKS_LISTED, LANDMARK_DEFAULTS } from '../core/map-layers.js';
+import { SOURCES, sourcesText } from '../core/observations.js';
+
+/** @typedef {import('../core/observations.js').ObsSource} ObsSource */
 
 /**
  * A layer of the Géoplateforme's catalogue (data/ign-catalog.json) the map adds as an overlay (core/ign.js
@@ -177,6 +181,38 @@ export function wideWords({ many = 0, listed = 0, missing = 0, gbif = 0 }) {
     names: missing > 0 ? `${n(missing)} plante${s(missing)} sans équivalent iNaturalist : absente${s(missing)} de cette carte.` : '',
     gbif: gbif > 0 ? `${n(gbif)} plante${s(gbif)} vue${s(gbif)} par GBIF seul dans la zone : absente${s(gbif)} de cette carte.` : ''
   };
+}
+
+/**
+ * @typedef {{ tag: string, line: string | null, why?: string, act?: { label: string, sources: ObsSource[] | null } }} MapPin
+ *   what the pin says it is (« iNaturalist seul »), what it leaves out (`line`), why (its title); `act`: its way back —
+ *   `sources` null: the map's src= let go (« Afficher »), else the group's sources then (« Cocher »: those it shows ticked)
+ */
+
+/**
+ * A map's pin (cells.js DlMap: an axis of its group it is detached from, said on the map itself, in use too): its own
+ * sources (`src`, its src=; null: none said) fewer than its group's (`group`, its filters' sources) — « iNaturalist
+ * seul », the others ticked not on this map, « Afficher » —, or only sources its group has unticked — nothing to show,
+ * « Cocher » ticks them for the group; a map of France or of the world, iNaturalist's tiles alone while its group has
+ * GBIF's observations (GBIF has no tiles). null: none.
+ * @param {{ portee: string, src: readonly string[] | null, group: readonly ObsSource[] }} o @returns {MapPin | null}
+ */
+export function mapPin({ portee, src, group }) {
+  if (portee !== 'zone') {
+    return group.includes('gbif') ? { tag: 'iNaturalist seul (carreaux)', line: null, why: 'GBIF n’a pas de carreaux : ses observations ne sont que sur une carte de la zone' } : null;
+  }
+  if (!src) return null;
+  const shown = group.filter(x => src.includes(x)), missing = group.filter(x => !src.includes(x));
+  const unticked = SOURCES.filter(x => src.includes(x) && !group.includes(x));
+  const ticked = (/** @type {readonly ObsSource[]} */ xs, /** @type {string} */ word) => `${sourcesText(xs)} ${word}${xs.length > 1 ? 's' : ''}`;
+  if (missing.length && (shown.length || !unticked.length)) {
+    return { tag: shown.length ? sourcesText(shown) + ' seul' : 'Aucune source', line: `${ticked(missing, 'coché')} : pas sur cette carte`, act: { label: 'Afficher', sources: null } };
+  }
+  if (!shown.length && unticked.length) {
+    return { tag: sourcesText(unticked) + ' seul', line: `${ticked(unticked, 'décoché')} : rien à montrer sur cette carte`,
+      act: { label: 'Cocher', sources: SOURCES.filter(x => group.includes(x) || unticked.includes(x)) } };
+  }
+  return null;
 }
 
 /**

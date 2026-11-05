@@ -8,7 +8,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import * as G from '../../app/layout/grammar.js';
 import { cellMark, cellName, resolve, resolveTree, withParam } from '../../app/layout/registry.js';
-import { MAP_CONTROLS, MAP_INTENTS, MAP_LANDMARKS, MAP_LAYERS, catalogLayers, defaultControls, inWhen, landmarksText, layersOf, mapControls, opacText, opacitiesOf, overlaysOf, snapRadius, uiMode, wideWords, zoneTaxa } from '../../app/layout/map-options.js';
+import { MAP_CONTROLS, MAP_INTENTS, MAP_LANDMARKS, MAP_LAYERS, catalogLayers, defaultControls, inWhen, landmarksText, layersOf, mapControls, mapPin, opacText, opacitiesOf, overlaysOf, snapRadius, uiMode, wideWords, zoneTaxa } from '../../app/layout/map-options.js';
 import { CATALOG_ROWS, LANDMARKS } from '../../app/core/map-layers.js';
 import { DEFAULT_OPACITY, defaultOpacity } from '../../app/core/ign-layers.js';
 
@@ -452,4 +452,21 @@ test('une carte de la France ou du monde sur une zone : les taxons iNaturalist d
   assert.deepEqual(zoneTaxa([{ taxonId: 7 }, { taxonId: null }]), { taxa: [7], said: { listed: 1, gbif: 1 } });
   assert.equal(wideWords({ gbif: 1 }).gbif, '1 plante vue par GBIF seul dans la zone : absente de cette carte.');
   assert.deepEqual(wideWords({}).gbif, '');
+});
+
+test('l’épingle d’une carte : ses sources contre celles du groupe — moins (« Afficher » lâche src=), seulement des décochées (« Cocher » les coche pour le groupe), aucune ; la France ou le monde, les carreaux d’iNaturalist seuls', () => {
+  const pin = (/** @type {string} */ portee, /** @type {string[] | null} */ src, /** @type {('inat' | 'gbif')[]} */ group) => mapPin({ portee, src, group });
+  // Fewer than its group's: what it shows, what it leaves out, src= let go.
+  assert.deepEqual(pin('zone', ['inat'], ['inat', 'gbif']), { tag: 'iNaturalist seul', line: 'GBIF coché : pas sur cette carte', act: { label: 'Afficher', sources: null } });
+  // Only a source its group has unticked: nothing to show — ticked for the group (its sources then, both).
+  assert.deepEqual(pin('zone', ['gbif'], ['inat']), { tag: 'GBIF seul', line: 'GBIF décoché : rien à montrer sur cette carte', act: { label: 'Cocher', sources: ['inat', 'gbif'] } });
+  // None of its own (src=aucune): every one of its group's left out.
+  assert.deepEqual(pin('zone', [], ['inat', 'gbif']), { tag: 'Aucune source', line: 'iNaturalist et GBIF cochés : pas sur cette carte', act: { label: 'Afficher', sources: null } });
+  // As its group's, or none said: no pin.
+  assert.equal(pin('zone', ['inat'], ['inat']), null);
+  assert.equal(pin('zone', null, ['inat']), null);
+  assert.equal(pin('zone', ['inat', 'gbif'], ['inat', 'gbif']), null);
+  // France or the world: iNaturalist's tiles alone, while its group has GBIF's observations — whatever src= says.
+  assert.deepEqual(pin('france', null, ['inat', 'gbif']), { tag: 'iNaturalist seul (carreaux)', line: null, why: 'GBIF n’a pas de carreaux : ses observations ne sont que sur une carte de la zone' });
+  assert.equal(pin('monde', ['gbif'], ['inat']), null);
 });

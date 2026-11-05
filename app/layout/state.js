@@ -308,13 +308,17 @@ export class LayoutState extends EventTarget {
   #circle = '';
 
   /**
-   * The zone's observations loaded, when it has more (iNaturalist's past ZONE_MAX, GBIF's past its page — core/
-   * observations.js: the most recent of each): how many are shown, of how many; null: all of them (cells.js says it).
-   * @returns {{ shown: number, total: number } | null}
+   * The zone's observations loaded, when a source has more, each apart (core/observations.js): iNaturalist's past
+   * ZONE_MAX — its most recent —, GBIF's past its page of GBIF_MAX — one page, asked in no order —: how many of its
+   * points are shown, of how many it counts (null: all of them); null: every source's all (cells.js says it).
+   * @returns {{ inat: { shown: number, total: number } | null, gbif: { shown: number, total: number } | null } | null}
    */
   get sample() {
     const t = this.totals;
-    return (t.inat ?? 0) > ZONE_MAX || (t.gbif ?? 0) > GBIF_MAX ? { shown: this.points.length, total: this.pointsTotal } : null;
+    const part = (/** @type {'inat' | 'gbif'} */ kind, /** @type {number} */ max) => (t[kind] ?? 0) > max
+      ? { shown: this.points.filter(p => p.kind === kind).length, total: /** @type {number} */ (t[kind]) } : null;
+    const inat = part('inat', ZONE_MAX), gbif = part('gbif', GBIF_MAX);
+    return inat || gbif ? { inat, gbif } : null;
   }
 
   /** The scope's key ('' without one): its circle, its period, its observations' sources and filters. */
@@ -381,15 +385,17 @@ export class LayoutState extends EventTarget {
   /**
    * What a map shows of the zone (`box` [west, south, east, north]; null: let go), the sources of its points
    * (`kinds`), the map (`by`): the list kept to the plants observed there — the whole zone when it shows all of the
-   * circle. The search runs again only when those plants change.
+   * circle. The search runs again only when those plants change — other sources, the same plants: the cells told all
+   * the same (the list's banner says them).
    * @param {number[] | null} box @param {{ kinds?: string[] | null, by?: object | null }} [o]
    */
   setView(box, { kinds = null, by = null } = {}) {
     const at = this.live.at;
     const view = box && at && !boxHolds(box, circleBox(at, this.radius)) ? { box, kinds, by } : null;
     if (!view && !this.view) return;
+    const other = Boolean(view && this.view) && String(view?.kinds) !== String(this.view?.kinds);
     this.view = view;
-    this.#narrow();
+    this.#narrow(other);
   }
 
   /** « Toute la zone »: the list back to the whole zone, and the map that led it framed on it again (`refit`, detail: { by }). */
@@ -415,12 +421,13 @@ export class LayoutState extends EventTarget {
   /**
    * The list kept to the view's plants: its search run again when they changed, its answer published with the cells
    * told — unless another view, or other plants of the zone, came meanwhile (theirs publish). The zone's points still
-   * coming (another period, other filters): found among them once there (#loadScope).
+   * coming (another period, other filters): found among them once there (#loadScope). `told`: the cells told even when
+   * the plants are the same (the view's sources changed).
    */
-  async #narrow() {
+  async #narrow(told = false) {
     if (this.speciesState === 'loading') return;
     const within = this.#withinNow();
-    if (String(within) === String(this.within)) return;
+    if (String(within) === String(this.within)) { if (told) this.#changed(); return; }
     this.within = within;
     const s = this.species;
     if (!s) { this.#changed(); return; }

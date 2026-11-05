@@ -15,6 +15,7 @@ const { store } = await import('../../app/core/store.js');
 const { LayoutState } = await import('../../app/layout/state.js');
 const { APP, SearchChannel, emptyQuery } = await import('../../app/core/search-channel.js');
 const { setModule } = await import('../../app/core/modules.js');
+const { sampleWords } = await import('../../app/core/observations.js');
 
 const AIL = { id: 81541, scientificName: 'Allium ursinum', vernacularNames: ['Ail des ours'] };
 const ORTIE = { id: 128268, scientificName: 'Urtica dioica', vernacularNames: ['Ortie dioïque'] };
@@ -136,20 +137,29 @@ test('le lieu de départ du groupe : appliqué une fois chacun — une zone ôt�
   s.dispose();
 });
 
-test('les observations de la zone en partie seulement (plus que la page d’iNaturalist ou de GBIF) : combien montrées, sur combien ; toutes, rien', () => {
+test('les observations de la zone en partie seulement (plus que la page d’iNaturalist ou de GBIF) : chaque source à part, combien montrées sur combien ; dites comme elles ont été demandées ; toutes, rien', () => {
   const s = new LayoutState();
   assert.equal(s.sample, null);
-  s.points = /** @type {any} */ (Array.from({ length: 1000 }, (_, i) => ({ id: 'i' + i })));
+  const points = (/** @type {number} */ inat, /** @type {number} */ gbif) => /** @type {any} */ ([...Array.from({ length: inat }, (_, i) => ({ id: 'i' + i, kind: 'inat' })),
+    ...Array.from({ length: gbif }, (_, i) => ({ id: 'g' + i, kind: 'gbif' }))]);
+  s.points = points(1000, 290);
   s.totals = { inat: 1000, gbif: 300 };
-  s.pointsTotal = 1300;
   assert.equal(s.sample, null);
-  s.totals = { inat: 4200, gbif: null };
-  s.pointsTotal = 4200;
-  assert.deepEqual(s.sample, { shown: 1000, total: 4200 });
-  s.points = s.points.slice(0, 312);
-  s.totals = { inat: 12, gbif: 301 };
-  s.pointsTotal = 313;
-  assert.deepEqual(s.sample, { shown: 312, total: 313 });
+  assert.equal(sampleWords(s.sample), '');
+  // iNaturalist's past its 1 000: its most recent (asked by date).
+  s.points = points(1000, 0);
+  s.totals = { inat: 4212, gbif: null };
+  assert.deepEqual(s.sample, { inat: { shown: 1000, total: 4212 }, gbif: null });
+  assert.equal(sampleWords(s.sample), 'les 1\u202f000 observations les plus récentes d’iNaturalist sur 4\u202f212');
+  // GBIF's past its page: one page, asked in no order — never « the most recent »; iNaturalist's all, nothing said of it.
+  s.points = points(640, 287);
+  s.totals = { inat: 640, gbif: 5000 };
+  assert.deepEqual(s.sample, { inat: null, gbif: { shown: 287, total: 5000 } });
+  assert.equal(sampleWords(s.sample), '287 des 5\u202f000 occurrences de GBIF');
+  // Both.
+  s.points = points(1000, 287);
+  s.totals = { inat: 4212, gbif: 5000 };
+  assert.equal(sampleWords(s.sample), 'les 1\u202f000 observations les plus récentes d’iNaturalist sur 4\u202f212 ; 287 des 5\u202f000 occurrences de GBIF');
   s.dispose();
 });
 
