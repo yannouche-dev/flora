@@ -402,9 +402,10 @@ export class AroundSession extends EventTarget {
   unswipe(id) { this.#core.restore(id); }
 
   /**
-   * A match taken back (Matchs, « Retirer »): out of the matches, and out of the favourites if this game added it and
-   * it is still its own. Resolves 'kept' when the plant stays a favourite (one of the user's: set before, elsewhere,
-   * or made theirs since), else null. @param {Card} c @returns {Promise<'kept' | null>}
+   * A match taken back (Matchs, « Retirer »): out of the matches (and of ↺'s swipes: ↺ then goes to the one before),
+   * and out of the favourites if this game added it and it is still its own. Resolves 'kept' when the plant stays a
+   * favourite (one of the user's: set before, elsewhere, or made theirs since), else null.
+   * @param {Card} c @returns {Promise<'kept' | null>}
    */
   async unmatch(c) { return (await this.#core.unmatch(c)) ? 'kept' : null; }
 

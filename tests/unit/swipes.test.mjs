@@ -152,11 +152,12 @@ test('♥ pendant que ↺ reprend le favori : compté comme pas un favori, ajout
   assert.ok(fav.has(1));
 });
 
-test('« Retirer » attend l’écriture du cœur, puis reprend son favori ; sans cœur, la règle de l’hôte (forget(id, null)) ; dit si la plante reste favorite', async () => {
+test('« Retirer » attend l’écriture du cœur, puis reprend son favori ; sans cœur, la règle de l’hôte (forget(id, null)) ; dit si la plante reste favorite ; ses glissés quittent ↺', async () => {
   const { store, fav, core: c } = core();
   c.decide(card(1), true);
   const out = c.unmatch(card(1));
   assert.equal(c.decided(1), false);
+  assert.deepEqual(c.history, []);
   await flush();
   assert.deepEqual(fav.log, ['add 1']);
   await fav.settle();
@@ -176,6 +177,19 @@ test('« Retirer » attend l’écriture du cœur, puis reprend son favori ; san
   await other.fav.settle();
   assert.equal(await gone, false);
   assert.deepEqual(other.fav.log.slice(1), ['add 6', 'forget 6 null']);
+  // Its swipes out of ↺'s history (a pass, then a heart, of the same plant): ↺ goes back to the swipe before them —
+  // and takes back nothing of theirs.
+  const third = core();
+  third.core.decide(card(7), false);
+  third.core.decide(card(8), false);
+  third.core.restore(8);
+  third.core.decide(card(8), true);
+  third.core.unmatch(card(8));
+  assert.deepEqual(third.core.history, [{ id: 7, liked: false, fav: false }]);
+  assert.equal(third.core.undo()?.id, 7);
+  assert.equal(third.core.undo(), null);
+  await third.fav.settle();
+  assert.deepEqual(third.fav.log, ['add 8', 'forget 8 e1']);
 });
 
 test('« Revoir les plantes passées » : les passées reviennent — et les plantes reconnues à éviter là où le magasin les garde, sans clé ajoutée ailleurs', () => {

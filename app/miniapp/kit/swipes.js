@@ -3,7 +3,8 @@
 // a place (kit/session.js: Rencontres, Cueillette prudente, Mosaïque) and a screen's `deck` cell (layout/cells.js) —
 // not Flore's swipe deck (gf-flora.js: no match, no ↺) nor Faux amis (its own answers and score). What it keeps: the
 // cards passed and matched (Cueillette prudente: its toxic look-alikes recognised, to avoid — never a match nor a
-// favourite), each swipe one write to its host's store; ↺, the last swipes, each taking back its own heart's favourite;
+// favourite), each swipe one write to its host's store; ↺, the last swipes, each taking back its own heart's favourite
+// (a match taken back, « Retirer », leaves them: ↺ then goes to the swipe before);
 // the favourite a heart adds, never one that is there (a heart never removes a favourite), and its taking back, one
 // plant's after the other (a ↺ then a heart before the write: added again, after); the heart flying off the deck. The
 // host gives where the swipes are kept (`store`), its favourites (`favourites`: an activity's carry its origin, a
@@ -163,16 +164,19 @@ export class SwipeCore extends EventTarget {
 
   /**
    * A match taken back (« Retirer »): out of the matches, and its favourite taken back, after its heart's write —
-   * that of its last heart, else the policy's own fallback. Resolves whether the plant is still a favourite.
+   * that of its last heart, else the policy's own fallback. Its swipes leave ↺'s history (the next ↺ goes to the swipe
+   * before them), their hearts' writes with them. Resolves whether the plant is still a favourite.
    * @param {Card} card @returns {Promise<boolean>}
    */
   async unmatch(card) {
     const id = card.plant.id;
     this.#store.write(unswipe(this.swipes, id));
-    const hearts = this.history.filter(e => e.id === id && e.fav);
+    const mine = this.history.filter(e => e.id === id);
+    const hearts = mine.filter(e => e.fav);
     const last = hearts[hearts.length - 1];
     const token = last ? this.#tokens.get(last) ?? null : null;
-    if (last) this.#tokens.delete(last);
+    for (const e of mine) this.#tokens.delete(e);
+    this.history = this.history.filter(e => e.id !== id);
     this.#changed();
     await this.#forget(id, async () => this.#favourites.forget(id, token ? await token : null));
     return this.#favourites.has(id);
