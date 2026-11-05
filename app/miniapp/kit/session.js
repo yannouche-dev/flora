@@ -95,13 +95,6 @@ export class AroundSession extends EventTarget {
     this.pointsFor = '';
     /** The photos' pane hovered: the plant chosen lit on the map. */
     this.chosenGlow = false;
-    /**
-     * A game of Rencontres kept from before its way was its own (a place chosen, no `guided`): the way it was playing
-     * kept from now on (kit/around.js#guidedWay — never swapped when the tabs arrive); ma-guided then takes back the
-     * panes its steps had put in the layout of the mode.
-     */
-    this.keptFromBefore = 'guided' in app.m.context && Array.isArray(this.c.point) && this.c.guided === null;
-    if (this.keptFromBefore) app.set({ guided: discovering() });
     app.addEventListener('dispose', () => this.dispose(), { once: true });
   }
 

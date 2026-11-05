@@ -88,25 +88,6 @@ test('un fichier de la version 1 : ses blocs dans la fiche, leur ordre, leurs ti
   SB.resetAll();
 });
 
-test('undockAlone : les volets que les étapes guidées d’avant avaient posés retournent dans la fiche, ceux que l’utilisateur a changés restent', () => {
-  SB.resetAll();
-  // As the guided steps of before left them: the photos beside the sheet, the encyclopedia under them, the fork's tabs.
-  SB.dockBlock('standard', 'media', 'sheet', 'right');
-  SB.dockBlock('standard', 'wikipedia', /** @type {any} */ (SB.paneOf('standard', 'media')).id, 'bottom');
-  SB.dockBlock('standard', 'uses', 'root', 'right');
-  SB.dockBlock('standard', 'lookalikes', /** @type {any} */ (SB.paneOf('standard', 'uses')).id, 'center');
-  SB.dockBlock('standard', 'calendar', /** @type {any} */ (SB.paneOf('standard', 'uses')).id, 'center');
-  // … one the user then gave another block.
-  SB.dockBlock('standard', 'names', /** @type {any} */ (SB.paneOf('standard', 'wikipedia')).id, 'center');
-  // (Usages is always shown: a block of the fork's that can be folded.)
-  SB.setHidden('standard', 'calendar', true);
-  SB.undockAlone('standard', [['media'], ['wikipedia'], ['uses', 'lookalikes', 'calendar']]);
-  assert.deepEqual(['media', 'uses', 'lookalikes', 'calendar'].map(k => SB.isOnEdge('standard', k)), [false, false, false, false]);
-  assert.deepEqual(SB.paneOf('standard', 'wikipedia')?.tabs, ['wikipedia', 'names'], 'with a block of the user’s: kept');
-  assert.ok(SB.foldedByHand('standard', 'calendar'), 'a block folded stays folded');
-  SB.resetAll();
-});
-
 test('le fichier n’emporte plus Réglages › Cartes ; celui d’un fichier ancien est ignoré', async () => {
   const MS = await import('../../app/core/map-settings.js');
   SB.resetAll();

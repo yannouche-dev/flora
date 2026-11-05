@@ -443,21 +443,6 @@ export function toSheet(view, key, beforeKey = null) {
   }
 }
 
-/**
- * Panes the app once docked by itself into a mode's layout (Rencontres' guided steps, before their panes were the
- * game's: kit/ma-guided.js) back in the sheet: each group of blocks only while a pane holds nothing else, as the
- * steps left it (a pane the user gave another block stays; a block folded stays folded).
- * @param {Mode} view @param {string[][]} groups
- */
-export function undockAlone(view, groups) {
-  let t = treeOf(view);
-  for (const keys of groups) {
-    const pane = keys.map(k => stackOf(t, k)).find(Boolean);
-    if (pane && pane.tabs.every(k => keys.includes(k))) for (const k of pane.tabs) t = undock(t, k);
-  }
-  if (t !== treeOf(view)) setTree(view, t);
-}
-
 /** New shares for a split's children. @param {Mode} view @param {string} id @param {number[]} sizes */
 export const setPaneSizes = (view, id, sizes) => setTree(view, setSizes(treeOf(view), id, sizes));
 

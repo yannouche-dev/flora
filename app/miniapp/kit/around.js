@@ -59,8 +59,7 @@ export const chosenContext = () => ({
 
 /**
  * Rencontres' guided way (kit/ma-guided.js): decided as its game begins (kit/session.js#setPoint: during the first
- * steps of the app; a game kept from before this was decided, as its session starts), kept for the whole game — tabs
- * that arrive never swap its view; « Recommencer » decides anew. Its steps over end it: « La flore complète », or the
+ * steps of the app), kept for the whole game — tabs that arrive never swap its view; « Recommencer » decides anew. Its steps over end it: « La flore complète », or the
  * first steps ended elsewhere (« Passer », « Tout montrer »: their last step reached) — the game then goes on as the
  * others.
  * @param {any} c
