@@ -286,6 +286,34 @@ test.describe('un grand écran', () => {
     await expect.poll(favourite).toBe(4);
   });
 
+  test('les cartes de Rencontres, ← → depuis la page : seulement un paquet visible — replié, rien ; deux à l’écran, celui qui a le focus', async ({ app, page }) => {
+    const ail = plantId(AIL);
+    const favourite = () => page.evaluate(async id => (await import('/app/core/collections.js')).isFavorite(id), ail);
+    // Folded to its head: its cards there (the first one the current plant), out of sight — → from the page decides nothing.
+    await app.open(`#/layout/[map(r=500m),deck(actions=replier,etat=replie)]?${AT}`);
+    await expect.poll(() => param(page, 'p')).toBe(String(ail));
+    await page.keyboard.press('ArrowRight');
+    await page.getByRole('button', { name: 'Déplier « Rencontres »' }).click();
+    const top = page.locator('dl-deck ma-deck .swipe-card.top');
+    await expect(top).toHaveAttribute('data-id', String(ail));
+    await expect(page.locator('dl-deck ma-deck .round.undo')).toBeDisabled();
+    expect(await favourite()).toBe(false);
+    // Two decks shown: → from the page, neither; with the focus on the first, that one only.
+    await app.go(`#/layout/[deck,deck]?${AT}&r=500m`);
+    const decks = page.locator('dl-deck ma-deck');
+    await expect(decks.locator('.swipe-card.top')).toHaveCount(2);
+    await expect(decks.locator('.swipe-card.top').first()).toHaveAttribute('data-id', String(ail));
+    await page.keyboard.press('ArrowRight');
+    await expect(decks.locator('.round.undo')).toHaveCount(2);
+    for (const undo of await decks.locator('.round.undo').all()) await expect(undo).toBeDisabled();
+    expect(await favourite()).toBe(false);
+    await decks.first().locator('.deck').focus();
+    await page.keyboard.press('ArrowRight');
+    await expect.poll(favourite).toBe(true);
+    await expect(decks.first().locator('.round.undo')).toBeEnabled();
+    await expect(decks.nth(1).locator('.round.undo')).toBeDisabled();
+  });
+
   test('les cartes de Rencontres quand iNaturalist ne répond pas : elles le disent, « Réessayer » les fait venir', async ({ app, page }) => {
     let down = true;
     await page.route(/^https:\/\/api\.inaturalist\.org\//, route => down ? route.fulfill({ status: 503, body: '' }) : route.fallback());

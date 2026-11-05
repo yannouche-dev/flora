@@ -3,11 +3,13 @@
 // photo and credit, what Wikipédia says of it, a short bio (its safety first: kit/cards.js#bio). Dragged, it leans and
 // shows its stamp (MATCH, BOF); far enough, or thrown, it flies off: right a match, left passed; up (or a touch), its
 // sheet — one decision at a time (another while the card flies, a double click: none), and none by a gesture the
-// browser takes over (pointercancel: a scroll, a pinch — the card back in place). The three buttons (↺ undo, ✕, ♥, « ⋯ » its sheet unless `guided`, and its photos when asked: `photos`) and the
-// keys (→ ←, ↑) do the same — the keys only when the deck has the focus or nothing has (never a match by mistake from a
-// tab, a slider or the map), and only while `active` (no plant open, no match on screen). Cueillette prudente's toxic
-// look-alikes (kit/session.js#avoids) are never loved: their right says « Je la reconnais : à ne pas cueillir » (stamp
-// À ÉVITER, ⛔ for ♥, a tag on the card).
+// browser takes over (pointercancel: a scroll, a pinch — the card back in place). The three buttons (↺ undo, ✕, ♥,
+// « ⋯ » its sheet unless `guided`, and its photos when asked: `photos`) and the keys (→ ←, ↑) do the same — the keys
+// only on a deck shown (none folded away, nor in a tab not shown), when it has the focus, or when nothing has and it is
+// the only deck shown with cards (never a match by mistake from a tab, a slider, the map or another deck), and only
+// while `active` (no plant open, no match on screen). Cueillette prudente's toxic look-alikes (kit/session.js#avoids)
+// are never loved: their right says « Je la reconnais : à ne pas cueillir » (stamp À ÉVITER, ⛔ for ♥, a tag on the
+// card).
 // The first time, the top card leans right then left: it can be swiped.
 // The hint once per app open (and again after « Recommencer »: kit/session.js#forgetGame). No more cards: further (« Chercher jusqu’à … »), or the ones passed again
 // (and those recognised to avoid, counted apart from the matches). A deck cut short (a screen's: its cards the first
@@ -41,6 +43,9 @@ import { bio, distLabel, nameOf, nextDistance } from './cards.js';
 
 /** A pointer still this long (ms) before it is let go: the card was held, not thrown. */
 const REST_MS = 60;
+
+/** The decks in the page: the keys pressed with nothing focused go to the only one shown, active, with cards. @type {Set<MaDeck>} */
+const decks = new Set();
 
 export class MaDeck extends LitElement {
   static properties = {
@@ -166,6 +171,7 @@ export class MaDeck extends LitElement {
 
   connectedCallback() {
     super.connectedCallback();
+    decks.add(this);
     addEventListener('keydown', this.#onKey);
     // A module switched on or off (Réglages, another tab): the photos follow it.
     moduleEvents.addEventListener('change', this.#onChange);
@@ -173,6 +179,7 @@ export class MaDeck extends LitElement {
 
   disconnectedCallback() {
     super.disconnectedCallback();
+    decks.delete(this);
     removeEventListener('keydown', this.#onKey);
     moduleEvents.removeEventListener('change', this.#onChange);
     this.#watched?.removeEventListener('change', this.#onChange);
@@ -202,14 +209,27 @@ export class MaDeck extends LitElement {
   /** A plant's photo, unless the « Photos en ligne » module is off (a leaf shows instead). @param {string | null | undefined} url */
   #photo(url) { return url && this.#store.state.modules.photos ? url : null; }
 
+  /** On the screen: not under something hidden (a cell folded to its head, a tab not shown — display: none). */
+  #shown() { return this.checkVisibility?.() !== false; }
+
+  /** The only deck shown, active, with cards: the one the keys mean when nothing has the focus. */
+  #alone() {
+    const live = [...decks].filter(d => d.active && d.#shown() && d.cards.length);
+    return live.length === 1 && live[0] === this;
+  }
+
   #onKey = (/** @type {KeyboardEvent} */ e) => {
-    // A dialog over the cards (« Noter ici », a question, a match): never a match by mistake under it.
-    if (e.altKey || e.ctrlKey || e.metaKey || !this.active || modalOpen()) return;
-    // ← passes, → matches, ↑ its sheet — when the deck has the focus, or nothing has (the page itself). Elsewhere
-    // (a tab, a button, a field, the map, a slider) the arrows keep their own meaning: never a match by mistake.
-    const t0 = /** @type {HTMLElement} */ (e.composedPath()[0]);
-    const free = t0 === document.body || t0 === document.documentElement || Boolean(t0?.closest?.('.deck'));
-    if (!free) return;
+    // A dialog over the cards (« Noter ici », a question, a match): never a match by mistake under it. A deck out of
+    // sight (folded, in a tab not shown): never a match unseen.
+    if (e.altKey || e.ctrlKey || e.metaKey || !this.active || modalOpen() || !this.#shown()) return;
+    // ← passes, → matches, ↑ its sheet — when this deck has the focus, or nothing has (the page itself) and it is the
+    // only deck shown (two on the screen: the one with the focus). Elsewhere (a tab, a button, a field, the map, a
+    // slider, another deck) the arrows keep their own meaning: never a match by mistake.
+    const path = e.composedPath(), t0 = path[0];
+    const deck = this.renderRoot.querySelector('.deck');
+    const mine = Boolean(deck) && path.includes(/** @type {Element} */ (deck));
+    const page = t0 === document.body || t0 === document.documentElement;
+    if (!mine && !(page && this.#alone())) return;
     const top = this.cards[0];
     if (!top) return;
     if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') { e.preventDefault(); this.decide(top, e.key === 'ArrowRight'); }
@@ -221,7 +241,8 @@ export class MaDeck extends LitElement {
 
   /** The cards just there: the one on top leans a little right, then left — they can be swiped (once). */
   #hintSwipe() {
-    if (!this.active || !this.session) return;
+    // Out of sight (folded, in a tab not shown): not spent — it comes with a change of the deck once seen.
+    if (!this.active || !this.session || !this.#shown()) return;
     const el = /** @type {HTMLElement | null} */ (this.renderRoot.querySelector('.swipe-card.top'));
     if (!el || !this.session.hintOnce()) return;
     if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
