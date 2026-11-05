@@ -176,6 +176,7 @@ const SHELL = [
   'app/miniapp/ma-grid.js',
   'app/miniapp/ma-steps.js',
   'app/miniapp/kit/cards.js',
+  'app/miniapp/kit/swipes.js',
   'app/miniapp/kit/session.js',
   'app/miniapp/kit/around.js',
   'app/miniapp/kit/ma-deck.js',

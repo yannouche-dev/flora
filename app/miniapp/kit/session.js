@@ -5,32 +5,32 @@
 // Cueillette prudente: avoided — persist keys of the manifest, under geoflora.app.<id>.state), written only through
 // app.set. The rest lives while the app is open: the cards found (iNaturalist, matched to the flora; Cueillette
 // prudente: only the plants of a dangerous confusion, the deadliest first, its toxic look-alikes never a match but
-// recognised, to avoid), the observations in the circle (the map), what Wikipédia says of each
-// card, the swipes to undo, how many of the list's cards are shown. The view of the list is the context's (`view`,
-// the address's &v=). Rencontres: the plant of the screen, chosen (chosenId: kit/around.js#chosenContext). Fires
-// `change`.
+// recognised, to avoid), the observations in the circle (the map), what Wikipédia says of each card, the swipes on
+// the swipe core (kit/swipes.js: ↺, the hearts' favourites — this game's, by origin), how many of the list's cards are
+// shown. The view of the list is the context's (`view`, the address's &v=). Rencontres: the plant of the screen,
+// chosen (chosenId: kit/around.js#chosenContext). Fires `change`.
 
-import { floweringMonths, getPlant } from '../../core/plants.js';
+import { getPlant } from '../../core/plants.js';
 import { speciesAround, observationPointsAround } from '../../core/nearby.js';
 import { addressAt } from '../../core/geoservices.js';
 import { verdictOf } from '../../core/alerts.js';
 import { lookalikesOf } from '../../core/lookalikes.js';
 import { discovering } from '../../core/discover.js';
 import { addFavorite, forgetFavoriteMadeBy, isFavorite } from '../../core/collections.js';
-import { thumbCredit } from '../../core/credit.js';
 import * as sources from '../../core/sources.js';
 import { whenReady } from '../../core/store.js';
 import { subscribe } from '../../core/sync.js';
-import { PAGE, aroundOrder, avoid, deckOf, ethnoSentence, harvestOrder, swipe, toAvoid, unswipe } from './cards.js';
+import { PAGE, aroundOrder, cardOf, ethnoSentence, harvestOrder, toAvoid } from './cards.js';
+import { SwipeCore, forgetHint, hintOnce as hintOnceFor } from './swipes.js';
 
 /**
  * @typedef {import('./cards.js').Card} Card
+ * @typedef {import('./swipes.js').Side} Side
+ * @typedef {import('./swipes.js').Swiped} Swiped
+ * @typedef {import('./ma-deck.js').DeckHost} DeckHost
  * @typedef {import('../../core/nearby.js').AroundPoint} AroundPoint
  * @typedef {import('../runtime.js').MiniApp} MiniApp
  */
-
-/** The mini-apps whose deck has shown it can be swiped (once while the app is open). @type {Set<string>} */
-const hinted = new Set();
 
 /** The cards of a search, at most: the most observed (Cueillette prudente: the first in its order, the deadliest first). */
 const MAX_CARDS = 120;
@@ -49,15 +49,34 @@ const viewOfWord = word => Object.entries(VIEW_WORDS).find(([, w]) => w === word
  * @param {string} id
  */
 export function forgetGame(id) {
-  hinted.delete(id);
+  forgetHint(id);
 }
 subscribe('miniapp', d => { if (d?.op === 'replay' && typeof d.id === 'string') forgetGame(d.id); });
 
+/**
+ * The favourites of a game's hearts (kit/swipes.js's policy): each one this game's (its origin, `app`: « Recommencer »
+ * takes them away again), added only if the plant is not a favourite (a heart never removes one); ↺ and « Retirer »
+ * take back only what still carries the game's origin (core/collections.js#forgetFavoriteMadeBy: not filed, annotated…
+ * since) — by its origin, not by the entry added, so still after a reload.
+ * @param {string} app @returns {import('./swipes.js').FavouritePolicy}
+ */
+const gameFavourites = app => ({
+  has: isFavorite,
+  add: plant => addFavorite(plant, { app }).catch(() => null),
+  forget: id => forgetFavoriteMadeBy(id, app)
+});
+
+/** @implements {DeckHost} */
 export class AroundSession extends EventTarget {
   /** @param {MiniApp} app */
   constructor(app) {
     super();
     this.app = app;
+    // The swipes (kit/swipes.js): kept by the app (app.c, app.set), its hearts this game's favourites, its right
+    // « recognised, to avoid » for Cueillette prudente's toxic look-alikes (avoids).
+    this.#core = new SwipeCore({ store: { read: () => /** @type {import('./cards.js').Swipes} */ (this.app.c), write: p => this.app.set(p) },
+      favourites: gameFavourites(app.m.id), avoids: card => this.avoids(card) });
+    this.#core.addEventListener('change', () => this.changed());
     /** The emptying of the app it belongs to (« Recommencer »: another session). */
     this.generation = app.generation;
     /** @type {Card[] | null} */
@@ -80,10 +99,6 @@ export class AroundSession extends EventTarget {
     this.pointsAbort = null;
     /** What is said of a plant (Wikipédia), by plant id: the text, null (nothing), or absent (not asked yet). @type {Map<number, string | null>} */
     this.ethno = new Map();
-    /** ↺: the last swipes, to undo (`was`: the plant chosen before a heart chose this one). @type {{ id: number, liked: boolean, fav: boolean, was?: number | null }[]} */
-    this.history = [];
-    /** A heart flying off the deck (a match after the first). */
-    this.burst = 0;
     /** The cards shown in « Toutes » (« Voir plus »). */
     this.shown = PAGE;
     /** The cards the open sheet steps through. @type {number[]} */
@@ -91,19 +106,20 @@ export class AroundSession extends EventTarget {
     /** @type {AbortController | null} */
     this.abort = null;
     /** @type {any} */
-    this.timers = { points: 0, radius: 0, burst: 0 };
+    this.timers = { points: 0, radius: 0 };
     this.pointsFor = '';
     /** The photos' pane hovered: the plant chosen lit on the map. */
     this.chosenGlow = false;
     app.addEventListener('dispose', () => this.dispose(), { once: true });
   }
 
-  /**
-   * The favourites the hearts of this game asked for, by plant id: the entry each one added (null: a favourite
-   * already, or not written) — ↺ and « Retirer » wait for it, and ↺ takes back only that one.
-   * @type {Map<number, Promise<import('../../core/collections.js').PlantEntry | null>>}
-   */
-  #writes = new Map();
+  /** The swipes, ↺, the hearts' favourites, the heart flying off (kit/swipes.js). @type {SwipeCore} */
+  #core;
+
+  /** ↺: the last swipes, to undo (`was`: the plant chosen before a heart chose this one). @returns {readonly Swiped[]} */
+  get history() { return this.#core.history; }
+  /** A heart flying off the deck (a match after the first). */
+  get burst() { return this.#core.burst; }
 
   /** The app's context: the place, the distance, the swipes. @returns {any} */
   get c() { return this.app.c; }
@@ -156,11 +172,7 @@ export class AroundSession extends EventTarget {
   }
 
   /** The deck's swipe hint: not shown yet in this app (and now it is). */
-  hintOnce() {
-    if (hinted.has(this.app.m.id)) return false;
-    hinted.add(this.app.m.id);
-    return true;
-  }
+  hintOnce() { return hintOnceFor(this.app.m.id); }
 
   /** The view of the list (the context's, the address's &v=; none chosen: the app's own, `fallback`). @param {string} fallback */
   viewOr(fallback) { return viewOfWord(this.c.view) ?? fallback; }
@@ -269,10 +281,7 @@ export class AroundSession extends EventTarget {
         const plant = await getPlant(/** @type {number} */ (s.plantId));
         if (!plant) return null;
         // iNaturalist's photo (a free licence only, nearby.js), else the flora's thumbnail: each with its credit.
-        /** @type {Card} */
-        const card = { plant, taxonId: s.taxonId, count: s.count, photo: s.photo ? s.photo.replace(/\/square\./, '/medium.') : plant.thumbnail?.url || null,
-          credit: s.photo ? s.credit : thumbCredit(plant.thumbnail), blooming: floweringMonths(plant.flowering).has(month), verdict: null };
-        return card;
+        return cardOf(plant, s, month);
       }))).filter(c => c !== null);
       if (abort.signal.aborted) return;
       let list = /** @type {Card[]} */ (cards);
@@ -294,7 +303,7 @@ export class AroundSession extends EventTarget {
         if (wrong.size) {
           this.app.set({ matches: this.c.matches.filter((/** @type {number} */ id) => !wrong.has(id)),
             avoided: [...(this.c.avoided ?? []).filter((/** @type {number} */ id) => !wrong.has(id)), ...wrong] });
-          for (const id of wrong) forgetFavoriteMadeBy(id, this.app.m.id);
+          for (const id of wrong) this.#core.unfavourite(id);
         }
       } else list = aroundOrder(list);
       this.cards = list;
@@ -311,19 +320,13 @@ export class AroundSession extends EventTarget {
   }
 
   /** The cards not yet swiped. */
-  get deck() { return deckOf(this.cards || [], this.c); }
+  get deck() { return this.#core.deck(this.cards || []); }
 
   /** The cards matched. */
-  get matchCards() {
-    const ids = this.c.matches;
-    return (this.cards || []).filter(c => ids.includes(c.plant.id));
-  }
+  get matchCards() { return this.#core.matchCards(this.cards || []); }
 
   /** Cueillette prudente: the toxic look-alikes recognised, to avoid (never among the matches). */
-  get avoidCards() {
-    const ids = this.c.avoided ?? [];
-    return (this.cards || []).filter(c => ids.includes(c.plant.id));
-  }
+  get avoidCards() { return this.#core.avoidCards(this.cards || []); }
 
   /** The cards the open sheet steps through. */
   get sheetCards() {
@@ -362,82 +365,52 @@ export class AroundSession extends EventTarget {
   avoids(card) { return this.harvest && (this.unread || card.confusions === undefined || toAvoid(card)); }
 
   /**
-   * A card swiped: right, a match (kept by the app, and in the favourites); left, passed. Cueillette prudente: a card
-   * to avoid (avoids) swiped right is recognised, to avoid — never a match nor a favourite, whatever asked it (a
-   * button, a swipe, a key). It can be undone (↺). Returns whether the match put it in the favourites.
-   * @param {Card} card @param {boolean} liked
+   * A card swiped: right, a match (kept by the app, and in the favourites — this game's); left, passed. Cueillette
+   * prudente: a card to avoid (avoids) swiped right is recognised, to avoid — never a match nor a favourite, whatever
+   * asked it (a button, a swipe, a key). Rencontres: a heart chooses the plant loved (until the next one; a pass
+   * changes nothing), in the swipe's own write — the plant chosen before kept for its ↺. It can be undone (↺). A card
+   * decided already is ignored (null: nothing seen, no vibration). Returns its side, and whether the match asked for a
+   * favourite. @param {Card} card @param {boolean} liked @returns {{ side: Side, fav: boolean } | null}
    */
-  swiped(card, liked) {
+  decide(card, liked) {
     const id = card.plant.id;
-    const avoided = liked && this.avoids(card);
-    const match = liked && !avoided;
-    const fav = match && !isFavorite(id);
-    // Rencontres: a heart chooses the plant loved (until the next one; a pass changes nothing) — the plant chosen
-    // before kept for its ↺.
-    const choose = match && this.chooses;
-    this.history = [...this.history, { id, liked: match, fav, ...(choose ? { was: this.c.focus } : {}) }].slice(-30);
-    this.app.set(avoided ? avoid(this.c, id) : { ...swipe(this.c, id, match), ...(choose && this.c.focus !== id ? { focus: id, mediaAt: null } : {}) });
+    const was = this.c.focus;
+    const choose = this.chooses && this.#core.sideOf(card, liked) === 'match';
+    const r = this.#core.decide(card, liked, choose ? { entry: { was }, write: was !== id ? { focus: id, mediaAt: null } : {} } : {});
+    if (!r) return null;
     this.app.seen(id);
-    if (match) {
-      // A favourite of this game (its origin): « Recommencer » takes it away again. Added only if it is not one (a
-      // heart never removes a favourite, whatever this tab believes).
-      if (fav) this.#writes.set(id, addFavorite(card.plant, { app: this.app.m.id }).catch(() => null));
-      if (matchMedia('(pointer: coarse)').matches) navigator.vibrate?.(30);
-    }
-    this.changed();
-    return fav;
+    if (r.side === 'match' && matchMedia('(pointer: coarse)').matches) navigator.vibrate?.(30);
+    return { side: r.side, fav: r.fav };
   }
 
+  /** A card swiped (decide): whether the match put it in the favourites. @param {Card} card @param {boolean} liked */
+  swiped(card, liked) { return this.decide(card, liked)?.fav ?? false; }
+
   /** A match after the first: a heart flies off the deck. */
-  heart() {
-    this.burst++;
-    const n = this.burst;
-    clearTimeout(this.timers.burst);
-    this.timers.burst = setTimeout(() => { if (this.burst === n) { this.burst = 0; this.changed(); } }, 900);
-    this.changed();
-  }
+  heart() { this.#core.heart(); }
 
   /**
    * ↺: the last card swiped comes back on top — a match undone: out of the favourites too, if its heart put it there
-   * and it is still this game's (not filed, annotated… since: collections.js#forgetFavoriteMadeBy).
+   * and it is still this game's (not filed, annotated… since: collections.js#forgetFavoriteMadeBy). The heart that
+   * chose the plant undone: the plant chosen before it (none: the card on top again). Returns the swipe undone.
    */
   rewind() {
-    const last = this.history[this.history.length - 1];
-    if (!last) return;
-    this.history = this.history.slice(0, -1);
-    // The heart that chose the plant undone: the plant chosen before it (none: the card on top again).
-    const back = last.liked && this.chooses && 'was' in last && this.c.focus === last.id ? { focus: last.was ?? null, mediaAt: null } : {};
-    this.app.set({ ...unswipe(this.c, last.id), ...back });
-    if (last.fav) this.#forget(last.id);
-    this.changed();
-  }
-
-  /** The favourite this game's heart added to `id`, taken back once written (none added: nothing). @param {number} id */
-  async #forget(id) {
-    const write = this.#writes.get(id);
-    this.#writes.delete(id);
-    if (write && await write) await forgetFavoriteMadeBy(id, this.app.m.id);
+    return this.#core.undo(last => last.liked && this.chooses && 'was' in last && this.c.focus === last.id ? { focus: last.was ?? null, mediaAt: null } : {});
   }
 
   /** A card back in the deck (on top: a plant touched on the map or in the list around). @param {number} id */
-  unswipe(id) { this.app.set(unswipe(this.c, id)); }
+  unswipe(id) { this.#core.restore(id); }
 
   /**
-   * A match taken back (Matchs, « Retirer »): out of the matches, and out of the favourites if this game added it and
-   * it is still its own. Resolves 'kept' when the plant stays a favourite (one of the user's: set before, elsewhere,
-   * or made theirs since), else null. @param {Card} c @returns {Promise<'kept' | null>}
+   * A match taken back (Matchs, « Retirer »): out of the matches (and of ↺'s swipes: ↺ then goes to the one before),
+   * and out of the favourites if this game added it and it is still its own. Resolves 'kept' when the plant stays a
+   * favourite (one of the user's: set before, elsewhere, or made theirs since), else null.
+   * @param {Card} c @returns {Promise<'kept' | null>}
    */
-  async unmatch(c) {
-    const id = c.plant.id;
-    this.app.set(unswipe(this.c, id));
-    await this.#writes.get(id);
-    this.#writes.delete(id);
-    await forgetFavoriteMadeBy(id, this.app.m.id);
-    return isFavorite(id) ? 'kept' : null;
-  }
+  async unmatch(c) { return (await this.#core.unmatch(c)) ? 'kept' : null; }
 
   /** The cards passed (and those recognised to avoid, Cueillette prudente), to see them again. */
-  resetPassed() { this.app.set({ passed: [], avoided: [] }); }
+  resetPassed() { this.#core.reset(); }
 
   /** A plant brought on top of the deck (touched on the map or in the list around). @param {Card} card */
   toTop(card) {
@@ -450,6 +423,7 @@ export class AroundSession extends EventTarget {
     this.abort?.abort();
     this.pointsAbort?.abort();
     for (const t of Object.values(this.timers)) clearTimeout(t);
+    this.#core.dispose();
   }
 }
 

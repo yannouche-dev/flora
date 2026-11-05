@@ -5,7 +5,7 @@
 // images). Cueillette prudente says first, in red, never to pick without a certain identification, that each plant here
 // has a dangerous look-alike (Anses, Centres antipoison) and whom to call; its list unreadable, it says so (every plant
 // kept); none here, one message — none confirmed is not none there; its toxic look-alikes swiped right are recognised,
-// to avoid, never a match (kit/session.js#swiped). The first match during the first steps: a screen of its own
+// to avoid, never a match (kit/session.js#decide). The first match during the first steps: a screen of its own
 // (« C’est un match ! »). A plant open (?p=): its
 // sheet beside the list (kit/ma-plant-sheet.js). The step « cards » of Cueillette prudente, Mosaïque, and Rencontres
 // once its first steps are over.
@@ -37,7 +37,7 @@ import { StoreController } from '../../core/store.js';
 import { emergency } from '../../core/poison.js';
 import { ui } from '../../styles/ui.js';
 import { severityChip, severityStyles } from '../../components/ui-kit.js';
-import { MONTH, PAGE, distLabel, nameOf, nextDistance } from './cards.js';
+import { MONTH, PAGE, distLabel, nameOf, nextDistance, saidOf } from './cards.js';
 import { sessionOf } from './session.js';
 import './ma-deck.js';
 import './ma-plant-sheet.js';
@@ -318,25 +318,25 @@ export class MaAroundList extends LitElement {
 
   /**
    * A card swiped (flown off the deck): kept, said; a match celebrated — the first one by a screen of its own.
-   * Cueillette prudente's toxic look-alike swiped right: recognised, to avoid (kit/session.js#swiped) — never celebrated.
+   * Cueillette prudente's toxic look-alike swiped right: recognised, to avoid (kit/session.js#decide) — never celebrated.
    * @param {CustomEvent} e
    */
   #onDecide = e => {
     const { card, liked } = /** @type {{ card: Card, liked: boolean }} */ (e.detail);
     const s = this.#s;
-    const avoided = liked && s.avoids(card);
-    const fav = s.swiped(card, liked);
+    // A card decided already (a second click while it flew): nothing.
+    const r = s.decide(card, liked);
+    if (!r) return;
     // Said aloud (the status under the view): what the swipe did, then the card now on top.
     const next = s.deck[0];
-    const did = avoided ? `Reconnue, à ne pas cueillir : ${nameOf(card.plant)}` : liked ? `Match : ${nameOf(card.plant)}${fav ? ', ajoutée aux favoris' : ''}` : `Passée : ${nameOf(card.plant)}`;
-    this._said = `${did}. ${next ? `Carte suivante : ${nameOf(next.plant)}.` : 'Plus aucune carte.'}`;
+    this._said = saidOf({ name: nameOf(card.plant), side: r.side, fav: r.fav, next: next ? nameOf(next.plant) : null });
     // Rencontres: the line on the photos gives way once the game goes on.
     this._coach = false;
-    if (!liked || avoided) return;
+    if (r.side !== 'match') return;
     // The first match (while discovering): its screen, once. The next ones: a heart.
     if (discovering() && !discoverState().firstMatch) this._match = card;
     else s.heart();
-    // The heart chose its plant (kit/session.js#swiped): the photos show it; the first heart brings them.
+    // The heart chose its plant (kit/session.js#decide): the photos show it; the first heart brings them.
     if (!this.#mediaState) this.#introduce(card);
   };
 
@@ -345,8 +345,7 @@ export class MaAroundList extends LitElement {
    * (kit/session.js#rewind); the heart that brought the photos undone: they close, and come with the next heart.
    */
   #onUndo = () => {
-    const last = this.#s.history.at(-1);
-    this.#s.rewind();
+    const last = this.#s.rewind();
     this._match = null;
     const m = this.#mediaState;
     if (!last?.liked || m?.by !== last.id) return;

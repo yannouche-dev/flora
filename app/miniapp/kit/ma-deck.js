@@ -1,18 +1,24 @@
 // @ts-check
-// The deck of a mini-app around a place: one card at a time, the next under it — its photo and credit, what
-// Wikipédia says of it, a short bio (its safety first: kit/cards.js#bio). Dragged, it leans and shows its stamp
-// (MATCH, BOF); far enough, or thrown, it flies off: right a match, left passed; up (or a touch), its sheet. The three
-// buttons (↺ undo, ✕, ♥, « ⋯ » its sheet unless `guided`, and its photos when asked: `photos`) and the keys (→ ←, ↑) do the same — the keys only when
-// the deck has the focus or nothing has (never a match by mistake from a tab, a slider or the map), and only while
-// `active` (no plant open, no match on screen). Cueillette prudente's toxic look-alikes (kit/session.js#avoids) are never
-// loved: their right says « Je la reconnais : à ne pas cueillir » (stamp À ÉVITER, ⛔ for ♥, a tag on the card).
-// The first time, the top card leans right then left: it can be swiped.
-// The hint once per app open (and again after « Recommencer »: kit/session.js#forgetGame). No more cards: further (« Chercher jusqu’à … »), or the ones passed again
-// (and those recognised to avoid, counted apart from the matches). A deck cut short (a screen's: its cards the first
-// ones of more) says so instead (`endTitle`, `endNote`), without « Chercher jusqu’à … » (further, its cards would
-// still be the first ones).
+// The deck of a mini-app around a place (and of a screen's `deck` cell): one card at a time, the next under it — its
+// photo and credit, what Wikipédia says of it, a short bio (its safety first: kit/cards.js#bio). Dragged, it leans and
+// shows its stamp (MATCH, BOF); far enough, or thrown, it flies off: right a match, left passed; up (or a touch), its
+// sheet (unless its host's touch opens none: `opens`). One decision at a time (another while the card flies, a double
+// click: none), and none by a gesture the browser takes over (pointercancel: a scroll, a pinch — the card back in
+// place). The three buttons (↺ undo, ✕, ♥, « ⋯ » its sheet unless `guided` or not `opens`, and its photos when asked:
+// `photos`) and the keys (→ ←, ↑) do the same — the keys only on a deck shown (none folded away, nor in a tab not
+// shown), when it has the focus, or when nothing has and it is the only deck shown with cards (never a match by
+// mistake from a tab, a slider, the map or another deck), and only while `active` (no plant open, no match on screen).
+// Cueillette prudente's toxic look-alikes (kit/session.js#avoids) are never a match: their right says « Je la
+// reconnais : à ne pas cueillir » (stamp À ÉVITER, ⛔ for ♥, a tag on the card).
+// The first time, the top card leans right then left: it can be swiped — once per app open (and again after
+// « Recommencer »: kit/session.js#forgetGame). No more cards: the matches counted, in its host's words (`end.kept`:
+// « à retrouver dans « Matchs » » only where there is such a tab), further (« Chercher jusqu’à … »), or the ones passed
+// again (and those recognised to avoid, counted apart from the matches). A deck cut short (a screen's: its cards the
+// first ones of more) says so instead (`end.title`, `end.note`), without « Chercher jusqu’à … » (further, its cards
+// would still be the first ones).
 // It decides nothing itself: the card flown off, the event `deck-decide` (detail { card, liked }); `deck-open`
-// (detail { id }), `deck-undo`, `deck-photos` (detail { id }). The session (kit/session.js) gives the rest.
+// (detail { id }), `deck-undo`, `deck-photos` (detail { id }). Its host (`session`, DeckHost: an activity's game,
+// kit/session.js, or a screen's deck, layout/cells.js — both on the swipe core, kit/swipes.js) gives the rest.
 
 import { LitElement, html, css, nothing, repeat } from 'lit';
 import { icon } from '../../core/icons.js';
@@ -25,31 +31,60 @@ import { floweringMonths } from '../../core/plants.js';
 import { ui } from '../../styles/ui.js';
 import { bio, distLabel, nameOf, nextDistance } from './cards.js';
 
-/** @typedef {import('./cards.js').Card} Card */
+/**
+ * @typedef {import('./cards.js').Card} Card
+ * @typedef {EventTarget & { deck: Card[], matchCards: Card[], avoidCards: Card[], history: readonly import('./swipes.js').Swiped[],
+ *   burst: number, hintOnce(): boolean, avoids(card: Card): boolean, ethnoOf(card: Card): string | null | undefined,
+ *   widen(m: number): void, resetPassed(): void }} DeckHost
+ *   what the deck asks of its host — an activity's game (kit/session.js) or a screen's deck (layout/cells.js), both on
+ *   the swipe core (kit/swipes.js): its cards not swiped, matched, recognised to avoid (a screen's: none), ↺'s swipes, the
+ *   heart flying off, the hint once, which cards are to avoid (a screen's: none), what Wikipédia says (a screen's:
+ *   nothing), further (« Chercher jusqu’à … »), the cards passed again; `change` when any of it changed
+ */
+
+/**
+ * @typedef {{ title?: string, kept?: (n: number) => string, note?: string }} DeckEnd
+ *   what the end of the deck says, by its host: `title` a deck cut short's headline (and no « Chercher jusqu’à … »),
+ *   `kept` the matches counted (n, maybe 0), `note` a line besides; none given: as an activity's list says them
+ */
+
+/** No match at the end of the deck: the same words for every host. */
+export const NO_MATCH = 'Aucun coup de cœur ? Le prochain se cache peut-être un peu plus loin, derrière la haie.';
+
+/** The matches at the end of the deck, as the activities' list says them (its tab « Matchs »). @param {number} n */
+const keptInMatches = n => (n ? `${n} match${n > 1 ? 's' : ''} dans vos favoris — à retrouver dans « Matchs ».` : NO_MATCH);
 
 /** A pointer still this long (ms) before it is let go: the card was held, not thrown. */
 const REST_MS = 60;
 
+/** The decks in the page: the keys pressed with nothing focused go to the only one shown, active, with cards. @type {Set<MaDeck>} */
+const decks = new Set();
+
 export class MaDeck extends LitElement {
   static properties = {
-    /** The game (kit/session.js). */
+    /** Its host (DeckHost: kit/session.js, layout/cells.js). */
     session: { attribute: false },
     /** The cards as shown, the top one first. */
     cards: { attribute: false },
-    /** The app's context (its matches, passed, distance). */
+    /** The app's context (its cards passed, those recognised to avoid, its radius). */
     c: { attribute: false },
     /** Rencontres while discovering: no « ⋯ », no ↑ (the plant is beside it), its size in the guided layout. */
     guided: { type: Boolean, reflect: true },
     /** The keys act on the deck (no plant open, no match on screen). */
     active: { type: Boolean },
+    /**
+     * A card opens its sheet (`deck-open`: a touch, a swipe up, ↑, « ⋯ ») — not on a screen's deck whose touch opens
+     * none (layout/cells.js: its card on top is the current plant already, or a touch does nothing).
+     */
+    opens: { type: Boolean },
     /** A button for the photos of the card on top (Rencontres, once they were shown: kit/ma-meet-media.js). */
     photos: { type: Boolean },
     /**
-     * A deck cut short (a screen's: its cards the first ones of more, layout/cells.js): its end's headline instead of
-     * « toutes les plantes du coin », and a line besides; '': none (its end as always).
+     * What its end says, by its host (DeckEnd): the matches counted in its words (a screen's, Rencontres while
+     * discovering: no tab « Matchs »); a deck cut short (a screen's: its cards the first ones of more, layout/cells.js),
+     * its headline instead of « toutes les plantes du coin », and a line besides. null: as the activities' list says it.
      */
-    endTitle: { attribute: false },
-    endNote: { attribute: false }
+    end: { attribute: false }
   };
 
   static styles = [ui, css`
@@ -77,8 +112,6 @@ export class MaDeck extends LitElement {
     .swipe-card.under.following { transition: none; }
     /* Risen while the top card flies (0.26 s): full size before the swap. */
     .swipe-card.under.rising { transition: transform 0.24s ease-out, filter 0.24s ease-out; }
-    /* Risen while the top card flies (0.26 s): full size before the swap. */
-    .swipe-card.under.rising { transition: transform 0.24s ease-out, filter 0.24s ease-out; }
     @keyframes under-in { from { opacity: 0; transform: scale(0.9) translateY(18px); } }
     .swipe-card img, .swipe-card .nophoto { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; pointer-events: none; }
     .swipe-card .nophoto { display: grid; place-items: center; font-size: 4rem; opacity: 0.4; }
@@ -93,9 +126,6 @@ export class MaDeck extends LitElement {
     .stamp.like.avoid { color: #fbbf24; font-size: 1.5rem; }
     .avoid-tag { display: flex; align-items: center; gap: 5px; width: fit-content; margin: 0 0 6px; padding: 2px 10px; border-radius: var(--gf-radius-pill);
       background: #b91c1c; color: #fff; font-size: 0.8rem; font-weight: 700; }
-    /* A plant already loved, brought back on top (touched on the map or in the list around). */
-    .loved-badge { position: absolute; top: 12px; left: 12px; z-index: 1; display: inline-flex; align-items: center; gap: 5px; padding: 4px 10px; border-radius: var(--gf-radius-pill);
-      background: var(--gf-kin); color: #fff; font-size: 0.8rem; font-weight: 700; box-shadow: 0 0 0 2px var(--gf-highlight), 0 2px 8px rgb(0 0 0 / 35%); pointer-events: none; }
     .actions { display: flex; gap: 22px; align-items: center; }
     .round { width: 62px; height: 62px; border-radius: 50%; border: 0; display: grid; place-items: center; font-size: 1.6rem; cursor: pointer; background: var(--gf-surface);
       box-shadow: 0 6px 16px rgb(0 0 0 / 18%); transition: transform 0.12s; }
@@ -137,7 +167,7 @@ export class MaDeck extends LitElement {
 
   constructor() {
     super();
-    /** @type {import('./session.js').AroundSession | null} */
+    /** @type {DeckHost | null} */
     this.session = null;
     /** @type {Card[]} */
     this.cards = [];
@@ -145,15 +175,17 @@ export class MaDeck extends LitElement {
     this.c = null;
     this.guided = false;
     this.active = false;
+    this.opens = true;
     this.photos = false;
-    this.endTitle = '';
-    this.endNote = '';
+    /** @type {DeckEnd | null} */
+    this.end = null;
   }
 
   #onChange = () => this.requestUpdate();
 
   connectedCallback() {
     super.connectedCallback();
+    decks.add(this);
     addEventListener('keydown', this.#onKey);
     // A module switched on or off (Réglages, another tab): the photos follow it.
     moduleEvents.addEventListener('change', this.#onChange);
@@ -161,6 +193,7 @@ export class MaDeck extends LitElement {
 
   disconnectedCallback() {
     super.disconnectedCallback();
+    decks.delete(this);
     removeEventListener('keydown', this.#onKey);
     moduleEvents.removeEventListener('change', this.#onChange);
     this.#watched?.removeEventListener('change', this.#onChange);
@@ -190,26 +223,43 @@ export class MaDeck extends LitElement {
   /** A plant's photo, unless the « Photos en ligne » module is off (a leaf shows instead). @param {string | null | undefined} url */
   #photo(url) { return url && this.#store.state.modules.photos ? url : null; }
 
+  /** On the screen: not under something hidden (a cell folded to its head, a tab not shown — display: none). */
+  #shown() { return this.checkVisibility?.() !== false; }
+
+  /** The only deck shown, active, with cards: the one the keys mean when nothing has the focus. */
+  #alone() {
+    const live = [...decks].filter(d => d.active && d.#shown() && d.cards.length);
+    return live.length === 1 && live[0] === this;
+  }
+
   #onKey = (/** @type {KeyboardEvent} */ e) => {
-    // A dialog over the cards (« Noter ici », a question, a match): never a match by mistake under it.
-    if (e.altKey || e.ctrlKey || e.metaKey || !this.active || modalOpen()) return;
-    // ← passes, → matches, ↑ its sheet — when the deck has the focus, or nothing has (the page itself). Elsewhere
-    // (a tab, a button, a field, the map, a slider) the arrows keep their own meaning: never a match by mistake.
-    const t0 = /** @type {HTMLElement} */ (e.composedPath()[0]);
-    const free = t0 === document.body || t0 === document.documentElement || Boolean(t0?.closest?.('.deck'));
-    if (!free) return;
+    // A dialog over the cards (« Noter ici », a question, a match): never a match by mistake under it. A deck out of
+    // sight (folded, in a tab not shown): never a match unseen.
+    if (e.altKey || e.ctrlKey || e.metaKey || !this.active || modalOpen() || !this.#shown()) return;
+    // ← passes, → matches, ↑ its sheet — when this deck has the focus, or nothing has (the page itself) and it is the
+    // only deck shown (two on the screen: the one with the focus). Elsewhere (a tab, a button, a field, the map, a
+    // slider, another deck) the arrows keep their own meaning: never a match by mistake.
+    const path = e.composedPath(), t0 = path[0];
+    const deck = this.renderRoot.querySelector('.deck');
+    const mine = Boolean(deck) && path.includes(/** @type {Element} */ (deck));
+    const page = t0 === document.body || t0 === document.documentElement;
+    if (!mine && !(page && this.#alone())) return;
     const top = this.cards[0];
     if (!top) return;
     if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') { e.preventDefault(); this.decide(top, e.key === 'ArrowRight'); }
-    else if (e.key === 'ArrowUp' && !this.guided) { e.preventDefault(); this.#open(top); }
+    else if (e.key === 'ArrowUp' && !this.guided && this.opens) { e.preventDefault(); this.#open(top); }
   };
 
-  /** @param {Card} card */
-  #open(card) { this.dispatchEvent(new CustomEvent('deck-open', { detail: { id: card.plant.id }, bubbles: true, composed: true })); }
+  /** Its sheet asked for (none when the deck opens none: `opens`). @param {Card} card */
+  #open(card) {
+    if (!this.opens) return;
+    this.dispatchEvent(new CustomEvent('deck-open', { detail: { id: card.plant.id }, bubbles: true, composed: true }));
+  }
 
   /** The cards just there: the one on top leans a little right, then left — they can be swiped (once). */
   #hintSwipe() {
-    if (!this.active || !this.session) return;
+    // Out of sight (folded, in a tab not shown): not spent — it comes with a change of the deck once seen.
+    if (!this.active || !this.session || !this.#shown()) return;
     const el = /** @type {HTMLElement | null} */ (this.renderRoot.querySelector('.swipe-card.top'));
     if (!el || !this.session.hintOnce()) return;
     if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
@@ -222,12 +272,15 @@ export class MaDeck extends LitElement {
 
   /**
    * Right: a match (Cueillette prudente's toxic look-alike: recognised, to avoid — the session decides,
-   * kit/session.js#swiped); left: passed. The card flies off first, then `deck-decide` says it.
+   * kit/session.js#decide); left: passed. The card flies off first, then `deck-decide` says it.
    * @param {Card} card @param {boolean} liked @param {HTMLElement} [el]
    */
   decide(card, liked, el) {
+    // One decision at a time: a second one while the card flies (a double click, a key pressed again) is none.
+    if (this.#flying) return;
     const node = el || /** @type {HTMLElement | null} */ (this.renderRoot.querySelector('.swipe-card.top'));
     const done = () => {
+      this.#flying = false;
       if (node) { node.style.transition = 'none'; this.#reset(node); node.classList.remove('fly'); requestAnimationFrame(() => { node.style.transition = ''; }); }
       this.dispatchEvent(new CustomEvent('deck-decide', { detail: { card, liked }, bubbles: true, composed: true }));
       // Now on top, the card that rose needs its rise no more (it would show if it came back under, by ↺).
@@ -235,15 +288,21 @@ export class MaDeck extends LitElement {
     };
     node?.classList.remove('hint');
     if (!node || matchMedia('(prefers-reduced-motion: reduce)').matches) { done(); return; }
+    // Until it has flown (done: from its timer, even once the deck is gone).
+    this.#flying = true;
     this.#rise(1);
     node.classList.add('fly');
     node.style.transform = `translate(${liked ? 140 : -140}vw, -40px) rotate(${liked ? 30 : -30}deg)`;
     setTimeout(done, 260);
   }
 
+  /** A card flying off (decide, 260 ms): no other decision, no drag meanwhile. */
+  #flying = false;
+
   /** @type {{ id: number, x: number, y: number, dx: number, dy: number, el: HTMLElement, t: number, vx: number, lx: number, lt: number } | null} */ #drag = null;
 
   #dragStart = (/** @type {PointerEvent} */ e) => {
+    if (this.#flying) return;
     const el = /** @type {HTMLElement} */ (e.currentTarget);
     try { el.setPointerCapture(e.pointerId); } catch { /* synthetic */ }
     this.#drag = { id: Number(el.dataset.id), x: e.clientX, y: e.clientY, dx: 0, dy: 0, el, t: performance.now(), vx: 0, lx: e.clientX, lt: performance.now() };
@@ -287,6 +346,19 @@ export class MaDeck extends LitElement {
     this.#reset(d.el);
   };
 
+  /**
+   * The gesture taken over by the browser (a scroll, a pinch: pointercancel): the card back in place — nothing
+   * decided, nothing opened, however far it was dragged.
+   */
+  #dragCancel = () => {
+    const d = this.#drag;
+    this.#drag = null;
+    if (!d) return;
+    d.el.classList.remove('dragging');
+    this.#under()?.classList.remove('following');
+    this.#reset(d.el);
+  };
+
   /** @param {HTMLElement} el The card on top back in place — and the one underneath back down. */
   #reset(el) { el.style.transform = ''; el.style.removeProperty('--like'); el.style.removeProperty('--nope'); this.#rise(0); }
 
@@ -299,7 +371,6 @@ export class MaDeck extends LitElement {
     if (!u) return;
     u.classList.toggle('following', follow);
     u.classList.toggle('rising', !follow && p === 1);
-    u.classList.toggle('rising', !follow && p === 1);
     if (p) u.style.setProperty('--rise', String(p)); else u.style.removeProperty('--rise');
   }
 
@@ -309,16 +380,16 @@ export class MaDeck extends LitElement {
     const deck = this.cards;
     if (!deck.length) {
       // Cut short: no wider search (further, its cards would still be the first ones).
-      const next = this.endTitle ? null : nextDistance(c.radius);
+      const end = this.end;
+      const next = end?.title ? null : nextDistance(c.radius);
       const matches = s.matchCards.length;
-      // Cueillette prudente: the toxic look-alikes recognised, counted apart — never with the matches. (A layout's
-      // deck, layout/cells.js, has none.)
-      const avoided = s.avoidCards?.length ?? 0;
+      // Cueillette prudente: the toxic look-alikes recognised, counted apart — never with the matches.
+      const avoided = s.avoidCards.length;
       return html`<div class="deck-end">
         <p class="big">${icon('flower3')}</p>
-        <p><b>${this.endTitle || 'Vous avez rencontré toutes les plantes du coin !'}</b></p>
-        <p class="muted">${matches ? `${matches} match${matches > 1 ? 's' : ''} dans vos favoris — à retrouver dans « Matchs ».` : 'Aucun coup de cœur ? Le prochain se cache peut-être un peu plus loin, derrière la haie.'}</p>
-        ${this.endNote ? html`<p class="muted">${this.endNote}</p>` : nothing}
+        <p><b>${end?.title || 'Vous avez rencontré toutes les plantes du coin !'}</b></p>
+        <p class="muted">${(end?.kept ?? keptInMatches)(matches)}</p>
+        ${end?.note ? html`<p class="muted">${end.note}</p>` : nothing}
         ${avoided ? html`<p class="avoided">${icon('exclamation-octagon-fill')}${avoided} plante${avoided > 1 ? 's' : ''} reconnue${avoided > 1 ? 's' : ''} à ne pas cueillir.</p>` : nothing}
         <div class="row">${next ? html`<button class="primary" type="button" @click=${() => s.widen(next)}>Chercher jusqu’à ${distLabel(next)}</button>` : nothing}
           ${c.passed.length || c.avoided?.length ? html`<button class="secondary" type="button" @click=${() => s.resetPassed()}>Revoir les plantes passées</button>` : nothing}</div>
@@ -328,13 +399,13 @@ export class MaDeck extends LitElement {
     const name = nameOf(top.plant);
     const left = s.deck.length;
     // Cueillette prudente: a toxic look-alike on top (or the confusions unreadable) — its right is « recognised, to
-    // avoid », never a match (kit/session.js#avoids; a layout's deck, layout/cells.js, has none). One button for both,
-    // so the focus stays on it from a card to the next.
-    const avoid = s.avoids?.(top) ?? false;
+    // avoid », never a match (the host's avoids: kit/session.js#avoids). One button for both, so the focus stays on it
+    // from a card to the next.
+    const avoid = s.avoids(top);
     // The deck takes the focus (a Tab), and ← → ↑ then act on its top card — only there (#onKey): on a tab, a
     // button or the map, the arrows keep their own meaning.
     return html`<div class="deck-wrap">
-      <div class="deck" tabindex="0" role="group" aria-label=${`Carte : ${name}. Flèche droite : ${avoid ? 'je la reconnais, à ne pas cueillir' : 'match'}, flèche gauche : passer${this.guided ? '' : ', flèche haut : sa fiche'}`}>
+      <div class="deck" tabindex="0" role="group" aria-label=${`Carte : ${name}. Flèche droite : ${avoid ? 'je la reconnais, à ne pas cueillir' : 'match'}, flèche gauche : passer${this.guided || !this.opens ? '' : ', flèche haut : sa fiche'}`}>
         ${repeat(under ? [under, top] : [top], x => x.plant.id, x => this.#card(x, x === top))}
         ${s.burst ? html`<span class="burst" aria-hidden="true">${icon('heart-fill')}</span>` : nothing}
       </div>
@@ -344,7 +415,7 @@ export class MaDeck extends LitElement {
         <button class="round pass" type="button" aria-label=${'Passer : ' + name} title="Passer (←)" @click=${() => this.decide(top, false)}>${icon('x-lg')}</button>
         ${this.photos ? html`<button class="round info photos" type="button" aria-label=${'Ses photos : ' + name} title="Ses photos"
           @click=${() => this.dispatchEvent(new CustomEvent('deck-photos', { detail: { id: top.plant.id }, bubbles: true, composed: true }))}>${icon('images')}</button>` : nothing}
-        ${this.guided ? nothing : html`<button class="round info" type="button" aria-label=${'Voir sa fiche : ' + name} title="Sa fiche (↑)" @click=${() => this.#open(top)}>${icon('three-dots')}</button>`}
+        ${this.guided || !this.opens ? nothing : html`<button class="round info" type="button" aria-label=${'Voir sa fiche : ' + name} title="Sa fiche (↑)" @click=${() => this.#open(top)}>${icon('three-dots')}</button>`}
         <button class="round like ${avoid ? 'avoid' : ''}" type="button" aria-label=${avoid ? `Je reconnais ${name} : à ne pas cueillir` : `J’aime ${name} : c’est un match`}
           title=${avoid ? 'Je la reconnais : à ne pas cueillir (→)' : 'Match (→)'} @click=${() => this.decide(top, true)}>${icon(avoid ? 'exclamation-octagon-fill' : 'heart-fill')}</button>
       </div>
@@ -354,22 +425,19 @@ export class MaDeck extends LitElement {
 
   /** @param {Card} c @param {boolean} top */
   #card(c, top) {
-    const s = /** @type {import('./session.js').AroundSession} */ (this.session);
+    const s = /** @type {DeckHost} */ (this.session);
     const p = c.plant, name = nameOf(p);
-    // A plant already loved, brought back on top: its heart says so; a swipe either way only puts it back.
-    const loved = /** @type {number[]} */ (this.c?.matches ?? []).includes(p.id);
     const photo = this.#photo(c.photo);
     const ethno = s.ethnoOf(c);
     // Cueillette prudente's toxic look-alike: swiped right, recognised — its stamp and its tag say so.
-    const avoid = s.avoids?.(c) ?? false;
+    const avoid = s.avoids(c);
     // The card underneath is out of reach (inert) and unread: a screen reader meets the card on top only.
-    return html`<article class="swipe-card ${top ? 'top' : 'under'} ${loved ? 'loved' : ''}" aria-label=${loved ? name + ' — déjà aimée' : name} data-id=${p.id}
+    return html`<article class="swipe-card ${top ? 'top' : 'under'}" aria-label=${name} data-id=${p.id}
         ?inert=${!top} aria-hidden=${top ? 'false' : 'true'}
-        @pointerdown=${top ? this.#dragStart : null} @pointermove=${top ? this.#dragMove : null} @pointerup=${top ? this.#dragEnd : null} @pointercancel=${top ? this.#dragEnd : null}>
+        @pointerdown=${top ? this.#dragStart : null} @pointermove=${top ? this.#dragMove : null} @pointerup=${top ? this.#dragEnd : null} @pointercancel=${top ? this.#dragCancel : null}>
       <div class="nophoto">${icon('leaf')}</div>
       ${photo ? html`<img src=${photo} alt="" loading="eager" decoding="async" referrerpolicy="no-referrer" draggable="false" @error=${hideImg} @load=${showImg} />` : nothing}
       <span class="stamp like ${avoid ? 'avoid' : ''}" aria-hidden="true">${avoid ? 'À ÉVITER' : 'MATCH'}</span><span class="stamp nope" aria-hidden="true">BOF</span>
-      ${loved ? html`<span class="loved-badge">${icon('heart-fill')} Déjà aimée</span>` : nothing}
       ${photo && c.credit ? html`<p class="credit">Photo : ${creditText(c.credit)}</p>` : nothing}
       <div class="about">
         ${avoid ? html`<p class="avoid-tag">${icon('exclamation-octagon-fill')} À ne pas cueillir</p>` : nothing}

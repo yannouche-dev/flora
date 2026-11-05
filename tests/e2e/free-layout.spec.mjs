@@ -286,6 +286,76 @@ test.describe('un grand écran', () => {
     await expect.poll(favourite).toBe(4);
   });
 
+  test('les cartes de Rencontres : chaque choix dit, avec les mots des activités ; une carte passée puis choisie ailleurs, ou reprise par ↺, sur le dessus ; la fin compte les coups de cœur ; ⋯ et ↑ seulement quand toucher ouvre la fiche', async ({ app, page }) => {
+    const ail = plantId(AIL), cigue = plantId('Conium maculatum');
+    await app.open(`#/layout/[map(r=500m),deck,plant.status]?${AT}`);
+    const deck = page.locator('dl-deck'), top = deck.locator('ma-deck .swipe-card.top'), said = deck.getByRole('status');
+    await expect(top).toHaveAttribute('data-id', String(ail));
+    // Its card on top the current plant already (toucher=plante): no « ⋯ », no ↑.
+    await expect(deck.getByRole('button', { name: /^Voir sa fiche/ })).toHaveCount(0);
+    await expect(deck.locator('ma-deck .deck')).toHaveAttribute('aria-label', 'Carte : Ail des ours. Flèche droite : match, flèche gauche : passer');
+    // A heart, then a pass: each said, with the card now on top.
+    await deck.locator('ma-deck .round.like').click();
+    await expect(said).toHaveText('Match : Ail des ours, ajoutée aux favoris. Carte suivante : Ciguë maculée.');
+    await deck.locator('ma-deck .round.pass').click();
+    await expect(said).toHaveText('Passée : Ciguë maculée. Carte suivante : Ortie dioïque.');
+    // The plant passed, chosen elsewhere (a link to it): back in the deck, on top — the one loved stays out.
+    await app.go(`#/layout/[map(r=500m),deck,plant.status]?p=${cigue}&${AT}&r=500m`);
+    await expect(top).toHaveAttribute('data-id', String(cigue));
+    await expect(deck.locator('ma-deck .left')).toHaveText('2 plantes à rencontrer');
+    // To the end: the heart counted, in the favourites — never « Matchs » (a screen has no such tab).
+    await deck.locator('ma-deck .round.pass').click();
+    await expect(top).toHaveAttribute('data-id', String(plantId(ORTIE)));
+    await deck.locator('ma-deck .round.pass').click();
+    const end = deck.locator('ma-deck .deck-end');
+    await expect(end).toContainText('1 coup de cœur dans vos favoris.');
+    await expect(end).not.toContainText('Matchs');
+    // ecrit=0 (the deck following the current plant, never changing it): the current plant's card passed, another
+    // plant chosen in the results, ↺ — the card taken back on top, not the current plant.
+    await app.go(`#/layout/[deck(ecrit=0),results(list)]?p=${ail}&${AT}&r=500m`);
+    await expect(top).toHaveAttribute('data-id', String(ail));
+    await deck.locator('ma-deck .round.pass').click();
+    await expect(top).toHaveAttribute('data-id', String(cigue));
+    await page.locator('dl-results gf-plant-card').filter({ hasText: 'Ortie dioïque' }).locator('a.row').click();
+    await expect(top).toHaveAttribute('data-id', String(plantId(ORTIE)));
+    await deck.locator('ma-deck .round.undo').click();
+    await expect(top).toHaveAttribute('data-id', String(ail));
+    // toucher=fiche: « ⋯ » and ↑ said, « ⋯ » opens its sheet.
+    await app.go(`#/layout/[deck(toucher=fiche),plant.status]?${AT}&r=500m`);
+    await expect(deck.locator('ma-deck .deck')).toHaveAttribute('aria-label', /, flèche haut : sa fiche$/);
+    const id = await top.getAttribute('data-id');
+    await deck.getByRole('button', { name: /^Voir sa fiche : / }).click();
+    await expect.poll(() => hash(page)).toBe(`#/plant/${id}`);
+  });
+
+  test('les cartes de Rencontres, ← → depuis la page : seulement un paquet visible — replié, rien ; deux à l’écran, celui qui a le focus', async ({ app, page }) => {
+    const ail = plantId(AIL);
+    const favourite = () => page.evaluate(async id => (await import('/app/core/collections.js')).isFavorite(id), ail);
+    // Folded to its head: its cards there (the first one the current plant), out of sight — → from the page decides nothing.
+    await app.open(`#/layout/[map(r=500m),deck(actions=replier,etat=replie)]?${AT}`);
+    await expect.poll(() => param(page, 'p')).toBe(String(ail));
+    await page.keyboard.press('ArrowRight');
+    await page.getByRole('button', { name: 'Déplier « Rencontres »' }).click();
+    const top = page.locator('dl-deck ma-deck .swipe-card.top');
+    await expect(top).toHaveAttribute('data-id', String(ail));
+    await expect(page.locator('dl-deck ma-deck .round.undo')).toBeDisabled();
+    expect(await favourite()).toBe(false);
+    // Two decks shown: → from the page, neither; with the focus on the first, that one only.
+    await app.go(`#/layout/[deck,deck]?${AT}&r=500m`);
+    const decks = page.locator('dl-deck ma-deck');
+    await expect(decks.locator('.swipe-card.top')).toHaveCount(2);
+    await expect(decks.locator('.swipe-card.top').first()).toHaveAttribute('data-id', String(ail));
+    await page.keyboard.press('ArrowRight');
+    await expect(decks.locator('.round.undo')).toHaveCount(2);
+    for (const undo of await decks.locator('.round.undo').all()) await expect(undo).toBeDisabled();
+    expect(await favourite()).toBe(false);
+    await decks.first().locator('.deck').focus();
+    await page.keyboard.press('ArrowRight');
+    await expect.poll(favourite).toBe(true);
+    await expect(decks.first().locator('.round.undo')).toBeEnabled();
+    await expect(decks.nth(1).locator('.round.undo')).toBeDisabled();
+  });
+
   test('les cartes de Rencontres quand iNaturalist ne répond pas : elles le disent, « Réessayer » les fait venir', async ({ app, page }) => {
     let down = true;
     await page.route(/^https:\/\/api\.inaturalist\.org\//, route => down ? route.fulfill({ status: 503, body: '' }) : route.fallback());

@@ -110,6 +110,17 @@ test('un cœur n’enlève jamais un favori ; reprendre celui d’une partie, ou
   assert.deepEqual(await favourites(), { 4: [null, null], 7: [null, null] });
 });
 
+test('↺ du paquet d’un écran sur mesure, la plante rangée depuis dans une liste : le favori repris tel que son cœur l’a laissé, la liste la garde', async () => {
+  await favouritesOf([]);
+  // Only its notes, rating, abundance and harvests make it the user's (filed, noted in a lieu, shared: not).
+  const made = /** @type {any} */ (await C.addFavorite(plant(8)));
+  const list = await C.savePlace(C.newCollection('list', { name: 'Balcon' }));
+  await C.setInCollection(list.id, plant(8), true);
+  assert.equal(await C.forgetFavoriteEntry(made.id, made), true);
+  assert.deepEqual(await favourites(), {});
+  assert.deepEqual((await C.getPlace(list.id))?.properties.plants.map(e => e.plantId), [8]);
+});
+
 test('« Revoir les premiers pas » : les favoris des parties nommées deviennent les vôtres, en une fois, et pas les autres', async () => {
   await favouritesOf([[1, 'rencontres'], [2, 'cueillette'], [3, 'faux-amis'], [4, null]]);
   assert.equal(await C.adoptMadeBy(['rencontres']), 1);
