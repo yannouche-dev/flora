@@ -11,7 +11,6 @@ import './history.js';
  *   | { name: 'shared', data: string } | { name: 'discover' }
  *   | AppRoute
  *   | { name: 'layout', spec: string, search: string }
- *   | { name: 'builder', grid: string | null, spec: string | null, search: string }
  *   | { name: 'not-found' }} Route
  */
 
@@ -77,14 +76,7 @@ export function parse(hash) {
   if (path === 'discover') return { name: 'discover' };
   // « Écran sur mesure » (app/layout/gf-layout.js): #/layout/<layout>?<state>[&edit=1] — the layout as written
   // (grammar.js), its live state (state.js) read by the screen itself; edit=1: being modified, its tools shown. #/layout
-  // alone: the home (« Composer un écran »). « Créer une app »'s old addresses, #/builder[/<grid>][?g=<layout>&<state>],
-  // still parse: gf-layout puts the screen they name in their place, being modified (until 3.1).
-  const builder = /^builder(?:\/([a-z][a-z0-9-]{0,23}))?$/.exec(path);
-  if (builder) {
-    const grid = builder[1] ?? null;
-    const spec = params.get('g');
-    return { name: 'builder', grid, spec, search: search.split('&').filter(p => p && !/^g=/.test(p)).join('&') };
-  }
+  // alone: the home (« Composer un écran »).
   const layout = /^layout(?:\/(.*))?$/s.exec(path);
   if (layout) return { name: 'layout', spec: layout[1] ?? '', search };
   return { name: 'not-found' };

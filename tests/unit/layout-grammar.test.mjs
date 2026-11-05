@@ -8,7 +8,7 @@ import assert from 'node:assert/strict';
 import * as G from '../../app/layout/grammar.js';
 import { cellIcon, cellMark, cellName, COMPONENTS, distanceText, menuLooks, names, parseDistance, resolve, resolveTree } from '../../app/layout/registry.js';
 import { cleanText, liveSearch, readLive, readQuery } from '../../app/layout/state.js';
-import { MODELS, modelSpec } from '../../app/layout/models.js';
+import { MODELS } from '../../app/layout/models.js';
 import { href, parse as route } from '../../app/core/router.js';
 import { fromHash } from '../../app/core/query.js';
 import { random } from './support/random.mjs';
@@ -350,16 +350,8 @@ test('le routeur : #/layout/<disposition>?<état>, aller-retour par href.layout'
   assert.equal(read(/** @type {any} */ (route(odd)).spec).text, '[map(r=2km),media]');
 });
 
-test('le routeur : l’ancienne adresse #/builder[/<grille>][?g=<disposition>&<état>], lue telle quelle (gf-layout met l’écran qu’elle nomme à sa place)', () => {
-  assert.deepEqual(route('#/builder'), { name: 'builder', grid: null, spec: null, search: '' });
-  // A layout with « + » and « & » in it (g=, encoded), its state beside it.
-  const spec = '[map(layers=znieff+n2000,lieu=A&B),slot]';
-  assert.deepEqual(route('#/builder?g=[map(layers%3Dznieff%2Bn2000,lieu%3DA%26B),slot]&p=1&at=48.85,2.35'), { name: 'builder', grid: null, spec, search: 'p=1&at=48.85,2.35' });
-  // A grid by its name (models.js#modelSpec); g= wins.
-  assert.deepEqual(route('#/builder/trois'), { name: 'builder', grid: 'trois', spec: null, search: '' });
-  assert.equal(modelSpec('trois'), '[slot@30,slot@35,slot]');
-  assert.equal(modelSpec('inconnue'), null);
-  assert.equal(modelSpec(null), null);
-  assert.deepEqual(route('#/builder/trois?g=[slot,slot]&r=2km'), { name: 'builder', grid: 'trois', spec: '[slot,slot]', search: 'r=2km' });
-  assert.deepEqual(route('#/builder/inconnue'), { name: 'builder', grid: 'inconnue', spec: null, search: '' });
+test('le routeur : #/builder, l’adresse de « Créer une app », n’ouvre plus rien', () => {
+  for (const old of ['#/builder', '#/builder/trois', '#/builder?g=[slot,slot]&r=2km']) assert.equal(route(old).name, 'not-found', old);
+  // Its grids by their names: the models' (« Composer un écran »).
+  assert.equal(MODELS.find(m => m.id === 'trois')?.spec, '[slot@30,slot@35,slot]');
 });

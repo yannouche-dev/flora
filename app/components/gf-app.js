@@ -15,8 +15,6 @@ import { modalOpen, openView, replaceView } from '../core/history.js';
 import { ui } from '../styles/ui.js';
 import { icon } from '../core/icons.js';
 
-/** « Écran sur mesure »: a screen of one's own, and « Créer une app »'s old addresses, which it replaces (one module). */
-const layoutScreen = () => import('../layout/gf-layout.js');
 /**
  * The screens other than Flore and Découvrir, each loaded the first time it shows: the start of the app — the search —
  * loads a third less code. A screen is drawn only once its module is there (its element upgraded before it gets its
@@ -32,8 +30,7 @@ const SCREENS = {
   settings: () => import('./gf-settings.js'),
   legal: () => import('./gf-legal.js'),
   app: () => import('../miniapp/gf-miniapp.js'),
-  layout: layoutScreen,
-  builder: layoutScreen
+  layout: () => import('../layout/gf-layout.js')
 };
 /**
  * « Noter ici » (gf-capture and what it brings: the plants, their alerts, the position…), out of the start: loaded once
@@ -94,11 +91,11 @@ function screenReady(name, then) {
   return false;
 }
 
-/** The tab a screen lights; '': none (a screen of one's own, its home and « Créer une app »'s old addresses). @param {string} name */
+/** The tab a screen lights; '': none (a screen of one's own and its home). @param {string} name */
 const tabOf = name => name === 'map' ? 'map' : name === 'discover' ? 'discover'
   : ['collections', 'spot', 'spot-new', 'shared'].includes(name) ? 'mine'
   : name === 'settings' || name === 'legal' ? 'more'
-  : name === 'layout' || name === 'builder' ? '' : 'flore';
+  : name === 'layout' ? '' : 'flore';
 
 /** App shell: header + route outlet + (phone) bottom tab bar. */
 export class GfApp extends LitElement {
@@ -471,10 +468,8 @@ export class GfApp extends LitElement {
         return html`<gf-legal></gf-legal>`;
       case 'app':
         return html`<gf-miniapp .route=${route}></gf-miniapp>`;
-      case 'builder':
       case 'layout':
-        // « Écran sur mesure » (app/layout/gf-layout.js): its home (#/layout), a screen and its state, being modified
-        // (edit=1); « Créer une app »'s old addresses (#/builder…) too, which it replaces by the screen they name.
+        // « Écran sur mesure » (app/layout/gf-layout.js): its home (#/layout), a screen and its state, being modified (edit=1).
         return html`<gf-layout .route=${route}></gf-layout>`;
       default:
         return html`<div class="banner">Page introuvable. <a href=${floreHref()}>Aller à ${floreName()}</a></div>`;

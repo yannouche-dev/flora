@@ -553,7 +553,7 @@ test('Quitter une activité ouverte par un lien, et « Page introuvable », ram�
 
 test('Les adresses d’avant n’ouvrent plus leur écran : « Page introuvable », Flore à portée', async ({ app, page }) => {
   await app.open('#/?family=Rosaceae');
-  for (const old of ['#/spot/abc', '#/spot/new']) {
+  for (const old of ['#/spot/abc', '#/spot/new', '#/builder', '#/builder/trois']) {
     await app.go(old);
     await expect(page.getByText('Page introuvable.').getByRole('link', { name: 'Aller à Flore' }), old).toHaveAttribute('href', '#/?family=Rosaceae');
   }

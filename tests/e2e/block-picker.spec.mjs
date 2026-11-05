@@ -8,7 +8,7 @@
 // first), a block too large for the place greyed with why; a phone's bottom sheet.
 import { test, expect, answerAround } from './fixtures.mjs';
 import { layoutOf, screen } from './app.mjs';
-import { modelSpec } from '../../app/layout/models.js';
+import { MODELS } from '../../app/layout/models.js';
 
 /** @typedef {import('@playwright/test').Page} Page */
 
@@ -139,7 +139,7 @@ test.describe('un grand écran', () => {
   });
 
   test('les tuiles d’un emplacement : à sa taille, jamais un bloc refusé (un conseil quand la case est petite) ; la carte, son intention d’abord', async ({ app, page }) => {
-    await app.open(modified(/** @type {string} */ (modelSpec('tableau')), ''));
+    await app.open(modified(/** @type {string} */ (MODELS.find(m => m.id === 'tableau')?.spec), ''));
     // The row of three, 22 % of the height: compact tiles; a little low for a map — said, never refused.
     const small = tilesAt(page, '1.0.0');
     await expect(small.locator('.tile small').first()).toBeHidden();

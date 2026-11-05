@@ -15,7 +15,7 @@ const ORIGIN = new URL(BASE).origin;
 /** The deployed site (https), not one served here. */
 const LIVE = new URL(BASE).protocol === 'https:';
 const ROUTES = ['#/', '#/?q=ortie', '#/plant/128268', '#/discover', '#/app/rencontres', '#/app/parcours', '#/app/cueillette', '#/app/mosaique', '#/app/faux-amis', '#/app/orchidees', '#/map', '#/collections', '#/settings', '#/legal',
-  '#/builder/tableau', '#/layout', '#/layout/[map(r=2km),search,plant]?edit=1', '#/layout/[map(r=2km),search,[plant.wikipedia,plant.calendar]]?p=128268',
+  '#/layout', '#/layout/[map(r=2km),search,plant]?edit=1', '#/layout/[map(r=2km),search,[plant.wikipedia,plant.calendar]]?p=128268',
   '#/layout/[[place,map],deck,[media,plant.status]]'];
 const DEVICES = {
   phone: { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true },
