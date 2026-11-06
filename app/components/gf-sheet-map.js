@@ -7,10 +7,9 @@ import { lastFix, oneFix } from '../core/geo.js';
 import { FRANCE_BOUNDS, WORLD_BOUNDS } from '../core/ign.js';
 import { moduleOn } from '../core/modules.js';
 import { observationsAround, RADII, savedRadius, saveRadius } from '../core/nearby.js';
-import { addressAt, zoneShape } from '../core/geoservices.js';
-import { bundledOutline } from '../core/territory.js';
+import { zoneShape } from '../core/geoservices.js';
+import { bundledOutline, mapRegion, myRegion } from '../core/territory.js';
 import { keptPlace } from '../core/around-sessions.js';
-import { regionOf } from '../core/regions.js';
 import * as sources from '../core/sources.js';
 import { MAP_DEFAULTS } from '../core/sheet-blocks.js';
 import { FOCUS_EVENT, focusId, isPlaceFilter, noFocus } from '../core/map-focus.js';
@@ -100,7 +99,7 @@ export class GfSheetMap extends LitElement {
     _near: { state: true },
     _compare: { state: true },
     _bounds: { state: true },
-    /** The region where I am (from my position, or the place chosen in Découvrir), for « Ma région ». */
+    /** « Ma région » (territory.js mapRegion): Réglages' one, else the one where I am (my last position, or the place chosen in Découvrir) — found on the device, nothing sent. */
     _region: { state: true },
     /** The plants it is mistaken for (to show beside it, from « Plantes à confondre »). */
     _lookalikes: { state: true },
@@ -193,7 +192,7 @@ export class GfSheetMap extends LitElement {
     this._spots = [];
     /** Observations around: not asked, looking, the result, or what went wrong. @type {any} */
     this._near = undefined;
-    /** @type {{ name: string, bounds: [number, number, number, number] } | null} */
+    /** @type {import('../core/territory.js').MapRegion | null} */
     this._region = null;
   }
 
@@ -202,6 +201,7 @@ export class GfSheetMap extends LitElement {
     spotEvents.addEventListener('change', this.#onChange);
     this.#listen();
     this.#items = this.#search.results.items;
+    addEventListener('geoflora-region', this.#onRegion);
     this.#findRegion();
     this.#loadCollections();
   }
@@ -216,15 +216,23 @@ export class GfSheetMap extends LitElement {
     return /** @type {[number, number] | null} */ (this._near?.point || lastFix()?.coordinates || keptPlace()?.point || null);
   }
 
-  /** My region (IGN address of where I am), once. */
+  /**
+   * « Ma région » (territory.js mapRegion), asked again when Réglages' or where I am changes; told to the sheet
+   * (`map-region`: its ⚙ offers it only when known).
+   */
   async #findRegion() {
     const point = this.#whereIAm;
-    if (!point || this.#regionFor === point.join()) return;
-    this.#regionFor = point.join();
-    const a = await addressAt(point).catch(() => null);
-    this._region = a ? regionOf(a.context) : null;
+    const want = (myRegion() || '') + '|' + (point?.join() || '');
+    if (this.#regionFor === want) return;
+    this.#regionFor = want;
+    const region = await mapRegion(point).catch(() => null);
+    if (this.#regionFor !== want) return;
+    this._region = region;
+    this.dispatchEvent(new CustomEvent('map-region', { detail: region, bubbles: true }));
   }
   #regionFor = '';
+  /** Réglages › Ma région changed (setMyRegion): asked again. */
+  #onRegion = () => { this.#findRegion(); };
 
   /** A setting of this map changed here (the scope bar): the sheet keeps it, per map. @param {any} patch */
   #set(patch) {
@@ -235,7 +243,8 @@ export class GfSheetMap extends LitElement {
   /** « Autour de moi »: framed on the circle around me (located first if needed). */
   async #aroundMe() {
     this.#set({ frame: 'me' });
-    if (!lastFix() && !this._near?.point) { const fix = await locate(); if (fix && !('error' in fix)) { this.#findRegion(); this.requestUpdate(); } }
+    if (!lastFix() && !this._near?.point) { const fix = await locate(); if (fix && !('error' in fix)) this.requestUpdate(); }
+    this.#findRegion();
   }
 
   /** Another radius: kept (as in the Carte), the observations around looked for again. @param {number} r */
@@ -247,6 +256,7 @@ export class GfSheetMap extends LitElement {
   disconnectedCallback() {
     super.disconnectedCallback();
     spotEvents.removeEventListener('change', this.#onChange);
+    removeEventListener('geoflora-region', this.#onRegion);
     this.#listen();
   }
 
@@ -439,7 +449,7 @@ export class GfSheetMap extends LitElement {
     if (kind === 'region' && !this._region) kind = 'france';
     if (kind === 'me' && !center) kind = content.length ? 'content' : 'france';
     if (kind === 'content' && !content.length) kind = c.gbif === 'world' ? 'world' : 'france';
-    const region = this._region?.bounds;
+    const region = this._region?.box;
     const points = kind === 'me' ? circle() : kind === 'content' ? content : kind === 'world' ? box(WORLD_BOUNDS)
       : kind === 'region' && region ? /** @type {[number, number][]} */ ([[region[0], region[1]], [region[2], region[3]]]) : box(FRANCE_BOUNDS);
     // Framed again whenever what it shows changes (settings, data, size), not when the user moves it.
@@ -676,7 +686,7 @@ export class GfSheetMap extends LitElement {
       </div>
       <b>Cadrer</b><div class="row">
         ${frameBtn('auto', 'Auto', 'Selon ce qui est affiché')}
-        ${this._region ? frameBtn('region', html`Ma région <small>${this._region.name}</small>`, 'La région où vous êtes') : nothing}
+        ${this._region ? frameBtn('region', html`Ma région <small>${this._region.name}</small>`, this._region.chosen ? 'Votre région, choisie dans Réglages' : 'La région où vous êtes, trouvée sur l’appareil') : nothing}
         ${about || located ? frameBtn('me', html`${icon('crosshair')} Autour de moi`, located ? 'Le cercle autour de vous' : 'Vous localiser, puis le cercle autour de vous', () => this.#aroundMe()) : nothing}
         ${hasContent ? frameBtn('content', 'Les points', 'Ajusté aux points affichés') : nothing}
         ${frameBtn('france', 'France')}
