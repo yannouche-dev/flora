@@ -402,7 +402,7 @@ test('la colonne « Espèce » trie par l’épithète, un hybride à la sienne 
   const head = page.locator('gf-flora gf-plant-list .th').filter({ hasText: 'Espèce' });
   await head.getByRole('button').click();
   await expect.poll(() => hash(page)).toBe('#/?family=Orchidaceae&sort=species');
-  await expect(head).toHaveAttribute('aria-sort', 'ascending');
+  await expect(head.getByRole('button')).toHaveAccessibleName('Espèce (tri)');
   const order = ['Dactylorhiza x ampolai', 'Ophrys x barbaricina', 'Dactylorhiza brennensis', 'Traunsteinera globosa', 'Ophrys holosericea',
     'Ophrys x jarigei', 'Epipactis leptochila', 'x Serapicamptis mutata', 'Ophrys x souliei', 'Orchis x spuria', 'x Dactylodenia st-quintinii'];
   const names = async () => (await app.state('results.items')).map((/** @type {any} */ p) => p.scientificName);
@@ -413,7 +413,7 @@ test('la colonne « Espèce » trie par l’épithète, un hybride à la sienne 
   await expect(cells.nth(2)).toHaveText('brennensis');
   await head.getByRole('button').click();
   await expect.poll(() => hash(page)).toBe('#/?family=Orchidaceae&sort=-species');
-  await expect(head).toHaveAttribute('aria-sort', 'descending');
+  await expect(head.getByRole('button')).toHaveAccessibleName('Espèce (tri inverse)');
   await expect.poll(names).toEqual([...order].reverse());
   // The Genre filter: by count, then by name — a hybrid genus among the others, not before them.
   const genera = page.locator('gf-flora .pane.filters gf-facet[name="genus"] .name');

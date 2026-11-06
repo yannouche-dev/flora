@@ -95,7 +95,8 @@ export class GfFlora extends LitElement {
       border-bottom: 1px solid var(--gf-border);
       background: var(--gf-surface);
     }
-    /* A pane's name: a heading under the view's h1 (Flore); a plant open, a label only (its name is the h1). */
+    /* A pane's name: a heading under the view's h1 (Flore); a plant open, a label only (its name is the h1); a phone, a
+       block over the sheet (inert under it): its name is the screen's h1. */
     .pane-head :is(h2, .title) { margin: 0; font-weight: 700; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--gf-text-muted); flex: 1; display: flex; gap: 8px; align-items: center; min-width: 0; }
     .pane-head .icon-btn { width: 32px; height: 32px; font-size: 1rem; }
     .pane-head .link { flex: none; white-space: nowrap; }
@@ -607,7 +608,8 @@ export class GfFlora extends LitElement {
         @media-index=${this.#mediaIndex} @media-close=${this.#closePane} @open-pane=${this.#openPane}>
       <div class="pane-head">
         ${phone ? html`<button class="link back" type="button" @click=${this.#closePane}>${icon('arrow-left')} Fiche</button>` : nothing}
-        <div class="title">${blockTitle(key)} <span class="pane-plant">${this.#paneName}</span></div>
+        ${phone ? html`<h1 class="title">${blockTitle(key)} <span class="pane-plant">${this.#paneName}</span></h1>`
+          : html`<div class="title">${blockTitle(key)} <span class="pane-plant">${this.#paneName}</span></div>`}
         ${phone ? nothing : html`<button class="icon-btn" type="button" aria-pressed=${String(this._paneFull)} title=${this._paneFull ? 'Sortir du plein écran' : 'Plein écran'}
           aria-label="Plein écran" @click=${() => { this._paneFull = !this._paneFull; }}>${icon(this._paneFull ? 'fullscreen-exit' : 'arrows-fullscreen')}</button>`}
         <button class="icon-btn" type="button" title="Fermer le panneau" aria-label="Fermer le panneau" @click=${this.#closePane}>${icon('x-lg')}</button>

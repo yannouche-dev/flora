@@ -1149,7 +1149,7 @@ export class GfSpotEditor extends LitElement {
     const place = this._place;
     if (place === undefined) return html`<form><p>Chargement…</p></form>`;
     if (place === null) {
-      return html`<form>
+      return html`<form>${this.embedded ? nothing : html`<h1 class="visually-hidden">Liste ou lieu introuvable</h1>`}
         <p>${this._error || 'Cette liste ou ce lieu n’existe plus.'}</p>
         ${this._error ? html`<button type="button" @click=${() => this.#load()}>Réessayer</button>` : nothing}
         <a href=${href.collections()}>Voir Mes plantes</a>
@@ -1161,8 +1161,12 @@ export class GfSpotEditor extends LitElement {
     const isPlace = this.#isPlace;
     const isFavorites = p.kind === 'favorites';
     const weak = this.#isNew && isPlace && !this._manual && (!fix || fix.accuracy > config.goodAccuracy);
+    // The view's h1, read and not shown (the form's first field is its name): none embedded (the Carte has its own), none
+    // for Favoris (its title is one).
+    const h1 = this.embedded || isFavorites ? nothing
+      : html`<h1 class="visually-hidden">${this.#isNew ? (p.kind === 'list' ? 'Nouvelle liste' : 'Nouveau lieu') : placeTitle(place)}</h1>`;
 
-    return html`
+    return html`${h1}
       ${place.geometry && !this.embedded ? html`<div class="map-area">
         <gf-map
           .pin=${place.geometry.coordinates}

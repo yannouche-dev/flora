@@ -84,6 +84,7 @@ export class GfCollections extends LitElement {
     .sheet-plant { position: fixed; inset: 0 0 calc(61px + env(safe-area-inset-bottom)) 0; z-index: 900; display: flex; flex-direction: column; background: var(--gf-surface); animation: slide-in 0.2s ease-out; }
     @keyframes slide-in { from { transform: translateX(30%); opacity: 0; } }
     @media (prefers-reduced-motion: reduce) { .sheet-plant { animation: none; } }
+    .sheet-plant:focus { outline: none; }
     .inline-map { position: relative; height: 220px; margin: 0 12px 10px; border-radius: var(--gf-radius); overflow: hidden; border: 1px solid var(--gf-border); }
     .inline-map gf-map { position: absolute; inset: 0; min-height: 0; }
     .wrap { max-width: 760px; margin: 0 auto; padding: 14px 16px 96px; }
@@ -217,6 +218,9 @@ export class GfCollections extends LitElement {
         before && before.plant == null ? depth() - 1 : before?.plant != null ? this.#sheet : null);
       // The sheet closed: the focus, gone with it, back on its plant (updated).
       if (before?.plant != null && this.route.plant == null) this.#focusPlant = before.plant;
+      // A phone, a plant just opened: its sheet over the list (inert under it) takes the focus; a step to another (‹ ›,
+      // ← →) leaves it where it is.
+      if (this.#phone.matches && this.route.plant != null && before?.plant == null) this.#focusSheet = true;
     }
     // Arriving on a collection (link, Back): it is unfolded.
     if (changed.has('route') && this.route.open && !this._open.has(this.route.open)) {
@@ -328,8 +332,14 @@ export class GfCollections extends LitElement {
 
   /** The plant whose sheet just closed: its link in the list takes the focus back. @type {number | null} */
   #focusPlant = null;
+  /** Phone: a plant just opened, its sheet over the list (inert under it) takes the focus. */
+  #focusSheet = false;
 
   updated() {
+    if (this.#focusSheet) {
+      this.#focusSheet = false;
+      /** @type {HTMLElement | null} */ (this.renderRoot.querySelector('.sheet-plant'))?.focus({ preventScroll: true });
+    }
     if (this.#focusPlant === null) return;
     const id = this.#focusPlant;
     this.#focusPlant = null;
@@ -631,8 +641,8 @@ export class GfCollections extends LitElement {
     const plantId = this.route.plant;
     if (phone) {
       return html`
-        <section class="list-pane phone" aria-label="Mes plantes">${this.#list(true)}</section>
-        ${plantId ? html`<section class="sheet-plant" aria-label="Plante">
+        <section class="list-pane phone" aria-label="Mes plantes" ?inert=${Boolean(plantId)}>${this.#list(true)}</section>
+        ${plantId ? html`<section class="sheet-plant" aria-label="Plante" tabindex="-1">
           <div class="pane-head">
             <button class="icon-btn" type="button" aria-label="Fermer la fiche" title="Fermer (Échap)" @click=${() => this.#closePlant()}>${icon('x-lg')}</button>
             <h2>Plante</h2>

@@ -337,7 +337,8 @@ test('une observation touchée : sa fiche simple, le focus dedans — « Médias
   // The focus in it, on what it shows (named after its plant); on a phone, the screen under it out of reach.
   await expect(sheet.locator('.simple')).toBeFocused();
   await expect(sheet.locator('.simple')).toHaveAttribute('aria-label', 'Traunsteinère globuleuse : médias et l’essentiel');
-  expect(await screen(page).locator('.wrap').getAttribute('inert')).toBe(app.phone ? '' : null);
+  // A phone: the sheet covers the box, which hides the rest from sight, the keyboard and screen readers.
+  if (app.phone) await expect(screen(page).locator('.wrap')).toBeHidden(); else await expect(screen(page).locator('.wrap')).toBeVisible();
 
   // « Médias »: its image (the flora's photo of it); the one shown kept in the address (&m=), and given back to it.
   const viewer = sheet.locator('gf-media-viewer');

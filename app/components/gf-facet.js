@@ -107,7 +107,7 @@ export const facetStyles = css`
   input[type='checkbox'] { width: 16px; height: 16px; margin: 0; flex: none; }
   .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .count { color: var(--gf-text-muted); font-size: 0.8rem; font-variant-numeric: tabular-nums; }
-  li.empty label { opacity: 0.45; }
+  li.empty label { color: var(--gf-text-muted); }
   .link.more { display: block; margin-top: 6px; }
   .none { font-size: 0.8rem; color: var(--gf-text-muted); padding: 4px 2px; }
 `;
@@ -270,7 +270,7 @@ export class GfFacet extends LitElement {
           <div class="filter"><input type="search" placeholder="Filtrer ${this.label.toLowerCase()}…" aria-label="Filtrer ${this.label}"
             .value=${this._filter} @input=${e => { this._filter = e.target.value; this.updateComplete.then(() => this.#keepBand()); }} /></div>` : nothing}
         <!-- Keyed rows: a checkbox stays with its value when counts reorder the list. -->
-        <ul role="group" aria-label=${this.label}>
+        <ul aria-label=${this.label}>
           ${repeat(shown, o => o.value, o => html`
             <li class=${o.count || selected.has(o.value) ? '' : 'empty'}>
               <label title=${o.title || o.label}>

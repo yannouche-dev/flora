@@ -157,6 +157,21 @@ test('Mosaïque : la grille des photos, « En fleur maintenant », une image tou
   await expect(page.locator('ma-plant-sheet')).toHaveCount(0);
 });
 
+test('téléphone, Mosaïque : une image ouverte au clavier, la fiche prend le focus (la grille cachée dessous) ; Échap la ferme et le rend à l’image', async ({ app, page }) => {
+  test.skip(!app.phone, 'the sheet over the whole box: a phone');
+  await app.open('#/app/mosaique');
+  await toCards(page, 'mosaique');
+  const list = page.locator('ma-around-list');
+  const card = list.locator('.grid.mosaic .card').nth(2);
+  await card.focus();
+  await page.keyboard.press('Enter');
+  await expect(page.locator('gf-miniapp')).toHaveAttribute('covered', '');
+  await expect(page.locator('ma-plant-sheet .sheet-head button')).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(page.locator('ma-plant-sheet')).toHaveCount(0);
+  await expect(card).toBeFocused();
+});
+
 test('Mosaïque, Matchs : « Retirer » reprend le favori que le match a ajouté, et dit quand un favori reste', async ({ app, page }) => {
   const ail = plantId('Allium ursinum'), pissenlit = plantId('Taraxacum officinale');
   /** The favourites, with the activity that made each (none: null). */

@@ -101,11 +101,11 @@ test('la grille : la colonne « Observations » (les plus observées d’abord, 
   await head.getByRole('button').click();
   await expect.poll(() => param(page, 'sort')).toBe('obs');
   await expect.poll(() => names(page)).toEqual(MOST);
-  await expect(head).toHaveAttribute('aria-sort', 'descending');
+  await expect(head.getByRole('button')).toHaveAccessibleName('Observations (tri)');
   await head.getByRole('button').click();
   await expect.poll(() => param(page, 'sort')).toBe('-obs');
   await expect.poll(() => names(page)).toEqual([...MOST].reverse());
-  await expect(head).toHaveAttribute('aria-sort', 'ascending');
+  await expect(head.getByRole('button')).toHaveAccessibleName('Observations (tri inverse)');
   await expect(page.locator('dl-results gf-plant-card').filter({ hasText: 'Ail des ours' }).locator('.cell.obs')).toContainText('9');
   // Flore: no zone, no count — neither the column nor the sort; sort=obs in its address is the French name's.
   await app.go('#/?sort=obs');
