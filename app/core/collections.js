@@ -7,7 +7,7 @@
 
 import { config } from '../config.js';
 import * as db from './db.js';
-import { FAVORITES_ID, countOf, joinEntry, locationLoss, madeBy, mergeCollections, newEntryId, normalizeEntry, normalizeCollection, plantIdsOf, plantKey, promoted, promotedEntry, promoteTouched, rebase, sameContent, userChange, withoutMadeBy } from './place-model.js';
+import { FAVORITES_ID, countOf, joinEntry, locationLoss, madeBy, mergeCollections, newEntryId, normalizeEntry, normalizeCollection, plantIdsOf, plantKey, promoted, promotedEntry, promoteTouched, rebase, roundCoordinates, sameContent, userChange, withoutMadeBy } from './place-model.js';
 import { store } from './store.js';
 import { FORMAT_VERSION, toPortable } from './portable.js';
 import { encodeCollection, encodePortable, share } from './share.js';
@@ -93,9 +93,6 @@ export async function deletePlace(id) {
   allowEmptyBackup = true;
   await changed();
 }
-
-/** 7 decimals ≈ 1 cm: plenty, and keeps exports readable. @param {[number, number]} c @returns {[number, number]} */
-const roundCoordinates = ([lon, lat]) => [Math.round(lon * 1e7) / 1e7, Math.round(lat * 1e7) / 1e7];
 
 /**
  * @param {[number, number]} coordinates [lon, lat]
@@ -428,6 +425,42 @@ export async function updatePlace(id, change, { by, create = true } = {}) {
     await promoteFavorites(gained);
   }
   return saved;
+}
+
+/**
+ * ✓ Valider on a map (✎): the places and plants moved there, saved in one write per place, on the place as stored now
+ * (nothing changed meanwhile — in another tab — is lost). The three maps that let you move them (Carte, a sheet's map,
+ * « Mes plantes » of a sheet) save through here. Never throws: what could not be written is in `failed` (a place deleted
+ * meanwhile: GoneError), the others are saved all the same.
+ * @param {{ places?: { id: string, coordinates: [number, number] }[], plants?: { placeId: string, entryId?: string, plantId: number | null, coordinates: [number, number] }[] }} moves
+ * @param {(id: string) => boolean} shown the places the map shows: a move of any other is ignored
+ * @returns {Promise<{ saved: string[], failed: { id: string, error: Error }[] }>}
+ */
+export async function saveMoves({ places = [], plants = [] }, shown) {
+  /** @type {Map<string, ((place: Collection) => Collection)[]>} */
+  const changes = new Map();
+  const add = (/** @type {string} */ id, /** @type {(place: Collection) => Collection} */ change) => {
+    if (shown(id)) changes.set(id, [...changes.get(id) || [], change]);
+  };
+  for (const { id, coordinates } of places) {
+    add(id, place => ({ ...place, geometry: { type: 'Point', coordinates: roundCoordinates(coordinates) }, properties: { ...place.properties, accuracy: null } }));
+  }
+  for (const { placeId, entryId, plantId, coordinates } of plants) {
+    add(placeId, place => withEntry(/** @type {Place} */ (place), entryId ?? plantId, { coordinates: roundCoordinates(coordinates), accuracy: null }));
+  }
+  /** @type {string[]} */
+  const saved = [];
+  /** @type {{ id: string, error: Error }[]} */
+  const failed = [];
+  for (const [id, list] of changes) {
+    try {
+      await updatePlace(id, place => list.reduce((p, change) => change(p), place));
+      saved.push(id);
+    } catch (error) {
+      failed.push({ id, error: /** @type {Error} */ (error) });
+    }
+  }
+  return { saved, failed };
 }
 
 /**

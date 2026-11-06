@@ -11,7 +11,7 @@ import {
   ABUNDANCE, copyAsList, defaultPlantPosition, deletePlace, distance, entryInSeason, entryName, entryPosition, exportGeoJSON, findEntry,
   formatDistance, getPlace, lastHarvest, locationQuestion, matchCollections, plantMarkers, removeQuestion,
   newCollection, newPlace, placesNear, placeTitle, plantCount, savePatch, savePlace, shareCollection, spotEvents, updatePlace, walkEnded, withEntry, withLocation, withoutPlant, withPlant, entriesOf, lastEntry } from '../core/collections.js';
-import { joinEntry, joinNotes } from '../core/place-model.js';
+import { joinEntry, joinNotes, roundCoordinates } from '../core/place-model.js';
 import { StoreController, whenReady } from '../core/store.js';
 import { addressAt, altitudeAt, formatCoordinates } from '../core/geoservices.js';
 import { BP } from '../core/media.js';
@@ -561,7 +561,7 @@ export class GfSpotEditor extends LitElement {
       this.#findNearby();
     }
     for (const { entryId, plantId, coordinates } of plants) {
-      this._place = withEntry(this._place, entryId ?? plantId, { coordinates: [Math.round(coordinates[0] * 1e7) / 1e7, Math.round(coordinates[1] * 1e7) / 1e7], accuracy: null });
+      this._place = withEntry(this._place, entryId ?? plantId, { coordinates: roundCoordinates(coordinates), accuracy: null });
     }
     this.#changed();
     // Validated on the map: saved right away, so the markers get their new positions back at once.
