@@ -3,7 +3,8 @@
 // start), the list takes its place. A block's pane closes the same way, onto the plant it was opened from
 // (core/history.js sheetMark, closeTo). On both widths the sheet's head has its × « Fermer la fiche », and Échap closes
 // it (Flore: its pane first). « Annuler » goes back, never a step more: a new place's, a dialog's; a share's « Ignorer »
-// too, and a share saved takes the preview's place. The Carte's plant filter is in its address (plants=).
+// too, and a share saved takes the preview's place. The Carte's plant filter is in its address (plants=). One h1 per
+// screen; on a phone, nothing reachable under a sheet.
 import { test, expect, plantId } from './fixtures.mjs';
 import { screenSearch } from './app.mjs';
 
@@ -619,4 +620,73 @@ test.describe('pendant les premiers pas', () => {
     await expect.poll(() => hash(page)).toBe('#/discover');
     expect(await depthOf(page)).toBe(0);
   });
+});
+
+/** The h1 a screen reader finds (none in an inert or aria-hidden subtree, none hidden), through the shadow roots: their text. @param {Page} page */
+const h1s = page => page.evaluate(() => {
+  const up = (/** @type {Element} */ el) => el.assignedSlot ?? el.parentElement ?? /** @type {any} */ (el.parentNode)?.host ?? null;
+  const read = (/** @type {Element} */ el) => {
+    for (let n = /** @type {Element | null} */ (el); n; n = up(n)) if (n.hasAttribute('inert') || n.getAttribute('aria-hidden') === 'true') return false;
+    return el.checkVisibility({ visibilityProperty: true });
+  };
+  /** @type {string[]} */ const found = [];
+  const walk = (/** @type {Document | ShadowRoot} */ root) => {
+    for (const el of root.querySelectorAll('*')) {
+      if (el.localName === 'h1' && read(el)) found.push((el.textContent || '').replace(/\s+/g, ' ').trim());
+      if (el.shadowRoot) walk(el.shadowRoot);
+    }
+  };
+  walk(document);
+  return found;
+});
+
+test('un h1 par écran, au bureau comme au téléphone : Mes plantes avec une fiche, une nouvelle liste, un nouveau lieu ; sur téléphone, un bloc en grand, la fiche d’une activité', async ({ app, page }) => {
+  const ortie = plantId('Urtica dioica');
+  await app.open(`#/collections?plant=${ortie}`);
+  await expect.poll(() => h1s(page)).toEqual(['Ortie dioïque']);
+  await app.go('#/collection/new?kind=list');
+  await expect.poll(() => h1s(page)).toEqual(['Nouvelle liste']);
+  await app.go('#/collection/new?kind=place');
+  await expect.poll(() => h1s(page)).toEqual(['Nouveau lieu']);
+  if (app.phone) {
+    await app.go(`#/plant/${ortie}?pane=media`);
+    await expect.poll(() => h1s(page)).toEqual([expect.stringMatching(/^Médias/)]);
+  }
+  await app.go(`#/app/rencontres?p=${ortie}&fiche=1`);
+  await expect.poll(() => h1s(page)).toEqual([app.phone ? 'Ortie dioïque' : expect.stringMatching(/^Rencontrez les plantes/)]);
+});
+
+test('téléphone : rien d’atteignable sous une fiche — Mes plantes (sa liste, l’en-tête), une activité (sa barre, son écran) ; refermée, tout revient', async ({ app, page }) => {
+  test.skip(!app.phone, 'a sheet over the whole page: a phone');
+  /** Whether the element takes the focus. @param {import('@playwright/test').Locator} el */
+  const reachable = el => el.evaluate(e => { /** @type {HTMLElement} */ (e).focus(); return e.matches(':focus'); });
+  await app.open('#/');
+  const id = await seedPlace(page);
+  await app.go('#/collections');
+  const mine = page.locator('gf-collections');
+  await mine.locator('button.main', { hasText: 'Bois de la Source' }).click();
+  await expect.poll(() => hash(page)).toBe(`#/collections?c=${id}`);
+  await mine.locator('ul.plants a').first().click();
+  await expect(mine.locator('.sheet-plant')).toBeFocused();
+  const newList = mine.locator('.list-pane .new a').first();
+  expect(await reachable(newList)).toBe(false);
+  expect(await reachable(page.locator('gf-app header a.brand'))).toBe(false);
+  await mine.locator('.sheet-plant .pane-head').getByRole('button', { name: 'Fermer la fiche' }).focus();
+  await page.keyboard.press('Shift+Tab');
+  await expect(page.locator('gf-collections .list-pane:focus-within, gf-app header:focus-within')).toHaveCount(0);
+  await closeMine(app, page);
+  await expect.poll(() => focused(page)).toBe(`#/collections?c=${id}&plant=${plantId('Allium ursinum')}`);
+  expect(await reachable(newList)).toBe(true);
+
+  // An activity's sheet: its bar and its screen hidden under it, back once closed.
+  await app.go(`#/app/rencontres?p=${plantId('Urtica dioica')}&fiche=1`);
+  const box = page.locator('gf-miniapp');
+  await expect(box).toHaveAttribute('covered', '');
+  expect(await reachable(box.locator('.quit'))).toBe(false);
+  await box.locator('ma-plant-sheet').getByRole('button', { name: 'Fermer la fiche' }).focus();
+  await page.keyboard.press('Shift+Tab');
+  await expect(page.locator('gf-miniapp .bar:focus-within, gf-miniapp .body > :not(ma-grid):focus-within')).toHaveCount(0);
+  await box.locator('ma-plant-sheet').getByRole('button', { name: 'Fermer la fiche' }).click();
+  await expect(box).not.toHaveAttribute('covered', '');
+  expect(await reachable(box.locator('.quit'))).toBe(true);
 });
