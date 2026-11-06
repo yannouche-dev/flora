@@ -53,10 +53,10 @@ const RESTRICTED = {
     selector: "MemberExpression[property.name='geolocation']",
     message: 'Ask for the position through core/geo.js (oneFix, takeFix, watchLocation, GeoController): one shared watch, its failures in the app’s words.'
   },
-  // One name per thing: `export { x } from …`, `export { x }`, `export *` and `export const y = x` give a second way to
-  // import a name, or a second name to one thing (5.7: 13 relays and 9 aliases gone).
+  // One name per thing: `export { x } from …`, `export { x }`, `export *`, `export default x` and `export const y = x`
+  // give a second way to import a name, or a second name to one thing (5.7: 13 relays and 9 aliases gone).
   relay: {
-    selector: "ExportNamedDeclaration[declaration=null], ExportAllDeclaration, ExportNamedDeclaration > VariableDeclaration > VariableDeclarator[id.type='Identifier'][init.type='Identifier']",
+    selector: "ExportNamedDeclaration[declaration=null], ExportAllDeclaration, ExportDefaultDeclaration > Identifier.declaration, ExportNamedDeclaration > VariableDeclaration > VariableDeclarator[id.type='Identifier'][init.type='Identifier']:not([init.name=/^(undefined|NaN|Infinity)$/])",
     message: 'Export a name where it is declared, under its own name, and import it from the module that owns it: no relay, no alias (one name per thing).'
   }
 };
@@ -108,7 +108,7 @@ export default [
   {
     files: ['app/core/**/*.js'],
     rules: {
-      'import-x/no-restricted-paths': ['error', { zones: [{ target: './app/core', from: ['./app/components', './app/layout', './app/miniapp', './app/miniapps'],
+      'import-x/no-restricted-paths': ['error', { basePath: import.meta.dirname, zones: [{ target: './app/core', from: ['./app/components', './app/layout', './app/miniapp', './app/miniapps'],
         message: 'core/ is the bottom layer: move what it needs down into core/ (or let the caller pass it).' }] }]
     }
   },

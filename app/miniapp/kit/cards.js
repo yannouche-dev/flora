@@ -1,6 +1,6 @@
 // @ts-check
 // The cards of the plants around a place (Rencontres, Cueillette prudente, Mosaïque): what is pure about them — the
-// distances offered, their words and their slider, the order of Cueillette prudente (only the plants of a dangerous
+// next distance and a word for it, and their slider (the stops and their words are core/distance.js's), the order of Cueillette prudente (only the plants of a dangerous
 // confusion, the deadliest first) and its toxic look-alikes (never a match: recognised, to avoid), the deck (the cards
 // not yet swiped), a swipe kept or taken back, what a swipe says aloud (saidOf), a card made of a plant and what was
 // seen of it (cardOf: an activity's and a screen's deck alike), the first sentence of what Wikipédia says, and a card's

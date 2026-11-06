@@ -11,12 +11,12 @@ import { SOURCES, sourcesText } from '../core/observations.js';
 /** @typedef {import('../core/observations.js').ObsSource} ObsSource */
 
 /**
- * A layer of the Géoplateforme's catalogue (data/ign-catalog.json) the map adds as an overlay (core/ign.js
- * addCatalogLayer: its key « ign:<id> »): those of the panel's themes (core/map-layers.js CATALOG_ROWS), the same
- * whichever adds it.
+ * A layer of the Géoplateforme's catalogue (data/ign-catalog.json) the map adds as an overlay
+ * (core/ign-layers.js addCatalogLayer: its key « ign:<id> »): those of the panel's themes (core/map-layers.js
+ * CATALOG_ROWS), the same whichever adds it.
  * @typedef {{ id: string, title: string, format: string, style: string, minNative: number, maxNative: number }} MapCatalogLayer
  * @typedef {{ label: string, keys: string[], catalog?: MapCatalogLayer[] }} MapLayer
- *   `keys`: the overlays of gf-map it shows (core/ign.js OVERLAYS' own keys, or « ign:<id> » for a catalogue's layer)
+ *   `keys`: the overlays of gf-map it shows (core/map-layers.js OVERLAYS' own keys, or « ign:<id> » for a catalogue's layer)
  */
 
 const {
@@ -26,7 +26,7 @@ const {
 /** The rivers, the lakes (« Cours d’eau » of « Noms et réseaux » too: core/map-layers.js LANDMARKS — drawn once, core/ign.js landmarksShown). @type {MapCatalogLayer} */
 const HYDRO = { id: 'HYDROGRAPHY.HYDROGRAPHY', title: 'Hydrographie', format: 'image/png', style: 'normal', minNative: 6, maxNative: 18 };
 
-/** A catalogue layer's overlay key (core/ign.js IGN_PREFIX). @param {MapCatalogLayer} l */
+/** A catalogue layer's overlay key (core/ign-layers.js IGN_PREFIX). @param {MapCatalogLayer} l */
 const ign = l => 'ign:' + l.id;
 
 /** A layer of the catalogue alone, by its row of the panel's themes (its title the panel's). @param {MapCatalogLayer} l @returns {MapLayer} */
@@ -34,7 +34,7 @@ const row = l => ({ label: l.title, keys: [ign(l)], catalog: [l] });
 
 /**
  * The layers a map cell names (layers=znieff+n2000), in the order the address writes them: protected areas first,
- * then the land. Each its overlays (gf-map `overlays`): the app's own (core/ign.js OVERLAYS) or the catalogue's — those
+ * then the land. Each its overlays (gf-map `overlays`): the app's own (core/map-layers.js OVERLAYS) or the catalogue's — those
  * of the panel's themes by their own short name (pentes, haies…: core/map-layers.js CATALOG_ROWS), the same overlay
  * whichever ticks it, the panel or the address.
  * @type {Record<string, MapLayer>}
@@ -106,7 +106,7 @@ export function landmarksText(keys) {
   return on.length === LANDMARK_DEFAULTS.length && LANDMARK_DEFAULTS.every(k => on.includes(k)) ? '1' : on.join('+');
 }
 
-/** The catalogue's layers these layers need added to the maps (core/ign.js addCatalogLayer) before they show. @param {string[]} names */
+/** The catalogue's layers these layers need added to the maps (core/ign-layers.js addCatalogLayer) before they show. @param {string[]} names */
 export const catalogLayers = names => names.flatMap(n => MAP_LAYERS[n]?.catalog ?? []);
 
 /**
@@ -326,7 +326,7 @@ export function snapRadius(m, stops, tol = SNAP) {
 
 // ── What a map cell keeps of what was done on it (registry.js `own`: written by its controls, not by the editor) ──
 
-/** A catalogue layer's id as the maps take it (core/ign.js SAFE_ID). */
+/** A catalogue layer's id as the maps take it (core/ign-layers.js SAFE_ID). */
 const SAFE_ID = /^[A-Za-z0-9._:-]{1,160}$/;
 
 /**
