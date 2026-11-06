@@ -22,9 +22,9 @@ import { hideImg, showImg } from '../../core/img.js';
 import { creditText } from '../../core/credit.js';
 import { StoreController } from '../../core/store.js';
 import { ui } from '../../styles/ui.js';
-import { distanceAt, distanceEvents, distMood, nameOf } from './cards.js';
+import { distanceAt, distanceEvents, distMood } from './cards.js';
 import { STOPS, radiusLabel } from '../../core/distance.js';
-import { commonOf } from '../../core/plants.js';
+import { commonOf, nameOf } from '../../core/plants.js';
 import '../../components/gf-map.js';
 
 /**

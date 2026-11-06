@@ -12,6 +12,7 @@ import assert from 'node:assert/strict';
 const { config } = await import('../../app/config.js');
 const db = await import('../../app/core/db.js');
 const C = await import('../../app/core/collections.js');
+const { FAVORITES_ID } = await import('../../app/core/place-model.js');
 const notes = await import('../../app/core/sheet-notes.js');
 const sync = await import('../../app/core/sync.js');
 const quota = await import('../../app/core/quota.js');
@@ -67,7 +68,7 @@ test('favoris : créés au premier usage, ajout et retrait atomiques', async () 
   assert.equal(await C.toggleFavorite(plant(5)), true);
   assert.equal(await C.toggleFavorite(plant(6)), true);
   assert.equal(await C.toggleFavorite(plant(5)), false);
-  assert.deepEqual((await C.getPlace(C.FAVORITES_ID))?.properties.plantIds, [6]);
+  assert.deepEqual((await C.getPlace(FAVORITES_ID))?.properties.plantIds, [6]);
 });
 
 test('notes de fiche : déplacées de localStorage dans IndexedDB une seule fois, sans perte', async () => {

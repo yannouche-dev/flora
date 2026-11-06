@@ -5,9 +5,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { LANDMARK_Z, OVERLAYS, addCatalogLayer, landmarksShown, tileLayer, wmtsUrl } from '../../app/core/ign.js';
+import { LANDMARK_Z, landmarksShown, tileLayer } from '../../app/core/ign.js';
+import { addCatalogLayer, wmtsUrl } from '../../app/core/ign-layers.js';
 import { PHOTO_HISTORIC, PHOTO_PERIODS, PHOTO_YEARS, SPOT_YEARS, baseLayers } from '../../app/core/backgrounds.js';
-import { LANDMARKS, LANDMARK_DEFAULTS } from '../../app/core/map-layers.js';
+import { LANDMARKS, LANDMARK_DEFAULTS, OVERLAYS } from '../../app/core/map-layers.js';
 import { MAP_DEFAULTS } from '../../app/core/map-settings.js';
 import {
   BUILDINGS_LAYER, BUILDING_HEIGHT, CACHE_PROTOCOL, DEM_TILES, IGN_VECTOR_TILES, buildStyle, circlePolygon, describeTileLayer,

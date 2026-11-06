@@ -12,8 +12,6 @@ import { onStorage } from './sync.js';
 import { config } from '../config.js';
 import { OVERLAYS, catalogRowOf } from './map-layers.js';
 
-export { OVERLAYS };
-
 const WMTS = 'https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&TILEMATRIXSET=PM'
   + '&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}';
 

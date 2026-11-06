@@ -16,7 +16,7 @@ import './gf-map.js';
 import './gf-spot-editor.js';
 import './gf-thumb.js';
 import { icon } from '../core/icons.js';
-import { foldLetters as fold, unsigned } from '../core/fold.js';
+import { foldLetters, unsigned } from '../core/fold.js';
 import { getPlant, nameOf } from '../core/plants.js';
 import { gbifTaxon } from '../core/sources.js';
 import { mapDistribution, setMapDistribution } from '../core/map-settings.js';
@@ -461,8 +461,8 @@ export class GfMapPage extends LitElement {
 
     // Search + two multi-select filters (Famille, Genre). Each filter's counts take the others into account.
     const { q, families, genera, open } = a.filter;
-    const needle = fold(q.trim());
-    const bySearch = (/** @type {any} */ sp) => !needle || fold([sp.common, sp.name, sp.genus, sp.family].filter(Boolean).join(' ')).includes(needle);
+    const needle = foldLetters(q.trim());
+    const bySearch = (/** @type {any} */ sp) => !needle || foldLetters([sp.common, sp.name, sp.genus, sp.family].filter(Boolean).join(' ')).includes(needle);
     const byFamily = (/** @type {any} */ sp) => !families.length || families.includes(sp.family);
     const byGenus = (/** @type {any} */ sp) => !genera.length || genera.includes(sp.genus);
     const shown = all.filter(sp => bySearch(sp) && byFamily(sp) && byGenus(sp));

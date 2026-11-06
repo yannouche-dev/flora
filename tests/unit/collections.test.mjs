@@ -19,29 +19,29 @@ globalThis.fetch = /** @type {any} */ (async (/** @type {any} */ input, /** @typ
 
 const db = await import('../../app/core/db.js');
 const C = await import('../../app/core/collections.js');
-const { normalizeCollection } = await import('../../app/core/place-model.js');
+const { FAVORITES_ID, normalizeCollection } = await import('../../app/core/place-model.js');
 const { metres } = await import('../../app/core/distance.js');
 
 const plant = (/** @type {number} */ id) => ({ id, scientificName: 'Planta ' + id, vernacularNames: ['Plante ' + id] });
 /** The favourites: plant id → [origin, from] (none: null). */
-const favourites = async () => Object.fromEntries(((await C.getPlace(C.FAVORITES_ID))?.properties.plants ?? [])
+const favourites = async () => Object.fromEntries(((await C.getPlace(FAVORITES_ID))?.properties.plants ?? [])
   .map(e => [e.plantId, [e.origin?.app ?? null, e.from?.app ?? null]]));
 /** The favourites made anew, those of a game (`origin`) and the user's. @param {[number, string | null][]} list */
 async function favouritesOf(list) {
-  await db.remove('spots', C.FAVORITES_ID).catch(() => {});
+  await db.remove('spots', FAVORITES_ID).catch(() => {});
   for (const [id, app] of list) await C.toggleFavorite(plant(id), app ? { app } : undefined);
 }
 
 test('rien à promouvoir ni à reprendre sans favoris : aucun favori créé pour rien', async () => {
   await C.promoteFavorites([1, 2]);
-  await C.promotePlace(C.FAVORITES_ID);
+  await C.promotePlace(FAVORITES_ID);
   assert.equal(await C.forgetFavoriteMadeBy(1, 'rencontres'), false);
   assert.equal(await C.adoptMadeBy(['rencontres']), 0);
   assert.equal(await C.forgetFavoriteEntry('e1', /** @type {any} */ ({ notes: '', rating: 0, abundance: 'moyen', harvests: [] })), false);
-  assert.equal(await C.getPlace(C.FAVORITES_ID), undefined);
+  assert.equal(await C.getPlace(FAVORITES_ID), undefined);
   // A list of the user's with plants, the favourites never made: still none.
   await C.savePlace(C.withPlant(C.newCollection('list', { name: 'Vide de favoris' }), plant(1)));
-  assert.equal(await C.getPlace(C.FAVORITES_ID), undefined);
+  assert.equal(await C.getPlace(FAVORITES_ID), undefined);
 });
 
 test('un favori de partie rangé dans une liste, ou noté de nouveau dans un lieu, est à vous ; une altitude ne change rien', async () => {
@@ -70,21 +70,21 @@ test('un favori de partie rangé dans une liste, ou noté de nouveau dans un lie
 
 test('un favori de partie annoté, noté ou récolté dans les Favoris est à vous ; les Favoris partagés ou exportés seuls aussi', async () => {
   await favouritesOf([[1, 'rencontres'], [2, 'rencontres'], [3, 'mosaique']]);
-  const entry = /** @type {any} */ (C.findEntry(/** @type {any} */ (await C.getPlace(C.FAVORITES_ID)), 1));
-  await C.updatePlace(C.FAVORITES_ID, c => C.withEntry(c, entry.id, { notes: 'Près du lavoir' }));
+  const entry = /** @type {any} */ (C.findEntry(/** @type {any} */ (await C.getPlace(FAVORITES_ID)), 1));
+  await C.updatePlace(FAVORITES_ID, c => C.withEntry(c, entry.id, { notes: 'Près du lavoir' }));
   assert.deepEqual(await favourites(), { 1: [null, 'rencontres'], 2: ['rencontres', null], 3: ['mosaique', null] });
   // The editor's way (place-model.js rebase): a rating given.
-  const base = /** @type {any} */ (await C.getPlace(C.FAVORITES_ID));
+  const base = /** @type {any} */ (await C.getPlace(FAVORITES_ID));
   await C.savePatch(base, C.withEntry(base, 2, { rating: 4 }));
   assert.deepEqual(await favourites(), { 1: [null, 'rencontres'], 2: [null, 'rencontres'], 3: ['mosaique', null] });
   // Shared or exported alone: every favourite of a match in them.
-  await C.promotePlace(C.FAVORITES_ID);
+  await C.promotePlace(FAVORITES_ID);
   assert.deepEqual(await favourites(), { 1: [null, 'rencontres'], 2: [null, 'rencontres'], 3: [null, 'mosaique'] });
   // Nothing left to promote: nothing written.
-  const before = (await C.getPlace(C.FAVORITES_ID))?.properties.updatedAt;
-  await C.promotePlace(C.FAVORITES_ID);
+  const before = (await C.getPlace(FAVORITES_ID))?.properties.updatedAt;
+  await C.promotePlace(FAVORITES_ID);
   await C.promoteFavorites([1, 2, 3]);
-  assert.equal((await C.getPlace(C.FAVORITES_ID))?.properties.updatedAt, before);
+  assert.equal((await C.getPlace(FAVORITES_ID))?.properties.updatedAt, before);
 });
 
 test('un cœur n’enlève jamais un favori ; reprendre celui d’une partie, ou celui d’un cœur tel qu’il l’a laissé', async () => {
@@ -104,7 +104,7 @@ test('un cœur n’enlève jamais un favori ; reprendre celui d’une partie, ou
   // The deck of a layout (no origin): ↺ takes back the entry its heart added, as it left it — rated since, it stays.
   const one = /** @type {any} */ (await C.addFavorite(plant(6)));
   const two = /** @type {any} */ (await C.addFavorite(plant(7)));
-  await C.updatePlace(C.FAVORITES_ID, c => C.withEntry(c, two.id, { rating: 3 }));
+  await C.updatePlace(FAVORITES_ID, c => C.withEntry(c, two.id, { rating: 3 }));
   assert.equal(await C.forgetFavoriteEntry(one.id, one), true);
   assert.equal(await C.forgetFavoriteEntry(two.id, two), false);
   assert.equal(await C.forgetFavoriteEntry(one.id, one), false, 'déjà repris');
@@ -219,7 +219,7 @@ test('removeQuestion : la note, le journal de récolte, les autres fois notées 
     plants: [{ plantId: 1, vernacularName: 'Ortie dioïque', notes: 'soupe' }, { plantId: 2, vernacularName: 'Ail des ours' }] } }));
   assert.deepEqual(C.removeQuestion(list, 1), ask('Retirer Ortie dioïque de cette liste ?', 'Sa note sera effacée.'));
   assert.equal(C.removeQuestion(list, 2), null);
-  const favourites = /** @type {any} */ (normalizeCollection({ type: 'Feature', id: C.FAVORITES_ID, geometry: null,
+  const favourites = /** @type {any} */ (normalizeCollection({ type: 'Feature', id: FAVORITES_ID, geometry: null,
     properties: { plants: [{ plantId: 2, vernacularName: 'Ail des ours', harvests: harvest }] } }));
   assert.deepEqual(C.removeQuestion(favourites, 2), ask('Retirer Ail des ours des favoris ?', 'Son journal de récolte sera effacé.'));
   // A list holding a plant twice (from before): its notes said, no positions.
@@ -246,7 +246,7 @@ test('positionQuestion, fileQuestion : la position comptée, le départ d’un p
   assert.equal(C.positionQuestion(bois([{ plantId: 1 }], { walk: true })).text, 'Le lien contiendra la position exacte de ce parcours et de sa plante.');
   // No point: nothing to ask.
   const list = /** @type {any} */ (normalizeCollection({ type: 'Feature', id: 'l', geometry: null, properties: { kind: 'list', name: 'Cuisine', plants: [{ plantId: 1 }] } }));
-  const favourites = /** @type {any} */ (normalizeCollection({ type: 'Feature', id: C.FAVORITES_ID, geometry: null, properties: { plants: [{ plantId: 2, notes: 'Au jardin' }] } }));
+  const favourites = /** @type {any} */ (normalizeCollection({ type: 'Feature', id: FAVORITES_ID, geometry: null, properties: { plants: [{ plantId: 2, notes: 'Au jardin' }] } }));
   assert.equal(C.positionQuestion(list), null);
   assert.equal(C.positionQuestion(favourites), null);
 
@@ -375,13 +375,13 @@ test('setInCollection : dans un lieu, la plante à votre position à moins de 10
 
 test('♥ ôté : un favori annoté ou récolté demandé d’abord, refusé il reste ; sans rien d’écrit, il part à l’instant', async () => {
   await favouritesOf([[1, null], [2, 'rencontres']]);
-  await C.updatePlace(C.FAVORITES_ID, c => C.withEntry(c, 1, { notes: 'Coin humide derrière le lavoir', rating: 4 }));
+  await C.updatePlace(FAVORITES_ID, c => C.withEntry(c, 1, { notes: 'Coin humide derrière le lavoir', rating: 4 }));
   /** @type {any[]} */
   const asked = [];
   const answer = (/** @type {boolean} */ yes) => async (/** @type {any} */ q) => { asked.push(q); return yes; };
   assert.equal(await C.toggleFavorite(plant(1), undefined, answer(false)), true, 'refusé : toujours un favori');
   assert.deepEqual(asked.map(q => [q.title, q.text, q.yes]), [['Retirer Plante 1 des favoris ?', 'Sa note sera effacée.', 'Retirer']]);
-  assert.equal(C.findEntry(/** @type {any} */ (await C.getPlace(C.FAVORITES_ID)), 1)?.notes, 'Coin humide derrière le lavoir', 'sa note gardée');
+  assert.equal(C.findEntry(/** @type {any} */ (await C.getPlace(FAVORITES_ID)), 1)?.notes, 'Coin humide derrière le lavoir', 'sa note gardée');
   assert.equal(await C.toggleFavorite(plant(1), undefined, answer(true)), false);
   assert.deepEqual(Object.keys(await favourites()), ['2']);
   // Nothing written on it: no question, gone at once; without `ask` (an activity's own), never asked.
@@ -454,7 +454,7 @@ test('Exporter (GeoJSON) une collection vers la feuille de partage : demandé ; 
     // The favourites alone: the match favourites in the file carry no origin, and are the user's once it went.
     await favouritesOf([[5, 'rencontres'], [6, null]]);
     // A note of the user's in them: the file says something of them, asked first.
-    const favs = await C.updatePlace(C.FAVORITES_ID, c => C.withEntry(c, 6, { notes: 'Au jardin' }));
+    const favs = await C.updatePlace(FAVORITES_ID, c => C.withEntry(c, 6, { notes: 'Au jardin' }));
     await C.exportGeoJSON([favs], { ask: answer(false) });
     assert.equal(asked[asked.length - 1].text, 'Le fichier contient vos notes.');
     assert.deepEqual((await favourites())[5], ['rencontres', null], 'refusé : toujours au jeu');

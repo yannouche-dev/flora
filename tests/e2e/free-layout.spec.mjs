@@ -272,7 +272,7 @@ test.describe('un grand écran', () => {
     await expect.poll(favourite).toBe(0);
     await page.evaluate(async id => {
       const c = await import('/app/core/collections.js');
-      await c.updatePlace(c.FAVORITES_ID, f => c.withEntry(f, id, { rating: 4 }));
+      await c.updatePlace('favorites', f => c.withEntry(f, id, { rating: 4 }));
     }, ail);
     await undo.click();
     await expect(top).toHaveAttribute('data-id', String(ail));

@@ -3,7 +3,8 @@
 // from plant to plant, from the start when it was started here); and what it keeps on the device.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { countOf, groupsOf, shortName, walkDone, walkOn, walkUnderWay, KEY, DONE } from '../../app/miniapp/kit/trail-store.js';
+import { groupsOf, shortName, walkDone, walkOn, walkUnderWay, KEY, DONE } from '../../app/miniapp/kit/trail-store.js';
+import { countOf } from '../../app/core/place-model.js';
 import { recapOf } from '../../app/miniapp/kit/trail-recap.js';
 import { writeJSON } from '../../app/core/prefs.js';
 

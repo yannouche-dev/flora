@@ -7,7 +7,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { avoid, bio, cardOf, deckOf, distanceAt, distanceEvents, distanceKey, distanceNear, ethnoSentence, harvestOrder, nameOf, nextDistance, saidOf, swipe, toAvoid, unswipe } from '../../app/miniapp/kit/cards.js';
+import { avoid, bio, cardOf, deckOf, distanceAt, distanceEvents, distanceKey, distanceNear, ethnoSentence, harvestOrder, nextDistance, saidOf, swipe, toAvoid, unswipe } from '../../app/miniapp/kit/cards.js';
+import { nameOf } from '../../app/core/plants.js';
 import { lookalikesOf } from '../../app/core/lookalikes.js';
 import { UNREAD, dangerLevel, rank } from '../../app/core/danger.js';
 import { verdictOf } from '../../app/core/alerts.js';

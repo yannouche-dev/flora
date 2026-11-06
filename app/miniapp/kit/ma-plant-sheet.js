@@ -17,7 +17,7 @@
 // its plant's name is then the screen's h1.
 
 import { LitElement, html, css, nothing } from 'lit';
-import { getPlant } from '../../core/plants.js';
+import { getPlant, nameOf } from '../../core/plants.js';
 import { icon } from '../../core/icons.js';
 import { blockOrder, blockStyle, blockTitle, isHidden } from '../../core/sheet-blocks.js';
 import { blockCategory, categoryOf } from '../../core/categories.js';
@@ -27,7 +27,6 @@ import { PaneSizer, splitStyles } from '../../core/panes.js';
 import { whenReady } from '../../core/store.js';
 import { modalOpen } from '../../core/history.js';
 import { ui } from '../../styles/ui.js';
-import { nameOf } from './cards.js';
 import '../../components/gf-plant-detail.js';
 import '../../components/gf-sheet-block.js';
 import '../../components/gf-media-viewer.js';

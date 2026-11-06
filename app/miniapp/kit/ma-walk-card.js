@@ -10,9 +10,9 @@ import { LitElement, html, css, nothing } from 'lit';
 import { icon } from '../../core/icons.js';
 import { entriesOf } from '../../core/collections.js';
 import { ui } from '../../styles/ui.js';
-import { countOf } from './trail-store.js';
 import { addPin, addPinStyles } from './ma-walk-search.js';
 import { SessionWatch } from './watch.js';
+import { countOf } from '../../core/place-model.js';
 import '../../components/gf-thumb.js';
 
 export class MaWalkCard extends LitElement {

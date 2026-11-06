@@ -1,6 +1,7 @@
 // @ts-check
 import { LitElement, html, css, nothing } from 'lit';
-import { FAVORITES_ID, addedTo, getMembership, getPlace, matchCollections, newCollection, removeQuestion, savePlace, setInCollection, withPlant } from '../core/collections.js';
+import { addedTo, getMembership, getPlace, matchCollections, newCollection, removeQuestion, savePlace, setInCollection, withPlant } from '../core/collections.js';
+import { FAVORITES_ID } from '../core/place-model.js';
 import { recentFix } from '../core/geo.js';
 import { href } from '../core/router.js';
 import { setContext } from '../core/context.js';

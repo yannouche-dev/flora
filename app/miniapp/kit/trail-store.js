@@ -8,9 +8,6 @@
 import { config } from '../../config.js';
 import { readJSON, writeJSON } from '../../core/prefs.js';
 
-// What a parcours holds, in words (« 9 plantes, notées 12 fois »): pure, with the shape of a collection.
-export { countOf } from '../../core/place-model.js';
-
 /**
  * The parcours being walked (its place id) and the one just ended (its recap, until left); none (null): the key removed
  * — a parcours never opened, or played again, leaves none behind.

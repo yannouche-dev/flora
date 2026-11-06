@@ -27,9 +27,9 @@ import { creditText } from '../../core/credit.js';
 import { moduleEvents } from '../../core/modules.js';
 import { StoreController } from '../../core/store.js';
 import { modalOpen } from '../../core/history.js';
-import { floweringMonths } from '../../core/plants.js';
+import { floweringMonths, nameOf } from '../../core/plants.js';
 import { ui } from '../../styles/ui.js';
-import { bio, nameOf, nextDistance } from './cards.js';
+import { bio, nextDistance } from './cards.js';
 import { radiusLabel } from '../../core/distance.js';
 
 /**

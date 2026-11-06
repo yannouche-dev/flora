@@ -5,9 +5,10 @@ import { commonOf, getPlant, nameOf } from '../core/plants.js';
 import { GeoController } from '../core/geo.js';
 import { href } from '../core/router.js';
 import {
-  FAVORITES_ID, discardMissingBackup, exportGeoJSON, inSeason, lastExportDate,
+  discardMissingBackup, exportGeoJSON, inSeason, lastExportDate,
   keptContents, listCollections, missingFromBackup, placeTitle, plantCount, plantMarkers, restoreBackup, restorePending, restoreReason, shareCollection, soon, spotEvents, findEntry,
   downloadBackup, readBackup } from '../core/collections.js';
+import { FAVORITES_ID } from '../core/place-model.js';
 import { formatDistance, metres } from '../core/distance.js';
 import { config } from '../config.js';
 import { StoreController, arrangedMode, closeKing, whenReady } from '../core/store.js';

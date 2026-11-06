@@ -91,10 +91,6 @@ export const MONTH = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'ju
 /** The cards shown at first in « Toutes », and each « Voir plus ». */
 export const PAGE = 12;
 
-// A plant's name (its first common name, else its scientific one) is core/plants.js's, offered here too: the kit's
-// screens import it from this module, and so do two e2e specs, in the page.
-export { nameOf } from '../../core/plants.js';
-
 /**
  * Cueillette prudente: only the plants of the Anses / Centres antipoison confusions, the deadliest first, then
  * those with an edible side, then the most observed. The list unreadable (`unread`): every plant kept, never « none to

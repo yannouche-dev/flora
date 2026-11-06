@@ -18,8 +18,6 @@ import { notesEvents, notesLoaded } from './sheet-notes.js';
 import { readJSON, readText, writeJSON, writeText } from './prefs.js';
 import { metres } from './distance.js';
 
-export { FAVORITES_ID };
-
 /**
  * @typedef {import('./place-model.js').Place} Place
  * @typedef {import('./place-model.js').Collection} Collection

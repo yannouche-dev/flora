@@ -24,6 +24,7 @@ localStorage.setItem(KEY, JSON.stringify({ done: false, unlocked: ['map', 'nope'
 
 const d = await import('../../app/core/discover.js');
 const c = await import('../../app/core/collections.js');
+const { FAVORITES_ID } = await import('../../app/core/place-model.js');
 
 /** The state as stored. */
 const stored = () => JSON.parse(localStorage.getItem(KEY) || 'null');
@@ -146,7 +147,7 @@ test('« Revoir les premiers pas » garde les onglets de vos listes et de vos li
 });
 
 test('recomputeUnlocks : un onglet venu à annoncer, sauf sans annonce', async () => {
-  for (const each of await c.listCollections()) if (each.id !== c.FAVORITES_ID) await c.deletePlace(each.id);
+  for (const each of await c.listCollections()) if (each.id !== FAVORITES_ID) await c.deletePlace(each.id);
   await d.restartDiscover();
   assert.deepEqual(d.discoverState().unlocked, []);
   // A liste made: Mes plantes, to be announced.
@@ -255,7 +256,7 @@ test('unlocksAtStart, une restauration en attente : l’onglet venu avec l’adr
 });
 
 test('markAnnounced : un onglet repris entre-temps (« Revoir les premiers pas » pendant son annonce) est annoncé quand il revient', async () => {
-  for (const each of await c.listCollections()) if (each.id !== c.FAVORITES_ID) await c.deletePlace(each.id);
+  for (const each of await c.listCollections()) if (each.id !== FAVORITES_ID) await c.deletePlace(each.id);
   await d.restartDiscover();
   // The Carte come with its address, its announcement showing.
   d.arrivedAt('map');
@@ -274,7 +275,7 @@ test('markAnnounced : un onglet repris entre-temps (« Revoir les premiers pas �
 });
 
 test('« Recommencer » de Rencontres sur un état qui n’a pas pu s’écrire (stockage plein) : ses onglets restent', async () => {
-  for (const each of await c.listCollections()) if (each.id !== c.FAVORITES_ID) await c.deletePlace(each.id);
+  for (const each of await c.listCollections()) if (each.id !== FAVORITES_ID) await c.deletePlace(each.id);
   await d.restartDiscover();
   assert.deepEqual(d.discoverState().unlocked, []);
   const set = localStorage.setItem;

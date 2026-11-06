@@ -243,7 +243,7 @@ test('♥ ôté d’un favori annoté (sa fiche, sa carte dans Flore) : demandé
     const c = await import('/app/core/collections.js');
     const db = await import('/app/core/db.js');
     for (const i of ids) await c.toggleFavorite(await db.get('plants', i));
-    await c.updatePlace(c.FAVORITES_ID, f => c.withEntry(f, ids[0], { notes: 'Coin humide derrière le lavoir', rating: 4 }));
+    await c.updatePlace('favorites', f => c.withEntry(f, ids[0], { notes: 'Coin humide derrière le lavoir', rating: 4 }));
   }, [ail, ortie]);
   const favourites = () => page.evaluate(async () => ((await (await import('/app/core/collections.js')).getPlace('favorites'))?.properties.plants ?? [])
     .map((/** @type {any} */ e) => [e.plantId, e.notes]));
@@ -264,7 +264,7 @@ test('♥ ôté d’un favori annoté (sa fiche, sa carte dans Flore) : demandé
   // A plant card's ♥ in Flore, the nettle annotated meanwhile: asked the same way.
   await page.evaluate(async i => {
     const c = await import('/app/core/collections.js');
-    await c.updatePlace(c.FAVORITES_ID, f => c.withEntry(f, i, { notes: 'En soupe' }));
+    await c.updatePlace('favorites', f => c.withEntry(f, i, { notes: 'En soupe' }));
   }, ortie);
   await app.go('#/?q=ortie');
   await page.getByRole('button', { name: 'Retirer des favoris : Ortie dioïque' }).first().click();
@@ -276,7 +276,7 @@ test('♥ ôté d’un favori annoté (sa fiche, sa carte dans Flore) : demandé
   // Nothing written on it: gone at once.
   await page.evaluate(async i => {
     const c = await import('/app/core/collections.js');
-    await c.updatePlace(c.FAVORITES_ID, f => c.withEntry(f, i, { notes: '' }));
+    await c.updatePlace('favorites', f => c.withEntry(f, i, { notes: '' }));
   }, ortie);
   await page.getByRole('button', { name: 'Retirer des favoris : Ortie dioïque' }).first().click();
   await expect.poll(favourites).toEqual([]);
