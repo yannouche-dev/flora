@@ -10,11 +10,11 @@ const seed = page => page.evaluate(async ids => {
   const db = await import('/app/core/db.js');
   const [geum, ail, ortie] = await Promise.all(ids.map(id => db.get('plants', id)));
   await c.toggleFavorite(geum);
-  await c.saveCollection(c.withPlant(c.withPlant(c.newCollection('list', { name: 'Mellifères' }), geum), ortie));
+  await c.savePlace(c.withPlant(c.withPlant(c.newCollection('list', { name: 'Mellifères' }), geum), ortie));
   let place = c.newPlace([4.8357, 45.7641], { name: 'Lisière nord', notes: 'Parking au bout du chemin' });
   place = c.withPlant(c.withPlant(place, ail), ortie, [4.83581, 45.76402]);
   place = c.withEntry(place, ail.id, { abundance: 'abondant', rating: 4, notes: 'avant floraison', harvests: [{ date: '2026-04-12', quantity: '1 kg', note: '' }] });
-  await c.saveCollection(place);
+  await c.savePlace(place);
 }, [plantId('Geum urbanum'), plantId('Allium ursinum'), plantId('Urtica dioica')]);
 
 /** What the user entered, comparable across devices (ids and dates of creation aside). @param {import('@playwright/test').Page} page */

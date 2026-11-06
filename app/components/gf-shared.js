@@ -2,7 +2,7 @@
 import { LitElement, html, css, nothing } from 'lit';
 import { getPlants, nameOf } from '../core/plants.js';
 import { href } from '../core/router.js';
-import { importPortable, keptContents, lastEntry, newCollection, newPlace, plantCount, saveCollection, withEntry, withPlant } from '../core/collections.js';
+import { importPortable, keptContents, lastEntry, newCollection, newPlace, plantCount, savePlace, withEntry, withPlant } from '../core/collections.js';
 import { FAVORITES_ID } from '../core/place-model.js';
 import { hasPersonal } from '../core/portable.js';
 import { decodeCollection, decodePortable, isPortableLink } from '../core/share.js';
@@ -125,7 +125,7 @@ export class GfShared extends LitElement {
         collection = withPlant(collection, plant, row.coordinates ? { coordinates: row.coordinates, accuracy: null } : undefined, { again: true });
         if (collection !== before && row.abundance) collection = withEntry(collection, /** @type {any} */ (lastEntry(collection)).id, { abundance: /** @type {any} */ (row.abundance) });
       }
-      const saved = await saveCollection(collection);
+      const saved = await savePlace(collection);
       // Saved, in the preview's place: Back does not open it again (a place: its editor goes on to the Carte, in place).
       replaceView(href.spot(saved.id));
     } catch (error) {

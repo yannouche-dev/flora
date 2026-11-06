@@ -40,7 +40,7 @@ test('deux onglets : chacun garde ses lieux, aucun n’efface l’autre', async 
   await expect.poll(() => other.evaluate(async () => (await import('/app/core/store.js')).store.state.status)).toBe('ready');
   const save = (/** @type {import('@playwright/test').Page} */ p, /** @type {string} */ name) => p.evaluate(async n => {
     const c = await import('/app/core/collections.js');
-    await c.saveCollection(c.newPlace([2.35, 48.85], { name: n }));
+    await c.savePlace(c.newPlace([2.35, 48.85], { name: n }));
   }, name);
   await Promise.all([save(page, 'Lieu A'), save(other, 'Lieu B'), save(page, 'Lieu C')]);
   const names = await other.evaluate(async () => (await (await import('/app/core/collections.js')).listCollections()).map((/** @type {any} */ c) => c.properties.name).sort());
@@ -65,7 +65,7 @@ test('GAP1-1 : l’éditeur de lieu ouvert n’efface pas une plante ajoutée ai
   const id = await page.evaluate(async () => {
     const c = await import('/app/core/collections.js');
     const place = c.newPlace([2.35, 48.85], { name: 'Bois' });
-    await c.saveCollection(place);
+    await c.savePlace(place);
     return place.id;
   });
   await app.go(`#/collection/${id}`);
@@ -75,7 +75,7 @@ test('GAP1-1 : l’éditeur de lieu ouvert n’efface pas une plante ajoutée ai
   await other.evaluate(async ([placeId, plant]) => {
     const db = await import('/app/core/db.js');
     const c = await import('/app/core/collections.js');
-    await c.saveCollection(c.withPlant(await c.getPlace(placeId), await db.get('plants', plant)));
+    await c.savePlace(c.withPlant(await c.getPlace(placeId), await db.get('plants', plant)));
   }, [id, plantId('Urtica dioica')]);
   // An edit in the open editor (its autosave writes the record back).
   await page.locator('gf-spot-editor input').first().fill('Bois du haut');

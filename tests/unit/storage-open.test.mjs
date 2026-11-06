@@ -238,7 +238,7 @@ test('réparation : la copie de secours, gardée telle quelle jusqu’à sa rest
   // Meanwhile: a ♥ in the new base, a deletion — the backup copy stays as it was.
   await C.toggleFavorite(plant(4));
   assert.equal(await C.writeBackup(), 'kept');
-  const extra = await C.saveCollection(C.newCollection('list', { name: 'Brouillon' }));
+  const extra = await C.savePlace(C.newCollection('list', { name: 'Brouillon' }));
   await C.deletePlace(extra.id);
   assert.equal(localStorage.getItem(config.storageKeys.backup), backup);
 

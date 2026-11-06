@@ -67,7 +67,7 @@ const setHidden = (page, hidden) => page.evaluate(h => {
 /** A list saved in Mes plantes (Mes plantes comes, to be announced). @param {Page} page */
 const saveList = page => page.evaluate(async () => {
   const c = await import('/app/core/collections.js');
-  await c.saveCollection(c.newCollection('list', { name: 'Bois' }));
+  await c.savePlace(c.newCollection('list', { name: 'Bois' }));
 });
 
 /** Favourites, a list and a place with notes, a harvest and a plant off the place's point (roundtrip.spec.mjs). @param {Page} page */
@@ -76,11 +76,11 @@ const seed = page => page.evaluate(async ids => {
   const db = await import('/app/core/db.js');
   const [geum, ail, ortie] = await Promise.all(ids.map(id => db.get('plants', id)));
   await c.toggleFavorite(geum);
-  await c.saveCollection(c.withPlant(c.withPlant(c.newCollection('list', { name: 'Mellifères' }), geum), ortie));
+  await c.savePlace(c.withPlant(c.withPlant(c.newCollection('list', { name: 'Mellifères' }), geum), ortie));
   let place = c.newPlace([4.8357, 45.7641], { name: 'Lisière nord', notes: 'Parking au bout du chemin' });
   place = c.withPlant(c.withPlant(place, ail), ortie, [4.83581, 45.76402]);
   place = c.withEntry(place, ail.id, { abundance: 'abondant', rating: 4, notes: 'avant floraison', harvests: [{ date: '2026-04-12', quantity: '1 kg', note: '' }] });
-  await c.saveCollection(place);
+  await c.savePlace(place);
 }, [plantId('Geum urbanum'), plantId('Allium ursinum'), plantId('Urtica dioica')]);
 
 const ADDRESSES = [
@@ -188,8 +188,8 @@ for (const address of ['#/discover', '#/collections']) {
     await app.open('#/discover');
     await page.evaluate(async () => {
       const c = await import('/app/core/collections.js');
-      await c.saveCollection(c.newCollection('list', { name: 'Bois' }));
-      await c.saveCollection(c.newPlace([4.8357, 45.7641], { name: 'Lisière nord' }));
+      await c.savePlace(c.newCollection('list', { name: 'Bois' }));
+      await c.savePlace(c.newPlace([4.8357, 45.7641], { name: 'Lisière nord' }));
       // A device of before: its lists and lieux, no tab come.
       localStorage.setItem('geoflora.discover', JSON.stringify({ done: false, unlocked: [], seen: [], step: 0 }));
     });

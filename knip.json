@@ -29,6 +29,6 @@
   ],
   "ignoreExportsUsedInFile": true,
   "rules": {
-    "duplicates": "warn"
+    "duplicates": "error"
   }
 }

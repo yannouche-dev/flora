@@ -379,7 +379,6 @@ export async function savePlace(place) {
   if (saved.id !== FAVORITES_ID && !saved.properties.origin) await promoteFavorites(plantIdsOf(saved.properties.plants));
   return saved;
 }
-export const saveCollection = savePlace;
 
 /**
  * Changes a stored collection atomically: `change` gets it as stored now (read in the same transaction as the write,

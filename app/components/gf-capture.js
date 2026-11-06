@@ -8,7 +8,7 @@ import { href } from '../core/router.js';
 import { openModal } from '../core/history.js';
 import {
   GoneError, NEAR_PLACE, distance, getPlace, listPlaces, newPlace, placeTitle, placesNear, recentPlants, rememberPlant,
-  saveCollection, undoNewPlace, updatePlace, withEntry, withPlant, withoutPlant, entriesOf, lastEntry } from '../core/collections.js';
+  savePlace, undoNewPlace, updatePlace, withEntry, withPlant, withoutPlant, entriesOf, lastEntry } from '../core/collections.js';
 import { store, StoreController } from '../core/store.js';
 import { lookalikeWarning } from '../core/lookalikes.js';
 import { verdictOf } from '../core/alerts.js';
@@ -351,7 +351,7 @@ export class GfCapture extends LitElement {
       };
       // An existing place: noted in it as stored now (one transaction: nothing written meanwhile is lost).
       const saved = before ? await updatePlace(before.id, note)
-        : await saveCollection(note(newPlace(fix.coordinates, { accuracy: here.accuracy })));
+        : await savePlace(note(newPlace(fix.coordinates, { accuracy: here.accuracy })));
       rememberPlant(plant.id);
       this.#close();
 

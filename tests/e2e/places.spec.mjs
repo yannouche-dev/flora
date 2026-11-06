@@ -8,8 +8,8 @@ const seed = page => page.evaluate(async ids => {
   const db = await import('/app/core/db.js');
   const [ail, ortie] = await Promise.all(ids.map(id => db.get('plants', id)));
   const place = c.withPlant(c.withPlant(c.newPlace([2.351, 48.851], { name: 'Bois de la Source' }), ail), ortie, [2.3512, 48.8509]);
-  await c.saveCollection(place);
-  await c.saveCollection(c.withPlant(c.newCollection('list', { name: 'À cueillir' }), ail));
+  await c.savePlace(place);
+  await c.savePlace(c.withPlant(c.newCollection('list', { name: 'À cueillir' }), ail));
   return place.id;
 }, [plantId('Allium ursinum'), plantId('Urtica dioica')]);
 
@@ -291,7 +291,7 @@ test('Le 📍 de Flore et « Dans mes listes et lieux » ouvrent la plante noté
     const c = await import('/app/core/collections.js');
     const o = await (await import('/app/core/db.js')).get('plants', plant);
     const twice = c.withPlant(c.withPlant(c.newPlace([2.351, 48.851], { name: 'Talus' }), o), o, { coordinates: [2.3514, 48.8512] }, { again: true });
-    const saved = await c.saveCollection(twice);
+    const saved = await c.savePlace(twice);
     return { id: saved.id, first: saved.properties.plants[0].id };
   }, ortie);
   const opened = async () => {

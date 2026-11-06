@@ -162,7 +162,7 @@ test('deux onglets : un lieu supprimé dans l’un n’est pas recréé par l’
   await app.open('#/');
   const id = await page.evaluate(async () => {
     const c = await import('/app/core/collections.js');
-    return (await c.saveCollection(c.newCollection('list', { name: 'Friche' }))).id;
+    return (await c.savePlace(c.newCollection('list', { name: 'Friche' }))).id;
   });
   await app.go(`#/collection/${id}`);
   const name = page.locator('gf-spot-editor input').first();

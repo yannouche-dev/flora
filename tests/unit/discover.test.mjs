@@ -125,7 +125,7 @@ test('quietly : les onglets qu’apporte un travail viennent sans annonce', asyn
   await d.restartDiscover();
   assert.deepEqual(d.discoverState().unlocked, []);
   assert.deepEqual(d.discoverState().announced, []);
-  await d.quietly(async () => c.saveCollection(c.newPlace([4.8, 45.7], { name: 'Lisière' })));
+  await d.quietly(async () => c.savePlace(c.newPlace([4.8, 45.7], { name: 'Lisière' })));
   assert.deepEqual(d.discoverState().unlocked, ['mine', 'map']);
   // Announced at once.
   assert.deepEqual(d.discoverState().announced, ['mine', 'map']);
@@ -133,7 +133,7 @@ test('quietly : les onglets qu’apporte un travail viennent sans annonce', asyn
 });
 
 test('« Revoir les premiers pas » garde les onglets de vos listes et de vos lieux, là tout de suite, sans annonce', async () => {
-  await c.saveCollection(c.newCollection('list', { name: 'Bois' }));
+  await c.savePlace(c.newCollection('list', { name: 'Bois' }));
   d.finishDiscover();
   await d.restartDiscover();
   const s = d.discoverState();
@@ -193,8 +193,8 @@ test('un état qui n’a pas pu s’écrire (stockage plein) garde ses onglets',
 });
 
 test('unlocksAtStart : au démarrage, les listes et les lieux de l’appareil font venir leurs onglets, sans annonce', async () => {
-  await c.saveCollection(c.newCollection('list', { name: 'Bois' }));
-  await c.saveCollection(c.newPlace([4.8357, 45.7641], { name: 'Lisière nord' }));
+  await c.savePlace(c.newCollection('list', { name: 'Bois' }));
+  await c.savePlace(c.newPlace([4.8357, 45.7641], { name: 'Lisière nord' }));
   // A device of before (or « Revoir les premiers pas » of before): its lists and lieux, no tab.
   localStorage.setItem(KEY, JSON.stringify({ done: false, unlocked: [], seen: [], step: 0 }));
   await d.unlocksAtStart();
@@ -267,7 +267,7 @@ test('markAnnounced : un onglet repris entre-temps (« Revoir les premiers pas �
   assert.deepEqual(d.discoverState().announced, []);
   assert.deepEqual(stored().announced, []);
   // A lieu saved: both come, both to be announced.
-  await c.saveCollection(c.newPlace([4.8357, 45.7641], { name: 'Lisière nord' }));
+  await c.savePlace(c.newPlace([4.8357, 45.7641], { name: 'Lisière nord' }));
   assert.deepEqual(d.discoverState().unlocked, ['mine', 'map']);
   assert.deepEqual(d.pendingUnlocks(), ['map', 'mine']);
   d.markAnnounced(['map', 'mine']);
