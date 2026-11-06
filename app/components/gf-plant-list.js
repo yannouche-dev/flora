@@ -151,7 +151,6 @@ export class GfPlantList extends LitElement {
     }
     .th button:hover { color: var(--gf-text); }
     .th button:focus-visible { outline: none; box-shadow: var(--gf-focus); }
-    .th [aria-sort='ascending'], .th [aria-sort='descending'] { color: var(--gf-accent); }
     .th .sort[data-active] { color: var(--gf-accent); }
     .th .funnel {
       flex: none;
@@ -289,17 +288,22 @@ export class GfPlantList extends LitElement {
   #columnsFor = '';
   /** @type {string[]} */ #columnsMemo = [];
 
-  /** @param {string[]} keys */
+  /**
+   * The grid's header: its column buttons (sort, the funnel of its filter) — no table roles: the results are a list
+   * (role="list", drawn as they scroll); a sort button says the order in its name.
+   * @param {string[]} keys
+   */
   #header(keys) {
     const { results: { sort }, query: { filters } } = this.#store.state;
-    return html`<div class="head" role="row">
+    return html`<div class="head">
       ${keys.map(key => /** @type {any} */ (COLUMNS.find(c => c.key === key))).map(c => {
         // Its first order (sort=key) is the largest first for a `desc` column (« Observations »: the most observed).
         const first = c.sort && sort === c.sort, second = c.sort && sort === '-' + c.sort;
         const active = first || second ? (first !== Boolean(c.desc) ? 'ascending' : 'descending') : null;
         const count = c.facet ? filters[c.facet]?.length || 0 : 0;
-        return html`<div class="th" role="columnheader" aria-sort=${active || 'none'}>
+        return html`<div class="th">
           ${c.sort ? html`<button class="sort" type="button" ?data-active=${Boolean(active)}
+            aria-label=${c.label + (first ? ' (tri)' : second ? ' (tri inverse)' : '')}
             title=${'Trier par ' + c.label.toLowerCase() + (first ? ' (ordre inverse)' : '')}
             @click=${() => this.#sortBy(/** @type {string} */ (c.sort))}>${c.label}${active === 'ascending' ? html` ${icon('caret-up-fill')}` : active === 'descending' ? html` ${icon('caret-down-fill')}` : ''}</button>` : nothing}
           ${count ? html`<button class="funnel" type="button" title=${`Filtre ${c.label.toLowerCase()} : ${count} valeur${count > 1 ? 's' : ''}`}

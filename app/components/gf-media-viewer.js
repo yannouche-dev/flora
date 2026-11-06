@@ -402,6 +402,8 @@ export class GfMediaViewer extends LitElement {
   #applyRatio = () => {
     this.toggleAttribute('sized', stageRatio != null);
     if (stageRatio != null) this.style.setProperty('--stage-ratio', `1 / ${stageRatio}`); else this.style.removeProperty('--stage-ratio');
+    // The grip says its value (aria-valuenow): drawn again.
+    this.requestUpdate();
   };
 
   connectedCallback() {
@@ -1113,7 +1115,9 @@ export class GfMediaViewer extends LitElement {
    */
   #grip() {
     return html`<div class="grip" role="separator" aria-orientation="horizontal" tabindex="0" title="Glisser pour agrandir ou réduire l’image (double-clic : taille par défaut)"
-      aria-label="Hauteur de l’image" @pointerdown=${this.#gripDown} @dblclick=${() => setStageRatio(null)}
+      aria-label="Hauteur de l’image" aria-valuemin="30" aria-valuemax="200" aria-valuenow=${Math.round((stageRatio ?? 0.75) * 100)}
+      aria-valuetext=${stageRatio == null ? 'taille par défaut' : `${Math.round(stageRatio * 100)} % de la largeur`}
+      @pointerdown=${this.#gripDown} @dblclick=${() => setStageRatio(null)}
       @keydown=${(/** @type {KeyboardEvent} */ e) => {
         if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
         e.preventDefault(); e.stopPropagation();
@@ -1186,7 +1190,7 @@ export class GfMediaViewer extends LitElement {
   #caption(item) {
     return html`<div class="caption">
       ${this._hd === 'loading' ? html`<span class="hd-dot loading" role="status" title="Chargement de l’original…" aria-label="Chargement de l’original"></span>`
-        : this._hd === 'on' ? html`<span class="hd-dot" title="Original affiché" aria-label="Original affiché"></span>` : nothing}
+        : this._hd === 'on' ? html`<span class="hd-dot" role="img" title="Original affiché" aria-label="Original affiché"></span>` : nothing}
       <span class="what">${KIND_LABEL[item.kind]} · ${item.source}</span>
       <gf-attribution .media=${item}></gf-attribution>
       <button class="icon-btn" type="button" aria-pressed=${String(this._info)} title="À propos de cette image" aria-label="À propos de cette image"

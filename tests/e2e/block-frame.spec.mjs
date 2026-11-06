@@ -265,7 +265,7 @@ test.describe('un grand écran', () => {
     await app.open(`#/layout/[results(grid,zone=0)]?${AT}&q=ortie`);
     const whole = cellOf(page, 'results'), list = whole.locator('gf-plant-list');
     await expect(list.locator('gf-plant-card').first()).toBeVisible();
-    const head = list.locator('.head[role="row"]'), sort = head.locator('button.sort').first();
+    const head = list.locator('.head'), sort = head.locator('button.sort').first();
     await expect(sort).toHaveText('Photo');
     await sort.focus();
     await sort.press('Enter');
@@ -277,7 +277,7 @@ test.describe('un grand écran', () => {
     await expect.poll(async () => (await wholeSearch(whole)).answered).toBe(true);
     await expect(list.locator('gf-plant-card').first()).toBeVisible();
     await expect(sort).toBeFocused();
-    await expect(head.locator('[role="columnheader"]').first()).toHaveAttribute('aria-sort', 'ascending');
+    await expect(sort).toHaveAccessibleName('Photo (tri)');
     expect(await seen()).toEqual(NONE);
   });
 
@@ -286,7 +286,7 @@ test.describe('un grand écran', () => {
     await app.open(`#/layout/[results(grid,zone=0)]?${AT}&q=ortie`);
     const whole = cellOf(page, 'results'), list = whole.locator('gf-plant-list');
     await expect(list.locator('gf-plant-card').first()).toBeVisible();
-    const sort = list.locator('.head[role="row"] button.sort').first();
+    const sort = list.locator('.head button.sort').first();
     await expect(sort).toHaveText('Photo');
     // Twice in a row (the worker slowed: the first answer not come): the second reverses the first.
     await sort.press('Enter');
@@ -294,7 +294,7 @@ test.describe('un grand écran', () => {
     await expect.poll(() => param(page, 'sort')).toBe('-photo');
     await expect.poll(async () => (await wholeSearch(whole)).sort).toBe('-photo');
     await expect.poll(async () => (await wholeSearch(whole)).answered).toBe(true);
-    await expect(list.locator('[role="columnheader"]').first()).toHaveAttribute('aria-sort', 'descending');
+    await expect(sort).toHaveAccessibleName('Photo (tri inverse)');
   });
 
   test('« Aucune plante… » d’une recherche vide ne reste pas sur la suivante : retenu tant que sa réponse n’est pas venue', async ({ app, page }) => {
@@ -315,7 +315,7 @@ test.describe('un grand écran', () => {
     const whole = cellOf(page, 'results'), list = whole.locator('gf-plant-list');
     await expect(list.locator('gf-plant-card').first()).toBeVisible();
     // Sorted from its header (the worker slowed): asked again, its rows kept until the answer.
-    await list.locator('.head[role="row"] button.sort').first().press('Enter');
+    await list.locator('.head button.sort').first().press('Enter');
     await expect.poll(async () => (await wholeSearch(whole)).sort).toBe('photo');
     await expect.poll(async () => (await wholeSearch(whole)).answered).toBe(true);
     await expect(list.locator('gf-plant-card').first()).toBeVisible();
