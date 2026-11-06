@@ -244,6 +244,7 @@ test('Partager un parcours en cours : demandé, son départ dit ; refusé, il re
   await page.getByRole('alertdialog', { name: 'Partager le parcours ?' }).getByRole('button', { name: 'Partager' }).click();
   await expect(page.locator('.gf-brief-toast')).toContainText('Lien du parcours copié : collez-le où vous voulez');
   await expect(page.locator('ma-trail-recap .toast')).toHaveCount(0);
+  await expect(page.locator('.gf-brief-toast'), 'puis il s’en va').toHaveCount(0);
 
   const other = await newDevice();
   await other.page.goto(link);

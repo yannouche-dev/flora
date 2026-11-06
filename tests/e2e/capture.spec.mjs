@@ -198,6 +198,16 @@ test('Noter ici, en thème sombre comme en clair : chaque avertissement du messa
     const [a, b] = [lum(rgba(getComputedStyle(node).color)), lum(bg ?? [255, 255, 255, 255])];
     return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
   });
+  /** A token as a computed background, to compare with a line's. @param {string} css */
+  const tint = css => page.evaluate(value => {
+    const probe = document.createElement('span');
+    probe.style.backgroundColor = value;
+    document.body.append(probe);
+    const out = getComputedStyle(probe).backgroundColor;
+    probe.remove();
+    return out;
+  }, css);
+  const background = (/** @type {import('@playwright/test').Locator} */ el) => el.evaluate(node => getComputedStyle(node).backgroundColor);
   await page.emulateMedia({ colorScheme: 'dark' });
   const toast = page.locator('gf-capture .toast');
   const line = (/** @type {string | RegExp} */ text) => toast.getByRole('alert').filter({ hasText: text });
@@ -207,11 +217,13 @@ test('Noter ici, en thème sombre comme en clair : chaque avertissement du messa
   await expect(garlic).toHaveClass(/\bsev-line\b.*\bdeadly\b|\bdeadly\b.*\bsev-line\b/);
   for (const scheme of /** @type {const} */ (['light', 'dark'])) {
     await page.emulateMedia({ colorScheme: scheme });
+    expect(await background(garlic), scheme).toBe(await tint('var(--gf-deadly)'));
     expect(await contrast(garlic), scheme).toBeGreaterThanOrEqual(4.5);
     expect(await contrast(garlic.getByRole('link', { name: '15' }).or(garlic.getByText('15', { exact: true })).first()), scheme).toBeGreaterThanOrEqual(4.5);
   }
   // A plant protected in France: danger; a confusion « toxique » on the edible side: a warning — each readable, dark.
-  for (const [name, text, level] of /** @type {const} */ ([['Ail faux moly', 'Espèce protégée (France)', 'danger'], ['Châtaignier', /Ne pas confondre avec : Marron d.Inde/, 'warn']])) {
+  for (const [name, text, level, link] of /** @type {const} */ ([['Ail faux moly', 'Espèce protégée (France)', 'danger', 'voir la fiche'],
+    ['Châtaignier', /Ne pas confondre avec : Marron d.Inde/, 'warn', 'comment les distinguer']])) {
     await page.locator('gf-app').evaluate(el => el.dispatchEvent(new Event('open-capture')));
     dialog = page.locator('gf-capture dialog');
     await expect(dialog.getByText(/Position GPS/)).toBeVisible();
@@ -219,7 +231,9 @@ test('Noter ici, en thème sombre comme en clair : chaque avertissement du messa
     await dialog.getByRole('button', { name: 'Nouveau lieu ici' }).click();
     const warned = line(text);
     await expect(warned).toHaveClass(new RegExp('\\b' + level + '\\b'));
+    expect(await background(warned), name).toBe(await tint(`var(--gf-${level}-bg)`));
     expect(await contrast(warned), name).toBeGreaterThanOrEqual(4.5);
+    expect(await contrast(warned.getByRole('link', { name: link })), name + ' : ' + link).toBeGreaterThanOrEqual(4.5);
   }
 });
 

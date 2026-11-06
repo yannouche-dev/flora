@@ -135,6 +135,7 @@ export class GfCapture extends LitElement {
     /* Its own links only: a warning's line keeps its level's colour (ui-kit.js .sev-line). */
     .toast .row :is(.link, a) { color: var(--gf-accent-soft); font-weight: 600; }
     .toast .sos-line { display: block; font-weight: 400; margin-top: 2px; }
+    .toast .sos-line a { font-weight: 600; }
     .toast .row { display: flex; gap: 12px; align-items: center; }
     .toast .row span { flex: 1; }
   `];
