@@ -184,3 +184,8 @@ test('joinEntry : deux fois la même plante réunies — notes une fois chacune,
   assert.equal(M.joinNotes('Coin humide', ''), 'Coin humide');
   assert.equal(M.joinNotes('x'.repeat(4000), 'y'.repeat(999)), null);
 });
+
+test('roundCoordinates : 7 décimales, comme une position gardée', () => {
+  assert.deepEqual(M.roundCoordinates([2.123456789, -48.987654351]), [2.1234568, -48.9876544]);
+  assert.deepEqual(M.validCoordinates([2.123456789, 48.987654321]), M.roundCoordinates([2.123456789, 48.987654321]));
+});

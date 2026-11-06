@@ -1,7 +1,7 @@
 // @ts-check
 import { LitElement, html, css, nothing } from 'lit';
 import { href } from '../core/router.js';
-import { collectionsForPlant, formatDistance, listCollections, plantMarkers, spotEvents, updatePlace, withEntry } from '../core/collections.js';
+import { collectionsForPlant, formatDistance, listCollections, plantMarkers, saveMoves, spotEvents } from '../core/collections.js';
 import { APP } from '../core/search-channel.js';
 import { lastFix, oneFix } from '../core/geo.js';
 import { FRANCE_BOUNDS, WORLD_BOUNDS } from '../core/ign.js';
@@ -398,16 +398,10 @@ export class GfSheetMap extends LitElement {
    * @param {{ places: { id: string, coordinates: [number, number] }[], plants: { placeId: string, entryId?: string, plantId: number | null, coordinates: [number, number] }[] }} moves
    */
   async #savePositions({ places, plants }) {
-    const round = (/** @type {[number, number]} */ c) => /** @type {[number, number]} */ (c.map(v => Math.round(v * 1e7) / 1e7));
-    // On the place as stored now (its other plants may have changed meanwhile, in another tab).
-    for (const { id, coordinates } of places) {
-      if (!this._spots.some(p => p.id === id)) continue;
-      await updatePlace(id, current => ({ ...current, geometry: { type: 'Point', coordinates: round(coordinates) }, properties: { ...current.properties, accuracy: null } })).catch(error => console.error(error));
-    }
-    for (const { placeId, entryId, plantId, coordinates } of plants) {
-      if (!this._spots.some(p => p.id === placeId)) continue;
-      await updatePlace(placeId, current => withEntry(current, entryId ?? plantId, { coordinates: round(coordinates), accuracy: null })).catch(error => console.error(error));
-    }
+    // On the place as stored now (its other plants may have changed meanwhile, in another tab): one write per place.
+    const { saved, failed } = await saveMoves({ places, plants }, id => this._spots.some(p => p.id === id));
+    if (failed.length) this.#map?.toast('Enregistrement impossible : ' + failed[0].error.message);
+    else if (saved.length) this.#map?.announce('Position enregistrée');
   }
 
   /**

@@ -278,6 +278,28 @@ test.describe('la Carte', () => {
 });
 
 test.describe('la carte d’une fiche plante', () => {
+  test('✎ : le lieu supprimé entre-temps (dans un autre onglet), la plante lâchée n’est pas enregistrée, et c’est dit sur la carte', async ({ app, page }) => {
+    await app.open('#/collections');
+    const spot = await seedParis(page);
+    await app.go(`#/plant/${plantId('Urtica dioica')}`);
+    const map = page.locator('gf-sheet-map:not([map-3d="off"])').first().locator('gf-map');
+    await map.evaluate(el => el.closest('section')?.scrollIntoView({ block: 'start' }));
+    await map.getByRole('button', { name: 'Modifier les positions' }).click();
+    await expect(map).toHaveAttribute('data-renderer', '2d');
+    const pin = map.locator('.leaflet-marker-pane .gf-plant.draggable').first();
+    await expect(pin).toBeVisible();
+    // Gone from the base, this tab not told (as another tab would have done it).
+    await page.evaluate(async id => { await (await import('/app/core/db.js')).remove('spots', id); }, spot);
+    const b = /** @type {{ x: number, y: number, width: number, height: number }} */ (await pin.boundingBox());
+    await page.mouse.move(b.x + b.width / 2, b.y + b.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(b.x + b.width / 2 + 40, b.y + b.height / 2 + 30, { steps: 8 });
+    await page.mouse.up();
+    await expect(brief(page)).toContainText('Enregistrement impossible : Supprimé entre-temps');
+    await expect(mapSaid(map)).toContainText('Enregistrement impossible');
+    await expect(mapSaid(map)).not.toContainText('Position enregistrée');
+  });
+
   test('ses observations autour de moi : la légende dans son panneau, les nombres dits ; ses puces disent leur état dans leur nom ; ses gestes une fois', async ({ app, page }) => {
     await answerPlantNear(page, { inat: 6, gbif: 7 });
     await app.open('#/collections');

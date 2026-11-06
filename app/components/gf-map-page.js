@@ -5,7 +5,7 @@ import { href, parse } from '../core/router.js';
 import { backTo, depth, entryValue, markEntry, pushHash, renewBehind, replaceHash } from '../core/history.js';
 import { findEntry,
   directionsUrl, entryPosition, plantMarkers, distance, entryName, formatDistance, inSeason, listPlaces,
-  placeAbundance, placeLastHarvest, placeTitle, plantCount, spotEvents, updatePlace, withEntry
+  placeAbundance, placeLastHarvest, placeTitle, plantCount, saveMoves, spotEvents
 } from '../core/collections.js';
 import { RADII, exploreUrl, observationsAround, saveRadius, savedRadius, speciesAround } from '../core/nearby.js';
 import { radiusLabel } from '../core/distance.js';
@@ -31,8 +31,6 @@ import { hintView, takeHint } from '../core/hints.js';
 
 const shortDate = (/** @type {string} */ iso) =>
   new Date(iso + 'T12:00:00').toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' });
-
-const round = (/** @type {[number, number]} */ [x, y]) => /** @type {[number, number]} */ ([Math.round(x * 1e7) / 1e7, Math.round(y * 1e7) / 1e7]);
 
 const PIN_COLORS = { rare: '#fb7185', moyen: '#fbbf24', abondant: '#38bdf8' };
 
@@ -280,26 +278,15 @@ export class GfMapPage extends LitElement {
       this.#map?.announce('Position enregistrée');
       return;
     }
-    // The moves of each place, applied to it as stored now (in one transaction: nothing changed meanwhile is lost).
-    /** @type {Map<string, ((place: any) => any)[]>} */
-    const changes = new Map();
-    const add = (/** @type {string} */ id, /** @type {(place: any) => any} */ change) => {
-      if (this._spots.some(s => s.id === id)) changes.set(id, [...changes.get(id) || [], change]);
-    };
-    for (const { id, coordinates } of places) {
-      add(id, place => ({ ...place, geometry: { type: 'Point', coordinates: round(coordinates) }, properties: { ...place.properties, accuracy: null } }));
-    }
-    for (const { placeId, entryId, plantId, coordinates } of plants) {
-      add(placeId, place => withEntry(place, entryId ?? plantId, { coordinates: round(coordinates), accuracy: null }));
-    }
-    // Saved: said to screen readers only (the user's own drag needs no toast); failed: one brief toast over the map,
-    // in the top layer (over the full-screen editing frame).
-    try {
-      for (const [id, list] of changes) await updatePlace(id, place => list.reduce((p, change) => change(p), place));
-      this.#map?.announce('Position enregistrée');
-    } catch (error) {
-      this.#map?.toast('Enregistrement impossible : ' + /** @type {Error} */ (error).message);
-    }
+    // The moves of each place, applied to it as stored now. Saved: said to screen readers only (the user's own drag
+    // needs no toast); failed: one brief toast over the map, in the top layer (over the full-screen editing frame).
+    this.#said(await saveMoves({ places, plants }, id => this._spots.some(s => s.id === id)));
+  }
+
+  /** What ✓ Valider wrote, said on the map (nothing written, nothing said). @param {{ saved: string[], failed: { error: Error }[] }} result */
+  #said({ saved, failed }) {
+    if (failed.length) this.#map?.toast('Enregistrement impossible : ' + failed[0].error.message);
+    else if (saved.length) this.#map?.announce('Position enregistrée');
   }
 
   /** The Carte's map (gf-map: what it says goes through it — the quiet-map rule). @returns {any} */

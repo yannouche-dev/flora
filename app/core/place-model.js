@@ -80,10 +80,13 @@ export function validAltitude(a, at) {
   return { m: v.m === null ? null : Math.round(v.m), at: [at[0], at[1]] };
 }
 
-/** 7 decimals ≈ 1 cm. @param {unknown} c @returns {[number, number] | null} */
+/** A point as stored: 7 decimals ≈ 1 cm. @param {[number, number]} c @returns {[number, number]} */
+export const roundCoordinates = ([lon, lat]) => [Math.round(lon * 1e7) / 1e7, Math.round(lat * 1e7) / 1e7];
+
+/** A point read back, or null. @param {unknown} c @returns {[number, number] | null} */
 export function validCoordinates(c) {
   if (!Array.isArray(c) || !isNumber(c[0]) || !isNumber(c[1]) || Math.abs(c[1]) > 90 || Math.abs(c[0]) > 180) return null;
-  return [Math.round(c[0] * 1e7) / 1e7, Math.round(c[1] * 1e7) / 1e7];
+  return roundCoordinates(/** @type {[number, number]} */ (c));
 }
 
 /**

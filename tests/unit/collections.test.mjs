@@ -491,3 +491,34 @@ test('findEntry : une plante notée par son id, une plante par son numéro ; un 
   assert.equal(C.findEntry(p, second.id), second);
   assert.equal(C.findEntry(p, '7'), null, 'focus=7, un lien d’avant : plus lu');
 });
+
+test('saveMoves : un lieu et ses plantes déplacés, une seule écriture ; un lieu supprimé entre-temps dit, les autres gardés', async () => {
+  const two = C.withPlant(C.withPlant(C.newPlace(HERE), plant(1), { coordinates: HERE }), plant(2), { coordinates: HERE });
+  const place = await C.savePlace(two), gone = await C.savePlace(C.newPlace(north(50)));
+  await C.deletePlace(gone.id);
+  const [first] = /** @type {any} */ (place).properties.plants;
+  /** @type {[number, number]} */ const to = [2.1234567891, 48.9876543219];
+  /** @type {[number, number]} */ const there = [2.2000000449, 48.9];
+  let writes = 0;
+  const counted = () => { writes++; };
+  C.spotEvents.addEventListener('change', counted);
+  const result = await C.saveMoves({
+    // The deleted place first: its failure does not stop the others.
+    places: [{ id: gone.id, coordinates: to }, { id: place.id, coordinates: to }],
+    plants: [
+      { placeId: place.id, entryId: first.id, plantId: 1, coordinates: there },
+      { placeId: place.id, plantId: 2, coordinates: there },
+      { placeId: gone.id, plantId: 3, coordinates: to },
+      { placeId: 'pas-sur-la-carte', plantId: 4, coordinates: to }
+    ]
+  }, id => id !== 'pas-sur-la-carte');
+  C.spotEvents.removeEventListener('change', counted);
+  assert.deepEqual(result.saved, [place.id]);
+  assert.deepEqual(result.failed.map(f => [f.id, f.error.name]), [[gone.id, 'GoneError']], 'le lieu supprimé : dit, jamais refait');
+  assert.equal(await C.getPlace(gone.id), undefined);
+  const stored = /** @type {any} */ (await C.getPlace(place.id));
+  assert.deepEqual([stored.geometry.coordinates, stored.properties.accuracy], [[2.1234568, 48.9876543], null]);
+  assert.deepEqual(stored.properties.plants.map((/** @type {any} */ e) => [e.plantId, e.coordinates, e.accuracy]), [[1, [2.2, 48.9], null], [2, [2.2, 48.9], null]], 'arrondies à 7 décimales');
+  assert.equal(writes, 1, 'une seule écriture : le lieu et ses deux plantes ensemble');
+  await db.remove('spots', place.id);
+});
