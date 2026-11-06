@@ -39,5 +39,5 @@ test('l’avertissement des toasts de cueillette (lookalikeWarning, dans la page
     const { lookalikeWarning } = await import('/app/core/lookalikes.js');
     return lookalikeWarning(await db.get('plants', id));
   }, plantId('Allium ursinum'));
-  expect(warning).toEqual({ toxic: true, unread: true, text: 'Liste des confusions indisponible pour le moment : ne consommez aucune plante sans vérification.' });
+  expect(warning).toEqual({ toxic: true, unread: true, level: 'danger', text: 'Liste des confusions indisponible pour le moment : ne consommez aucune plante sans vérification.' });
 });

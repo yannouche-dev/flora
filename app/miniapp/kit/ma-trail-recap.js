@@ -13,6 +13,7 @@ import { href, parse } from '../../core/router.js';
 import { startScreen, startStyles } from '../../components/start-screen.js';
 import { map3dProblem, openMap3d } from '../../components/gf-map3d.js';
 import { ui } from '../../styles/ui.js';
+import { briefToast } from '../../core/toast.js';
 import { writeJSON } from '../../core/prefs.js';
 import { DONE, countOf, groupsOf } from './trail-store.js';
 import { recapOf } from './trail-recap.js';
@@ -50,13 +51,6 @@ export class MaTrailRecap extends LitElement {
     .profile circle { fill: var(--gf-surface); stroke: var(--gf-accent); stroke-width: 1.5; }
     .profile figcaption { text-align: center; font-size: 0.75rem; color: var(--gf-text-muted); font-variant-numeric: tabular-nums; }
     .recap-of { display: block; color: var(--gf-text); font-weight: 600; }
-    /* The recap's word: over the bottom of the screen, out of the flow (nothing moves as it comes and goes), never in
-       the way of a touch (it has no action). */
-    .toast-dock { position: sticky; bottom: 0; height: 0; z-index: 20; pointer-events: none; }
-    .toast { position: absolute; z-index: 20; left: 12px; right: 12px; margin: 0 auto; width: fit-content; bottom: 12px; display: flex; gap: 12px; align-items: center; padding: 10px 14px 10px 16px;
-      border-radius: var(--gf-radius-pill); background: #1f2a1f; color: #fff; box-shadow: 0 10px 30px rgb(0 0 0 / 35%); font-size: 0.92rem; animation: up 0.25s ease-out; }
-    @keyframes up { from { opacity: 0; transform: translateY(10px); } }
-    @media (prefers-reduced-motion: reduce) { .toast { animation: none; } }
   `];
 
   constructor() {
@@ -72,6 +66,8 @@ export class MaTrailRecap extends LitElement {
 
   disconnectedCallback() {
     super.disconnectedCallback();
+    this.#toast?.shown?.hide();
+    this.#toast = null;
     // The recap left for another scenario (not for « Le voir dans Mes plantes », whose Back comes to it again; not for
     // another walk, which leaves it itself).
     if (this.#session?.done && parse(location.hash).name !== 'collections') writeJSON(DONE, null);
@@ -121,7 +117,27 @@ export class MaTrailRecap extends LitElement {
       // The recap stays until another activity is chosen (Découvrir closed without a choice: still here).
       exit: { icon: 'camera-reels', label: 'Autres activités', run: () => this.app?.scenarios() }
     })}
-    <div class="toast-dock">${s.toast ? html`<div class="toast" role="status">${icon('check-lg')} <span>${s.toast.text}</span></div>` : nothing}</div></div>`;
+    </div>`;
+  }
+
+  updated() { this.#syncToast(); }
+
+  /** The word shown now (the session's toast), and how to let it go. @type {{ toast: any, shown: { hide: () => void } | null } | null} */
+  #toast = null;
+
+  /**
+   * The recap's word (« Lien du parcours copié… »): the app's brief toast (core/toast.js), as during the walk
+   * (ma-walk.js#syncToast) — above the button it speaks of, in the top layer, read out by the toasts' own live region;
+   * the session times it.
+   */
+  #syncToast() {
+    const s = this.#session, toast = s?.done ? s.toast : null;
+    if (this.#toast?.toast === toast) return;
+    this.#toast?.shown?.hide();
+    this.#toast = null;
+    if (!toast) return;
+    const go = this.renderRoot.querySelector('button.go');
+    this.#toast = { toast, shown: briefToast(toast.text, go ? { near: go, at: 'above', offset: 10, ms: 0 } : { near: this, at: 'bottom', offset: 12, ms: 0 }) };
   }
 
   /**

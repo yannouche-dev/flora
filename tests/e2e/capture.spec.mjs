@@ -175,6 +175,54 @@ test('Noter ici, mode cueillette éteint : l’ail des ours noté rappelle le co
   expect(await harvestsOf(page, plantId('Allium ursinum'))).toEqual([0]);
 });
 
+test('Noter ici, en thème sombre comme en clair : chaque avertissement du message de la couleur de son niveau, lisible', async ({ app, page }) => {
+  /** The WCAG contrast of a line's text on the first background under it. @param {import('@playwright/test').Locator} el */
+  const contrast = el => el.evaluate(node => {
+    const probe = document.createElement('canvas').getContext('2d', { willReadFrequently: true });
+    const rgba = (/** @type {string} */ css) => {
+      if (!probe) return [0, 0, 0, 0];
+      probe.clearRect(0, 0, 1, 1);
+      probe.fillStyle = css;
+      probe.fillRect(0, 0, 1, 1);
+      return [...probe.getImageData(0, 0, 1, 1).data];
+    };
+    let bg = null;
+    for (let n = /** @type {any} */ (node); n && !bg; n = n.parentElement ?? n.getRootNode()?.host) {
+      const c = rgba(getComputedStyle(n).backgroundColor);
+      if (c[3] > 0) bg = c;
+    }
+    const lum = (/** @type {number[]} */ c) => {
+      const [r, g, b] = c.slice(0, 3).map(v => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; });
+      return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    };
+    const [a, b] = [lum(rgba(getComputedStyle(node).color)), lum(bg ?? [255, 255, 255, 255])];
+    return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+  });
+  await page.emulateMedia({ colorScheme: 'dark' });
+  const toast = page.locator('gf-capture .toast');
+  const line = (/** @type {string | RegExp} */ text) => toast.getByRole('alert').filter({ hasText: text });
+  let dialog = await openCapture(page, app, false);
+  await pick(dialog, 'Ail des ours', 'Ail des ours');
+  const garlic = line('Ne pas confondre avec : Colchique (mortel)');
+  await expect(garlic).toHaveClass(/\bsev-line\b.*\bdeadly\b|\bdeadly\b.*\bsev-line\b/);
+  for (const scheme of /** @type {const} */ (['light', 'dark'])) {
+    await page.emulateMedia({ colorScheme: scheme });
+    expect(await contrast(garlic), scheme).toBeGreaterThanOrEqual(4.5);
+    expect(await contrast(garlic.getByRole('link', { name: '15' }).or(garlic.getByText('15', { exact: true })).first()), scheme).toBeGreaterThanOrEqual(4.5);
+  }
+  // A plant protected in France: danger; a confusion « toxique » on the edible side: a warning — each readable, dark.
+  for (const [name, text, level] of /** @type {const} */ ([['Ail faux moly', 'Espèce protégée (France)', 'danger'], ['Châtaignier', /Ne pas confondre avec : Marron d.Inde/, 'warn']])) {
+    await page.locator('gf-app').evaluate(el => el.dispatchEvent(new Event('open-capture')));
+    dialog = page.locator('gf-capture dialog');
+    await expect(dialog.getByText(/Position GPS/)).toBeVisible();
+    await pick(dialog, name, name);
+    await dialog.getByRole('button', { name: 'Nouveau lieu ici' }).click();
+    const warned = line(text);
+    await expect(warned).toHaveClass(new RegExp('\\b' + level + '\\b'));
+    expect(await contrast(warned), name).toBeGreaterThanOrEqual(4.5);
+  }
+});
+
 test('Noter ici, « Annuler » : la note retirée, et le nouveau lieu avec elle seulement s’il est resté vide', async ({ app, page }) => {
   const places = () => page.evaluate(async () => (await (await import('/app/core/collections.js')).listPlaces())
     .map((/** @type {any} */ p) => [p.properties.name, p.properties.plantIds.length]));

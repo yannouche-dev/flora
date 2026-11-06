@@ -4,9 +4,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { LEVELS, UNREAD, confusionLevel, dangerLevel, harvestStop, rank, reasonLine } from '../../app/core/danger.js';
+import { LEVELS, UNREAD, dangerLevel, harvestStop, rank, reasonLine } from '../../app/core/danger.js';
 import { verdictOf } from '../../app/core/alerts.js';
-import { lookalikesOf } from '../../app/core/lookalikes.js';
+import { confusionLevel, lookalikesOf } from '../../app/core/lookalikes.js';
 
 const read = async (/** @type {string} */ path) => JSON.parse(await readFile(new URL(path, import.meta.url), 'utf8'));
 const [plants, safety] = await Promise.all([read('../fixtures/plants.json'), read('../../data/safety.json')]);

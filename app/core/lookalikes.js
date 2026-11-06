@@ -183,18 +183,30 @@ export function edibleFilter({ pair, side, named }) {
 export const UNREAD_LOOKALIKES = 'Liste des confusions indisponible pour le moment : ne consommez aucune plante sans vérification.';
 
 /**
+ * The level of one confusion, for this plant's side: « mortel » deadly; « très toxique » (grave) a danger; « toxique »
+ * a danger on the toxic side (the plant itself), a warning on the edible side (its look-alike). The confusion chips of
+ * the sheet and of Faux amis read it too.
+ * @param {Pair} pair @param {Lookalike['side']} side @returns {import('./danger.js').Level}
+ */
+export function confusionLevel(pair, side) {
+  const sev = severityOf(pair);
+  return sev.key === 'mortel' ? 'deadly' : sev.danger || side === 'toxic' ? 'danger' : 'warn';
+}
+
+/**
  * One line for the toast of « Noter ici »: what this plant can be mistaken for (or that it is the toxic one), or that the
- * list could not be read (`unread`).
- * @param {any} plant @returns {Promise<{ toxic: boolean, text: string, unread?: boolean } | null>}
+ * list could not be read (`unread`), with its level: that of the gravest confusion it names (lookalikesOf: gravest
+ * first), danger when the list could not be read.
+ * @param {any} plant @returns {Promise<{ toxic: boolean, text: string, level: import('./danger.js').Level, unread?: boolean } | null>}
  */
 export async function lookalikeWarning(plant) {
   let list;
-  try { list = await lookalikesOf(plant); } catch { return { toxic: true, unread: true, text: UNREAD_LOOKALIKES }; }
+  try { list = await lookalikesOf(plant); } catch { return { toxic: true, unread: true, level: 'danger', text: UNREAD_LOOKALIKES }; }
   const edible = list.filter(l => l.side === 'edible');
   if (edible.length) {
     const names = edible.flatMap(l => l.others.map(o => o.label + severityNote(l.pair)));
-    return { toxic: false, text: 'Ne pas confondre avec : ' + [...new Set(names)].join(', ') };
+    return { toxic: false, level: confusionLevel(edible[0].pair, 'edible'), text: 'Ne pas confondre avec : ' + [...new Set(names)].join(', ') };
   }
   const toxic = list.find(l => l.side === 'toxic');
-  return toxic ? { toxic: true, text: `Plante ${severityOf(toxic.pair).plant}, confondue avec : ${toxic.others.map(o => o.label).join(', ')}` } : null;
+  return toxic ? { toxic: true, level: confusionLevel(toxic.pair, 'toxic'), text: `Plante ${severityOf(toxic.pair).plant}, confondue avec : ${toxic.others.map(o => o.label).join(', ')}` } : null;
 }
