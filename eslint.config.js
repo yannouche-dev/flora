@@ -46,6 +46,10 @@ const RESTRICTED = {
   storage: {
     selector: "Identifier[name='localStorage']",
     message: 'Read and write localStorage through core/prefs.js (readJSON, writeJSON, definePref…), its keys in config.storageKeys.'
+  },
+  geolocation: {
+    selector: "MemberExpression[property.name='geolocation']",
+    message: 'Ask for the position through core/geo.js (oneFix, takeFix, watchLocation, GeoController): one shared watch, its failures in the app’s words.'
   }
 };
 const restricted = (/** @type {(keyof typeof RESTRICTED)[]} */ ...keys) => ['error', ...keys.map(k => RESTRICTED[k])];
@@ -80,16 +84,18 @@ export default [
     ...lit.configs['flat/recommended'],
     rules: {
       ...lit.configs['flat/recommended'].rules,
-      'no-restricted-syntax': restricted('nativeMember', 'tooltip', 'hash', 'replace', 'storage')
+      'no-restricted-syntax': restricted('nativeMember', 'tooltip', 'hash', 'replace', 'storage', 'geolocation')
     }
   },
   // Every import of the app finds its file. Not in tests/ (their page.evaluate imports resolve in the page, from the
   // site's root) nor in scripts/ (SheetJS is installed by scripts/package.json, for the data workflows only).
   { files: ['app/**/*.js', 'lib/**/*.mjs', 'sw.js'], rules: { 'import-x/no-unresolved': 'error' } },
   // The navigation helpers themselves.
-  { files: ['app/core/history.js'], rules: { 'no-restricted-syntax': restricted('nativeMember', 'tooltip', 'storage') } },
+  { files: ['app/core/history.js'], rules: { 'no-restricted-syntax': restricted('nativeMember', 'tooltip', 'storage', 'geolocation') } },
   // localStorage itself: the storage layer, and the channel between tabs it listens to.
-  { files: ['app/core/prefs.js', 'app/core/sync.js'], rules: { 'no-restricted-syntax': restricted('nativeMember', 'tooltip', 'hash', 'replace') } },
+  { files: ['app/core/prefs.js', 'app/core/sync.js'], rules: { 'no-restricted-syntax': restricted('nativeMember', 'tooltip', 'hash', 'replace', 'geolocation') } },
+  // The device's position itself: the shared watch.
+  { files: ['app/core/geo.js'], rules: { 'no-restricted-syntax': restricted('nativeMember', 'tooltip', 'hash', 'replace', 'storage') } },
   { files: ['app/workers/**/*.js'], languageOptions: { globals: globals.worker } },
   { files: ['sw.js'], languageOptions: { globals: globals.serviceworker } },
   // Playwright: the functions given to page.evaluate run in the page.
