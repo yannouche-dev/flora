@@ -43,6 +43,7 @@ import { SearchController } from '../core/search-channel.js';
 import { blockStyle } from '../core/sheet-blocks.js';
 import { href } from '../core/router.js';
 import { getPlant, nameOf } from '../core/plants.js';
+import { counted } from '../core/fr.js';
 import { verdictOf } from '../core/alerts.js';
 import { cachedThumb, thumbUrl } from '../core/thumb.js';
 import { hintView, takeHint } from '../core/hints.js';
@@ -224,9 +225,6 @@ const OTHER_BASE = { photo: THUMBS.plan, spot: THUMBS.plan, plan: THUMBS.photo }
 
 /** The period's chips (when=), in their order. */
 const PERIODS = [['toujours', 'Toujours'], ['annee', 'Cette année'], ['mois', 'Ce mois-ci']];
-
-/** « 214 observations », « 1 espèce ». @param {number} n @param {string} word */
-const counted = (n, word) => `${n.toLocaleString('fr-FR')} ${word}${n > 1 ? 's' : ''}`;
 
 /**
  * iNaturalist's taxa of names of the flora (families, genera, species), each found once (core/nearby.js#taxonIdOf,

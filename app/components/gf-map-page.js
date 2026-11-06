@@ -17,6 +17,7 @@ import './gf-spot-editor.js';
 import './gf-thumb.js';
 import { icon } from '../core/icons.js';
 import { foldLetters, unsigned } from '../core/fold.js';
+import { counted } from '../core/fr.js';
 import { getPlant, nameOf } from '../core/plants.js';
 import { gbifTaxon } from '../core/sources.js';
 import { mapDistribution, setMapDistribution } from '../core/map-settings.js';
@@ -454,7 +455,6 @@ export class GfMapPage extends LitElement {
       </section>`;
     }
     const all = result.species;
-    const plural = (/** @type {number} */ n, /** @type {string} */ word) => `${n.toLocaleString('fr-FR')} ${word}${n > 1 ? 's' : ''}`;
     const familyCount = new Set(all.map(sp => sp.family).filter(Boolean)).size;
     const genusCount = new Set(all.map(sp => sp.genus).filter(Boolean)).size;
     const outside = all.filter(sp => !sp.plantId).length;
@@ -484,8 +484,8 @@ export class GfMapPage extends LitElement {
     return html`<section class="sheet around" aria-label="Autour">
       ${head}
       <p class="recap">
-        <strong>${plural(all.length, 'espèce')}</strong> · <strong>${plural(familyCount, 'famille')}</strong>
-        · <strong>${plural(genusCount, 'genre')}</strong> · ${plural(result.observations, 'observation')}
+        <strong>${counted(all.length, 'espèce')}</strong> · <strong>${counted(familyCount, 'famille')}</strong>
+        · <strong>${counted(genusCount, 'genre')}</strong> · ${counted(result.observations, 'observation')}
         ${outside ? html`<span class="muted" title="Absentes de la flore de l’app (TAXREF) : famille inconnue">(${outside} hors flore)</span>` : nothing}
       </p>
       ${all.length ? html`
@@ -505,7 +505,7 @@ export class GfMapPage extends LitElement {
           <gf-facet name="genera" label="Genre" stack="1" searchable ordered limit="6" hide-empty .open=${open.genera || genera.length > 0}
             .selected=${genera} .options=${genusOptions}></gf-facet>
         </div>
-        ${filtered ? html`<div class="meta"><span><strong>${shown.length}</strong> / ${plural(all.length, 'espèce')}</span>
+        ${filtered ? html`<div class="meta"><span><strong>${shown.length}</strong> / ${counted(all.length, 'espèce')}</span>
           <button type="button" class="link" @click=${() => this.#filterAround({ q: '', families: [], genera: [] })}>Effacer</button></div>` : nothing}
         ${shown.length ? html`<ul class="plants species">
           ${shown.map(sp => html`<li><button type="button" class="pick" @click=${() => this.#pickSpecies(sp)}>

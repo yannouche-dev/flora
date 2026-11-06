@@ -23,7 +23,7 @@ import { LitElement, html, css, nothing } from 'lit';
 import { appKey } from '../../config.js';
 import { forgetFailures } from '../../core/cache.js';
 import { icon } from '../../core/icons.js';
-import { fr } from '../../core/fr.js';
+import { counted, fr } from '../../core/fr.js';
 import { STOPS, nearestStop, radiusLabel, radiusWords } from '../../core/distance.js';
 import { SOURCES, SOURCE_NAMES, failedText, obsNotes } from '../../core/observations.js';
 import { speciesKey } from '../../components/map-style.js';
@@ -52,8 +52,6 @@ const SOURCE_HINTS = { inat: 'ses observations dans le cercle', gbif: 'ses occur
 
 /** « d’iNaturalist », « de GBIF ». @param {string} name */
 const of = name => /^[aeiouyh]/i.test(name) ? 'd’' + name : 'de ' + name;
-/** « 12 observations », « 1 orchidée ». @param {number} n @param {string} word */
-const counted = (n, word) => `${n.toLocaleString('fr-FR')} ${word}${n > 1 ? 's' : ''}`;
 /** Why an orchid has no sheet: named to the genus only, above it, or outside the app's flora. @param {Orchid} o */
 const noSheet = o => o.rank === 'genus' ? 'identifiée au genre seulement' : o.rank === 'higher' ? 'genre non précisé' : 'hors de la flore de l’app';
 /**
