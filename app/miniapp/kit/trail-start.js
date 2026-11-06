@@ -3,7 +3,7 @@
 // app's action `locate`); smaller, a commune, a walk to continue (the one under way first, when Back brought here);
 // the link at the bottom, the other activities (Découvrir over it).
 
-import { shortName } from './trail-store.js';
+import { shortName } from '../../core/trail-store.js';
 import { trailSessionOf } from './trail-session.js';
 
 /**

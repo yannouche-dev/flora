@@ -1,6 +1,6 @@
 // @ts-check
 // IGN Géoplateforme (free, no API key): its WMTS layers as Leaflet tile layers. The layers themselves (overlays, the
-// catalogue's added, opacities) are core/ign-layers.js's, without Leaflet: re-exported here; « Noms et réseaux » over
+// catalogue's added, opacities) are core/ign-layers.js's, without Leaflet (imported from there); « Noms et réseaux » over
 // the photos and SPOT's images core/map-layers.js's; the backgrounds core/backgrounds.js's.
 
 import * as L from 'leaflet';
@@ -8,8 +8,6 @@ import { moduleOn } from './modules.js';
 import { defaultOpacity, overlayDef, wmtsUrl } from './ign-layers.js';
 import { parseBase, takesLandmarks } from './backgrounds.js';
 import { LANDMARKS, LANDMARK_MAX_ZOOM } from './map-layers.js';
-
-export { OVERLAYS, wmtsUrl, isOverlay, overlayDef, addCatalogLayer, defaultOpacity } from './ign-layers.js';
 
 /** @typedef {import('./ign-layers.js').WmtsLayer} WmtsLayer @typedef {import('./ign-layers.js').LayerDef} LayerDef */
 

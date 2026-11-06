@@ -2,7 +2,7 @@
 import { LitElement, html, css, nothing, repeat } from 'lit';
 import { ui } from '../styles/ui.js';
 import { icon } from '../core/icons.js';
-import { foldLetters as fold } from '../core/fold.js';
+import { foldLetters } from '../core/fold.js';
 
 /**
  * @typedef {{ value: string, label: string, count: number, title?: string, icon?: import('../core/icons.js').IconName, order?: string }} FacetOption
@@ -245,12 +245,12 @@ export class GfFacet extends LitElement {
 
   render() {
     const selected = new Set(this.selected);
-    const filter = fold(this._filter.trim());
+    const filter = foldLetters(this._filter.trim());
 
     // By count, then by name. Selecting does not move a value; a selected one past the limit stays shown in place.
     let options = this.options
       .filter(o => selected.has(o.value) || !this.hideEmpty || o.count > 0)
-      .filter(o => !filter || fold(o.label).includes(filter));
+      .filter(o => !filter || foldLetters(o.label).includes(filter));
     if (this.limit && !this.ordered) options = options.sort((a, b) => b.count - a.count || (a.order ?? a.label).localeCompare(b.order ?? b.label, 'fr'));
     const limit = this.limit && !this._expanded && !filter ? this.limit : Infinity;
     const shown = options.filter((o, i) => i < limit || selected.has(o.value));

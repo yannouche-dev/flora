@@ -14,7 +14,7 @@ name: CI
 #    (dark) allows, rule by rule: a ratchet, the baselines only go down.
 #  - « lint »: static analysis (README, « Analyse statique ») — tsc on the JSDoc types of app/ against
 #    tools/tsc-baseline.json (a ratchet too, per file and error code), ESLint (eslint.config.js) and knip (knip.json:
-#    unused files, exports and dependencies).
+#    unused files, exports and dependencies; one export under two names).
 # Not required checks of main yet: the data workflows push to main with GITHUB_TOKEN, which no ruleset bypass list
 # accepts (README, « Protéger main »); until they push as a GitHub App, merge a pull request (or a merge queue entry)
 # only when all five are green.

@@ -3,7 +3,7 @@
 // URL form: #/?q=ortie&family=Urticaceae,Rosaceae&status=I,J&photo=avec&sort=sci
 
 import { replaceHash } from './history.js';
-import { config } from '../config.js';
+import { FACETS, config, emptyFilters } from '../config.js';
 import { readJSON, writeJSON } from './prefs.js';
 import { parse } from './router.js';
 import { genusFamily, runSearch } from './search.js';
@@ -13,13 +13,7 @@ import { APP } from './search-channel.js';
 /** @typedef {import('./search-channel.js').Channel} Channel */
 
 /** @typedef {import('./store.js').Query} Query */
-/** @typedef {keyof import('./store.js').Filters} Facet */
-
-/** @type {Facet[]} */
-export const FACETS = ['mine', 'status', 'legal', 'family', 'genus', 'photo', 'french'];
-
-/** @returns {import('./store.js').Filters} */
-const emptyFilters = () => ({ status: [], legal: [], family: [], genus: [], photo: [], french: [], mine: [] });
+/** @typedef {import('../config.js').Facet} Facet */
 
 /** @param {string} hash @returns {Query} */
 export function fromHash(hash) {
@@ -98,7 +92,7 @@ export const letGoSuggestions = channel => { helds.delete(channel); };
 
 /**
  * Genera only make sense inside the selected families: those of other families let go (a family chosen in its
- * filter, or by « Filtrer par »). @param {import('./store.js').Filters} filters
+ * filter, or by « Filtrer par »). @param {import('../config.js').Filters} filters
  */
 const inFamilies = filters => filters.family.length
   ? { ...filters, genus: filters.genus.filter(genus => filters.family.includes(genusFamily.get(genus) || '')) }

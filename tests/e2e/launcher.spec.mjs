@@ -271,7 +271,7 @@ test('Rencontres : un favori de match rangé dans une liste est gardé, un favor
     const c = await import('/app/core/collections.js');
     const db = await import('/app/core/db.js');
     const listOf = c.newCollection('list', { name: 'Cuisine' });
-    await c.saveCollection(listOf);
+    await c.savePlace(listOf);
     await c.setInCollection(listOf.id, await db.get('plants', id), true);
   }, plantId('Allium ursinum'));
   await expect.poll(() => favourites(page)).toEqual({ [plantId('Allium ursinum')]: null, [plantId('Taraxacum officinale')]: 'rencontres' });

@@ -3,12 +3,13 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { FACETS, buildIndex, distance, legalValues, rank, search, sequence } from '../../app/workers/search-core.js';
+import { buildIndex, distance, legalValues, rank, search, sequence } from '../../app/workers/search-core.js';
+import { FACETS, emptyFilters } from '../../app/config.js';
 import { unsigned } from '../../app/core/fold.js';
 
 const plants = JSON.parse(await readFile(new URL('../fixtures/plants.json', import.meta.url), 'utf8'));
 const index = buildIndex(plants);
-const NONE = Object.fromEntries(FACETS.map(f => [f, []]));
+const NONE = emptyFilters();
 const find = (/** @type {string} */ q, /** @type {any} */ more = {}) => search(index, { q, filters: { ...NONE, ...(more.filters || {}) }, sort: more.sort || '', membership: more.membership });
 const names = (/** @type {any} */ r) => r.items.map((/** @type {any} */ p) => p.scientificName);
 
@@ -51,6 +52,7 @@ test('fautes de frappe : « pisenlit », « otrie dioique » trouvent quand mêm
 test('facettes : un filtre réduit les résultats, chaque compte vaut ce qu’on aurait en l’ajoutant', () => {
   const all = find('');
   assert.equal(all.total, plants.length);
+  assert.deepEqual(Object.keys(all.facets), [...FACETS], 'une liste de comptes par facette, dans l’ordre');
   const urticaceae = all.facets.family.Urticaceae;
   assert.ok(urticaceae > 0);
   const only = find('', { filters: { family: ['Urticaceae'] } });

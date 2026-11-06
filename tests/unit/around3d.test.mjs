@@ -10,9 +10,10 @@ import assert from 'node:assert/strict';
 
 const { config } = await import('../../app/config.js');
 const {
-  AROUND3D_DEFAULTS, INAT_DATASET, RADII_3D, around3dPrefs, boxHolds, circleBox, cleanAround3d, fitZoom, gbifSource, hexBins, inCircle, metres, morePhotos,
-  observations3d, radiusLabel, radiusWords, ringWall, setAround3dPrefs, sharePhotos, wallHeight
+  AROUND3D_DEFAULTS, INAT_DATASET, around3dPrefs, boxHolds, circleBox, cleanAround3d, fitZoom, gbifSource, hexBins, inCircle, morePhotos,
+  observations3d, ringWall, setAround3dPrefs, sharePhotos, wallHeight
 } = await import('../../app/core/around3d.js');
+const { metres } = await import('../../app/core/distance.js');
 const { floraPhotos } = await import('../../app/core/nearby.js');
 const db = await import('../../app/core/db.js');
 
@@ -117,14 +118,6 @@ test('la source d’un relevé GBIF, telle que sa carte la dit', () => {
   assert.equal(gbifSource(null), 'GBIF');
   const long = gbifSource('Données d’observation de la flore du Conservatoire botanique national du Massif central (2000-2024)');
   assert.ok(long.length <= 'GBIF · '.length + 60 && long.endsWith('…'));
-});
-
-test('les rayons : ceux des mini-apps, dits en français', () => {
-  assert.deepEqual(RADII_3D, [200, 500, 1000, 2000, 5000, 10000, 20000, 50000]);
-  assert.equal(radiusLabel(500), '500 m');
-  assert.equal(radiusLabel(2000), '2 km');
-  assert.equal(radiusWords(1000), '1 kilomètre');
-  assert.equal(radiusWords(20000), '20 kilomètres');
 });
 
 test('seuls les points dans le cercle restent', () => {

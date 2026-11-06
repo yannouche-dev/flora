@@ -12,7 +12,7 @@ import { readText, writeText } from './prefs.js';
 import { inatCredit, thumbCredit } from './credit.js';
 import { cachedCredit, cachedThumb, thumbUrl } from './thumb.js';
 import { commonOf } from './plants.js';
-import { AROUND_STOPS as RADII } from './distance.js';
+import { AROUND_STOPS } from './distance.js';
 
 const API = 'https://api.inaturalist.org/v1';
 /** Results kept a day (offline: an older copy is better than nothing). */
@@ -25,8 +25,6 @@ const RESEARCH = '&quality_grade=research';
 /** A query's filters in a cache key: research grade, nothing; every observation, « toutes »; else themselves. @param {string} filters */
 const filtersKey = filters => filters === RESEARCH ? '' : '|' + (filters || 'toutes');
 
-// Radii offered, in metres (core/distance.js AROUND_STOPS): a radius kept must be one of them (savedRadius).
-export { RADII };
 export const DEFAULT_RADIUS = 5000;
 
 /**
@@ -481,7 +479,7 @@ function aroundPoint(o) {
 /** The radius chosen last (Carte → Autour). */
 export function savedRadius() {
   const value = Number(readText(config.storageKeys.aroundRadius));
-  return RADII.includes(value) ? value : DEFAULT_RADIUS;
+  return AROUND_STOPS.includes(value) ? value : DEFAULT_RADIUS;
 }
 
 /** @param {number} radius */

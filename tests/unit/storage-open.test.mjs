@@ -15,6 +15,7 @@ import assert from 'node:assert/strict';
 const { config } = await import('../../app/config.js');
 const db = await import('../../app/core/db.js');
 const C = await import('../../app/core/collections.js');
+const { FAVORITES_ID } = await import('../../app/core/place-model.js');
 const notes = await import('../../app/core/sheet-notes.js');
 
 const BACKING_STORE = 'Internal error opening backing store for indexedDB.open.';
@@ -238,7 +239,7 @@ test('réparation : la copie de secours, gardée telle quelle jusqu’à sa rest
   // Meanwhile: a ♥ in the new base, a deletion — the backup copy stays as it was.
   await C.toggleFavorite(plant(4));
   assert.equal(await C.writeBackup(), 'kept');
-  const extra = await C.saveCollection(C.newCollection('list', { name: 'Brouillon' }));
+  const extra = await C.savePlace(C.newCollection('list', { name: 'Brouillon' }));
   await C.deletePlace(extra.id);
   assert.equal(localStorage.getItem(config.storageKeys.backup), backup);
 
@@ -248,7 +249,7 @@ test('réparation : la copie de secours, gardée telle quelle jusqu’à sa rest
   assert.equal(C.backupContents(/** @type {any} */ (restored)), 'vos favoris (1 plante), 1 liste, 1 lieu et 1 note de fiche');
   const all = await C.listCollections();
   assert.deepEqual(all.map(c => c.properties.name).sort(), ['Bois', 'Comestibles', 'Favoris']);
-  assert.deepEqual((await C.getPlace(C.FAVORITES_ID))?.properties.plantIds.sort(), [1, 4], 'le ♥ d’entre-temps gardé');
+  assert.deepEqual((await C.getPlace(FAVORITES_ID))?.properties.plantIds.sort(), [1, 4], 'le ♥ d’entre-temps gardé');
   assert.equal(notes.noteText('terrain', 2), 'En soupe');
   // Done: no longer held, and the copy follows the base again.
   assert.equal(C.restorePending(), false);
@@ -280,7 +281,7 @@ test('base vidée par le navigateur sous la page : dit aussitôt, la copie de se
     // The next launch puts it back (main.js restoreAfter), the ♥ of meanwhile kept.
     await C.restoreAfterRepair();
     assert.equal((await C.getPlace(list.id))?.properties.name, 'Sauvages');
-    assert.ok((await C.getPlace(C.FAVORITES_ID))?.properties.plantIds.includes(3));
+    assert.ok((await C.getPlace(FAVORITES_ID))?.properties.plantIds.includes(3));
     assert.equal(C.restorePending(), false);
   } finally {
     removeEventListener('geoflora-emptied', onEmptied);
@@ -313,7 +314,7 @@ test('copie de secours : ce qu’elle tient, dit avec les mots du dialogue de r�
 });
 
 test('favoris, listes et lieux comptés (Réglages, export, transfert) : les favoris à part — ni liste ni lieu —, vidés pas du tout', () => {
-  const favorites = (/** @type {number} */ n) => ({ id: C.FAVORITES_ID, geometry: null, properties: { plants: Array(n).fill({}) } });
+  const favorites = (/** @type {number} */ n) => ({ id: FAVORITES_ID, geometry: null, properties: { plants: Array(n).fill({}) } });
   const list = { id: 'l', geometry: null, properties: { plants: [] } };
   const place = (/** @type {string} */ id) => ({ id, geometry: { type: 'Point', coordinates: [3.1, 45.8] }, properties: { plants: [{}] } });
   assert.equal(C.keptContents([favorites(2)]), 'vos favoris (2 plantes)', 'seulement des favoris : pas « 1 liste ou lieu »');

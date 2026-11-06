@@ -1,9 +1,10 @@
-// The Parcours botanique, what is pure about it (app/miniapp/kit/trail-store.js): a walk's plants grouped and
+// The Parcours botanique, what is pure about it (app/core/trail-store.js): a walk's plants grouped and
 // counted, its name shortened for the list to take up again, its recap's numbers (time without the pauses, distance
 // from plant to plant, from the start when it was started here); and what it keeps on the device.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { countOf, groupsOf, shortName, walkDone, walkOn, walkUnderWay, KEY, DONE } from '../../app/miniapp/kit/trail-store.js';
+import { groupsOf, shortName, walkDone, walkOn, walkUnderWay, KEY, DONE } from '../../app/core/trail-store.js';
+import { countOf } from '../../app/core/place-model.js';
 import { recapOf } from '../../app/miniapp/kit/trail-recap.js';
 import { writeJSON } from '../../app/core/prefs.js';
 

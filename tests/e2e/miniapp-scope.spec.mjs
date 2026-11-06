@@ -348,7 +348,7 @@ test('mode cueillette « auto » : il suit les récoltes qui arrivent, sans rien
     const db = await import('/app/core/db.js');
     let place = c.withPlant(c.newPlace([2.35, 48.85], { name: 'Lisière ' + id }), await db.get('plants', id));
     place = c.withEntry(place, id, { harvests: [{ date: '2026-04-12', quantity: '1 kg', note: '' }] });
-    await c.saveCollection(place);
+    await c.savePlace(place);
   }, plantId(name));
   // A version before wrote it by itself (at its first launch, or as Cueillette prudente began): no choice — forgotten.
   await page.addInitScript(() => {

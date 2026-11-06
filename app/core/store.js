@@ -1,7 +1,7 @@
 // @ts-check
 // Tiny observable store + a Lit reactive controller to re-render subscribers.
 
-import { config } from '../config.js';
+import { config, emptyFilters } from '../config.js';
 import { moduleEvents, modulesState } from './modules.js';
 import { baseOf, isMode, modeEvents, modeList } from './modes.js';
 import { readJSON, readText, writeText } from './prefs.js';
@@ -9,8 +9,7 @@ import { quotaEvents } from './quota.js';
 import { onStorage } from './sync.js';
 
 /**
- * @typedef {Record<'status' | 'legal' | 'family' | 'genus' | 'photo' | 'french' | 'mine', string[]>} Filters
- * @typedef {{ q: string, filters: Filters, sort: string }} Query
+ * @typedef {{ q: string, filters: import('../config.js').Filters, sort: string }} Query
  * @typedef {{ type: 'family' | 'genus', name: string, count: number }} Suggestion
  * @typedef {object} Results
  * @property {number} total
@@ -123,7 +122,7 @@ const readOverride = key => { const v = readMode(key); return v === initialMode 
 export const store = new Store({
   status: 'loading',
   offline: false,
-  query: { q: '', filters: { status: [], legal: [], family: [], genus: [], photo: [], french: [], mine: [] }, sort: '' },
+  query: { q: '', filters: emptyFilters(), sort: '' },
   results: { total: 0, items: [], facets: {}, suggestions: [], fuzzy: 0, sort: 'fr' },
   compact: readText(config.storageKeys.compact) === '1',
   favorites: new Set(),

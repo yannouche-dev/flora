@@ -24,6 +24,7 @@ localStorage.setItem(KEY, JSON.stringify({ done: false, unlocked: ['map', 'nope'
 
 const d = await import('../../app/core/discover.js');
 const c = await import('../../app/core/collections.js');
+const { FAVORITES_ID } = await import('../../app/core/place-model.js');
 
 /** The state as stored. */
 const stored = () => JSON.parse(localStorage.getItem(KEY) || 'null');
@@ -125,7 +126,7 @@ test('quietly : les onglets qu’apporte un travail viennent sans annonce', asyn
   await d.restartDiscover();
   assert.deepEqual(d.discoverState().unlocked, []);
   assert.deepEqual(d.discoverState().announced, []);
-  await d.quietly(async () => c.saveCollection(c.newPlace([4.8, 45.7], { name: 'Lisière' })));
+  await d.quietly(async () => c.savePlace(c.newPlace([4.8, 45.7], { name: 'Lisière' })));
   assert.deepEqual(d.discoverState().unlocked, ['mine', 'map']);
   // Announced at once.
   assert.deepEqual(d.discoverState().announced, ['mine', 'map']);
@@ -133,7 +134,7 @@ test('quietly : les onglets qu’apporte un travail viennent sans annonce', asyn
 });
 
 test('« Revoir les premiers pas » garde les onglets de vos listes et de vos lieux, là tout de suite, sans annonce', async () => {
-  await c.saveCollection(c.newCollection('list', { name: 'Bois' }));
+  await c.savePlace(c.newCollection('list', { name: 'Bois' }));
   d.finishDiscover();
   await d.restartDiscover();
   const s = d.discoverState();
@@ -146,7 +147,7 @@ test('« Revoir les premiers pas » garde les onglets de vos listes et de vos li
 });
 
 test('recomputeUnlocks : un onglet venu à annoncer, sauf sans annonce', async () => {
-  for (const each of await c.listCollections()) if (each.id !== c.FAVORITES_ID) await c.deletePlace(each.id);
+  for (const each of await c.listCollections()) if (each.id !== FAVORITES_ID) await c.deletePlace(each.id);
   await d.restartDiscover();
   assert.deepEqual(d.discoverState().unlocked, []);
   // A liste made: Mes plantes, to be announced.
@@ -193,8 +194,8 @@ test('un état qui n’a pas pu s’écrire (stockage plein) garde ses onglets',
 });
 
 test('unlocksAtStart : au démarrage, les listes et les lieux de l’appareil font venir leurs onglets, sans annonce', async () => {
-  await c.saveCollection(c.newCollection('list', { name: 'Bois' }));
-  await c.saveCollection(c.newPlace([4.8357, 45.7641], { name: 'Lisière nord' }));
+  await c.savePlace(c.newCollection('list', { name: 'Bois' }));
+  await c.savePlace(c.newPlace([4.8357, 45.7641], { name: 'Lisière nord' }));
   // A device of before (or « Revoir les premiers pas » of before): its lists and lieux, no tab.
   localStorage.setItem(KEY, JSON.stringify({ done: false, unlocked: [], seen: [], step: 0 }));
   await d.unlocksAtStart();
@@ -255,7 +256,7 @@ test('unlocksAtStart, une restauration en attente : l’onglet venu avec l’adr
 });
 
 test('markAnnounced : un onglet repris entre-temps (« Revoir les premiers pas » pendant son annonce) est annoncé quand il revient', async () => {
-  for (const each of await c.listCollections()) if (each.id !== c.FAVORITES_ID) await c.deletePlace(each.id);
+  for (const each of await c.listCollections()) if (each.id !== FAVORITES_ID) await c.deletePlace(each.id);
   await d.restartDiscover();
   // The Carte come with its address, its announcement showing.
   d.arrivedAt('map');
@@ -267,14 +268,14 @@ test('markAnnounced : un onglet repris entre-temps (« Revoir les premiers pas �
   assert.deepEqual(d.discoverState().announced, []);
   assert.deepEqual(stored().announced, []);
   // A lieu saved: both come, both to be announced.
-  await c.saveCollection(c.newPlace([4.8357, 45.7641], { name: 'Lisière nord' }));
+  await c.savePlace(c.newPlace([4.8357, 45.7641], { name: 'Lisière nord' }));
   assert.deepEqual(d.discoverState().unlocked, ['mine', 'map']);
   assert.deepEqual(d.pendingUnlocks(), ['map', 'mine']);
   d.markAnnounced(['map', 'mine']);
 });
 
 test('« Recommencer » de Rencontres sur un état qui n’a pas pu s’écrire (stockage plein) : ses onglets restent', async () => {
-  for (const each of await c.listCollections()) if (each.id !== c.FAVORITES_ID) await c.deletePlace(each.id);
+  for (const each of await c.listCollections()) if (each.id !== FAVORITES_ID) await c.deletePlace(each.id);
   await d.restartDiscover();
   assert.deepEqual(d.discoverState().unlocked, []);
   const set = localStorage.setItem;

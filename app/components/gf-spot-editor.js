@@ -8,9 +8,10 @@ import { moduleOn } from '../core/modules.js';
 import { href } from '../core/router.js';
 import { back, openView, replaceHash, replaceView } from '../core/history.js';
 import {
-  ABUNDANCE, copyAsList, defaultPlantPosition, deletePlace, distance, entryInSeason, entryName, entryPosition, exportGeoJSON, findEntry,
-  formatDistance, getPlace, lastHarvest, locationQuestion, matchCollections, plantMarkers, removeQuestion,
+  ABUNDANCE, copyAsList, defaultPlantPosition, deletePlace, entryInSeason, entryName, entryPosition, exportGeoJSON, findEntry,
+  getPlace, lastHarvest, locationQuestion, matchCollections, plantMarkers, removeQuestion,
   newCollection, newPlace, placesNear, placeTitle, plantCount, savePatch, savePlace, shareCollection, spotEvents, updatePlace, walkEnded, withEntry, withLocation, withoutPlant, withPlant, entriesOf, lastEntry } from '../core/collections.js';
+import { formatDistance, metres } from '../core/distance.js';
 import { joinEntry, joinNotes, roundCoordinates } from '../core/place-model.js';
 import { StoreController, whenReady } from '../core/store.js';
 import { addressAt, altitudeAt, formatCoordinates } from '../core/geoservices.js';
@@ -30,7 +31,7 @@ import './gf-nearby-places.js';
 import { map3dProblem, openMap3d } from './gf-map3d.js';
 import { briefToast } from '../core/toast.js';
 import { hintView, takeHint } from '../core/hints.js';
-import { continueWalk } from '../miniapp/kit/trail-store.js';
+import { continueWalk } from '../core/trail-store.js';
 
 const today = () => {
   const d = new Date();
@@ -784,7 +785,7 @@ export class GfSpotEditor extends LitElement {
           const own = draft.geometry && e.coordinates ? { coordinates: e.coordinates, accuracy: e.accuracy } : null;
           // Already there: in a list, the plant; in a place, this plant at this very spot (else another occurrence).
           const there = target.geometry && own
-            ? entriesOf(target, e.plantId).find(t => t.coordinates && distance(t.coordinates, own.coordinates) < 1)
+            ? entriesOf(target, e.plantId).find(t => t.coordinates && metres(t.coordinates, own.coordinates) < 1)
             : findEntry(target, e.plantId);
           if (there) {
             const one = joinEntry(there, e);
@@ -945,7 +946,7 @@ export class GfSpotEditor extends LitElement {
   #plantPosition(entry) {
     const place = /** @type {import('../core/collections.js').Collection} */ (this._place);
     const own = entryPosition(place, entry);
-    const away = own && place.geometry ? distance(own, place.geometry.coordinates) : 0;
+    const away = own && place.geometry ? metres(own, place.geometry.coordinates) : 0;
     const fix = this.#geo.state.fix;
     return html`<div class="plant-pos">
       <span>${icon('geo-alt-fill')} ${away < 3 ? 'Au point du lieu' : `À ${formatDistance(away)} du point du lieu`}${entry.accuracy ? ` · ± ${entry.accuracy} m` : ''}</span>

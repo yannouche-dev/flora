@@ -112,7 +112,7 @@ test('Éditeur d’un lieu, mode cueillette : une espèce protégée en France �
     const c = await import('/app/core/collections.js');
     const db = await import('/app/core/db.js');
     const place = c.withPlant(c.newPlace([2.351, 48.851], { name: 'Pelouse sèche' }), await db.get('plants', plant));
-    await c.saveCollection(place);
+    await c.savePlace(place);
     return place.id;
   }, moly);
   await app.go(`#/collection/${id}`);
@@ -360,7 +360,7 @@ test('Éditeur d’un lieu, mode cueillette éteint : l’ail des ours ouvert mo
     const c = await import('/app/core/collections.js');
     const db = await import('/app/core/db.js');
     const place = c.withPlant(c.newPlace([2.351, 48.851], { name: 'Sous-bois' }), await db.get('plants', plant));
-    await c.saveCollection(place);
+    await c.savePlace(place);
     return place.id;
   }, plantId('Allium ursinum'));
   await app.go(`#/collection/${id}`);

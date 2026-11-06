@@ -1,15 +1,14 @@
 // @ts-check
 // The Parcours botanique, what it keeps on the device and what is pure about it: the walk under way (its place id), the
 // one just ended (its recap, until left); a walk's plants grouped (each plant once, its occurrences together), counted;
-// its recap's numbers are trail-recap.js's (with the walk and the altitudes: not at the start of the app). Tested under
+// its recap's numbers are kit/trail-recap.js's (with the walk and the altitudes: not at the start of the app). Tested under
 // Node (tests/unit/trail.test.mjs). A walk itself is a place of Mes plantes marked a walk (core/place-model.js `walk`):
-// those to continue are read there (trail-session.js), not kept here.
+// those to continue are read there (kit/trail-session.js), not kept here. In core/: the app's context (core/context.js:
+// a parcours under way is no current collection), Découvrir's list (miniapps/index.js) and Mes plantes' « Continuer le
+// parcours » (gf-spot-editor.js) read it too.
 
-import { config } from '../../config.js';
-import { readJSON, writeJSON } from '../../core/prefs.js';
-
-// What a parcours holds, in words (« 9 plantes, notées 12 fois »): pure, with the shape of a collection.
-export { countOf } from '../../core/place-model.js';
+import { config } from '../config.js';
+import { readJSON, writeJSON } from './prefs.js';
 
 /**
  * The parcours being walked (its place id) and the one just ended (its recap, until left); none (null): the key removed

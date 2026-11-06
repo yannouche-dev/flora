@@ -4,9 +4,7 @@
 
 import { fold, signed, unsigned } from '../core/fold.js';
 import { harvestRules } from '../core/regulation.js';
-
-/** Facets, in the order the filter panel shows them. Values within a facet are OR'ed, facets are AND'ed. */
-export const FACETS = /** @type {const} */ (['mine', 'status', 'legal', 'family', 'genus', 'photo', 'french']);
+import { FACETS } from '../config.js';
 const NONE = /** @type {string[]} */ ([]);
 
 /** Folded words (« Œillet » and « oeillet » alike): the one folding of the app (core/fold.js). */

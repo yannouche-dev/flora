@@ -1,7 +1,7 @@
 // @ts-check
 import { LitElement, html, css, nothing } from 'lit';
-import { STATUS_SHORT } from '../config.js';
-import { FACETS, activeFilterCount, clearFilters, toggleValue } from '../core/query.js';
+import { FACETS, STATUS_SHORT } from '../config.js';
+import { activeFilterCount, clearFilters, toggleValue } from '../core/query.js';
 import { store } from '../core/store.js';
 import { SearchController } from '../core/search-channel.js';
 import { ui } from '../styles/ui.js';
@@ -22,7 +22,7 @@ const NAMES = {
 /** The filter groups' names (gf-filter-panel), so a chip's button says which filter it removes. */
 const GROUPS = { mine: 'Mes plantes', status: 'Statut', legal: 'Protection', family: 'Famille', genus: 'Genre', photo: 'Plante avec photo', french: 'Nom français' };
 
-/** A chip's label: its name, a place's or the favourites' icon before it, a genus in italics. @param {import('../core/query.js').Facet} facet @param {string} v */
+/** A chip's label: its name, a place's or the favourites' icon before it, a genus in italics. @param {import('../config.js').Facet} facet @param {string} v */
 const label = (facet, v) => facet === 'genus' ? html`<i>${v}</i>`
   : facet === 'mine' && (v === 'place' || v === 'favorites') ? html`${icon(v === 'place' ? 'geo-alt-fill' : 'heart-fill')} ${NAMES.mine(v)}`
   : NAMES[facet](v);

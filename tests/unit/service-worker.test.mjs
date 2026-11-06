@@ -8,8 +8,8 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 import { baseLayers } from '../../app/core/backgrounds.js';
-import { CATALOG_ROWS, LANDMARKS, LANDMARK_DEFAULTS } from '../../app/core/map-layers.js';
-import { OVERLAYS, wmtsUrl } from '../../app/core/ign.js';
+import { CATALOG_ROWS, LANDMARKS, LANDMARK_DEFAULTS, OVERLAYS } from '../../app/core/map-layers.js';
+import { wmtsUrl } from '../../app/core/ign-layers.js';
 
 const catalog = JSON.parse(readFileSync(new URL('../../data/ign-catalog.json', import.meta.url), 'utf8'));
 const sw = vm.createContext({ self: { location: { href: 'https://example.org/sw.js' }, addEventListener() {} }, atob, URL, Uint8Array });

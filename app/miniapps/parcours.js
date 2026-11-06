@@ -21,7 +21,7 @@ import { forgetMadeBy } from '../core/collections.js';
 import { defineMiniApp } from '../miniapp/define.js';
 import { trailSessionOf } from '../miniapp/kit/trail-session.js';
 import { trailStart } from '../miniapp/kit/trail-start.js';
-import { walkDone, walkOn } from '../miniapp/kit/trail-store.js';
+import { walkDone, walkOn } from '../core/trail-store.js';
 
 export default defineMiniApp({
   id: 'parcours',

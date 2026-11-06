@@ -4,6 +4,7 @@ import { IGN_PREFIX, builtinKeyOf, wmtsUrl } from '../core/ign-layers.js';
 import { landmarkOf } from '../core/map-layers.js';
 import { loadCatalog, onCatalog } from '../core/ign-catalog.js';
 import { moduleOn } from '../core/modules.js';
+import { counted } from '../core/fr.js';
 import { href } from '../core/router.js';
 import { ui } from '../styles/ui.js';
 import { icon } from '../core/icons.js';
@@ -42,9 +43,6 @@ export function previewTile(l) {
   const y = Math.floor(((1 - Math.log(Math.tan(rad) + 1 / Math.cos(rad)) / Math.PI) / 2) * n);
   return wmtsUrl(l).replace('{z}', String(z)).replace('{x}', String(x)).replace('{y}', String(y));
 }
-
-/** « 1 couche », « 6 couches ». @param {number} n @param {string} word */
-const count = (n, word) => `${n} ${word}${n > 1 ? 's' : ''}`;
 
 /** A catalogue layer's overlay key: one of the app's own when it is one (« Forêts publiques »…), else « ign:<id> ». @param {CatalogLayer} l */
 const keyOf = l => builtinKeyOf(l.id) || IGN_PREFIX + l.id;
@@ -388,10 +386,10 @@ export class GfIgnLayers extends LitElement {
     const q = this._q.trim();
     const found = q ? searchEntries(entries, q) : [];
     return html`${this.#state(c)}
-      <input type="search" placeholder=${`Chercher parmi ${count(layers.length, 'couche')} (forêt, sol, relief, 1950…)`} aria-label="Chercher une couche de l’IGN"
+      <input type="search" placeholder=${`Chercher parmi ${counted(layers.length, 'couche')} (forêt, sol, relief, 1950…)`} aria-label="Chercher une couche de l’IGN"
         .value=${this._q} @input=${(/** @type {any} */ e) => { this._q = e.target.value; this._more = new Map(); }} />
-      <p class="note" role="status" aria-live="polite">${q ? (found.length ? count(found.length, 'résultat') : 'Aucune couche ne correspond.')
-        : `${count(layers.length, 'couche')} en ${count(entries.length, 'entrée')}, rangées en ${count(tree.length, 'catégorie')}.`}</p>
+      <p class="note" role="status" aria-live="polite">${q ? (found.length ? counted(found.length, 'résultat') : 'Aucune couche ne correspond.')
+        : `${counted(layers.length, 'couche')} en ${counted(entries.length, 'entrée')}, rangées en ${counted(tree.length, 'catégorie')}.`}</p>
       ${q ? html`<div class="results" aria-label="Résultats">${this.#rows('search', found, RESULTS, true)}</div>` : html`
         <details class="reco" ?open=${this._nodes.has('reco')} @toggle=${(/** @type {Event} */ e) => this.#toggleNode('reco', e)}>
           <summary>${icon('leaf-fill')} Recommandées pour la botanique<span class="count">${recommended.length}</span></summary>

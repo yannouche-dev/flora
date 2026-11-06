@@ -22,8 +22,8 @@ async function toCards(page) {
   await expect(page.locator('ma-deck .swipe-card.top')).toHaveAttribute('data-id', String(plantId(AIL)));
 }
 
-/** A plant's name as the app says it (kit/cards.js#nameOf). @param {import('@playwright/test').Page} page @param {string} name */
-const nameOf = (page, name) => page.evaluate(async id => (await import('/app/miniapp/kit/cards.js')).nameOf(await (await import('/app/core/db.js')).get('plants', id)), plantId(name));
+/** A plant's name as the app says it (core/plants.js#nameOf). @param {import('@playwright/test').Page} page @param {string} name */
+const nameOf = (page, name) => page.evaluate(async id => (await import('/app/core/plants.js')).nameOf(await (await import('/app/core/db.js')).get('plants', id)), plantId(name));
 
 /** The photos, as they show: the pane beside the deck, or the full-screen dialog (a phone). @param {import('@playwright/test').Page} page @param {boolean} phone */
 const photos = (page, phone) => page.locator(`ma-around-list ma-meet-media[mode="${phone ? 'dialog' : 'pane'}"]`);

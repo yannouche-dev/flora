@@ -87,6 +87,7 @@ import { renderCell, revealFacet, scopeWords } from './cells.js';
 import { cellOf, cellText } from './picker-model.js';
 import { pickerBounds } from './gf-block-picker.js';
 import { boxOf, canSplit, placesOf, remove as removeBox, SLOT, specOf, split } from './builder-grid.js';
+import { counted } from '../core/fr.js';
 
 /**
  * @typedef {import('./grammar.js').ListNode} ListNode
@@ -1409,7 +1410,6 @@ export class GfLayout extends LitElement {
     // Its plant: its own (plante=, a pin before its names), else the current one.
     const fixed = r.known && r.params.plante ? /** @type {number} */ (r.params.plante) : null;
     const info = fixed ? this.#namesOf(fixed) : s.plantInfo && s.plantInfo.id === s.live.plant ? s.plantInfo : null;
-    const count = (/** @type {number} */ n) => `${n.toLocaleString('fr-FR')} espèce${n > 1 ? 's' : ''}`;
     const whole = id === 'results' && r.known && r.params.zone === false;
     // A new answer of its zone coming (another period, other filters, another circle, none: state.js `updating`): what
     // its map, list and deck show stays, dimmed, until the answer replaces all of it at once; its counts « Mise à jour… ».
@@ -1420,9 +1420,9 @@ export class GfLayout extends LitElement {
       : id === 'map' ? scopeWords(s, { zone: r.known && r.params.portee === 'zone' }) + (s.updating ? ' · Mise à jour…' : '')
       : id === 'place' ? scopeWords(s, { zone: true })
       // (Its count kept with its rows while a new answer comes — another text, another sort —, as the other heads'.)
-      : whole ? (s.whole ? count(s.whole.total) + ' · toute la France' : '')
+      : whole ? (s.whole ? counted(s.whole.total, 'espèce') + ' · toute la France' : '')
       : id === 'search' || id === 'results' || id === 'filters' ? (this.#store.state.status === 'ready' && channel.answered
-        ? s.updating ? 'Mise à jour…' : count(results.total) + (results.inZone ? ' · dans la vue' : '') : '')
+        ? s.updating ? 'Mise à jour…' : counted(results.total, 'espèce') + (results.inZone ? ' · dans la vue' : '') : '')
       : info ? html`${fixed ? html`<span class="pin" title=${`Plante fixée (plante=${fixed}) : cette case ne suit pas la plante courante`}>${icon('pin-angle-fill')}<span class="visually-hidden">Plante fixée :</span></span> ` : nothing}${info.name}${info.name !== info.sci ? html` · <i>${info.sci}</i>` : nothing}` : '';
     // Said after its names, never cut with them (a phone's narrow head: « Ortie dioïque · Urtica di… », the flag whole).
     const off = outside && info ? html`<span class="off" title="La plante choisie n’est pas parmi les plantes trouvées : elle reste choisie (Retour l’enlève)"><span class="visually-hidden">· </span>hors du résultat</span>` : nothing;

@@ -4,11 +4,11 @@ import { GeoController } from '../core/geo.js';
 import { href, parse } from '../core/router.js';
 import { backTo, depth, entryValue, markEntry, pushHash, renewBehind, replaceHash } from '../core/history.js';
 import { findEntry,
-  directionsUrl, entryPosition, plantMarkers, distance, entryName, formatDistance, inSeason, listPlaces,
+  directionsUrl, entryPosition, plantMarkers, entryName, inSeason, listPlaces,
   placeAbundance, placeLastHarvest, placeTitle, plantCount, saveMoves, spotEvents
 } from '../core/collections.js';
-import { RADII, exploreUrl, observationsAround, saveRadius, savedRadius, speciesAround } from '../core/nearby.js';
-import { radiusLabel } from '../core/distance.js';
+import { exploreUrl, observationsAround, saveRadius, savedRadius, speciesAround } from '../core/nearby.js';
+import { AROUND_STOPS, formatDistance, metres, radiusLabel } from '../core/distance.js';
 import { StoreController, whenReady } from '../core/store.js';
 import { ui } from '../styles/ui.js';
 import './gf-facet.js';
@@ -16,7 +16,8 @@ import './gf-map.js';
 import './gf-spot-editor.js';
 import './gf-thumb.js';
 import { icon } from '../core/icons.js';
-import { foldLetters as fold, unsigned } from '../core/fold.js';
+import { foldLetters, unsigned } from '../core/fold.js';
+import { counted } from '../core/fr.js';
 import { getPlant, nameOf } from '../core/plants.js';
 import { gbifTaxon } from '../core/sources.js';
 import { mapDistribution, setMapDistribution } from '../core/map-settings.js';
@@ -420,7 +421,7 @@ export class GfMapPage extends LitElement {
           if (c) this.#searchAround(c, 'centre de la carte');
         }}>Chercher au centre de la carte</button></div>
       <div class="radii" role="group" aria-label="Rayon">
-        ${RADII.map(r => html`<button type="button" aria-pressed=${r === a.radius ? 'true' : 'false'}
+        ${AROUND_STOPS.map(r => html`<button type="button" aria-pressed=${r === a.radius ? 'true' : 'false'}
           @click=${() => { saveRadius(r); this.#searchAround(a.center, a.where, r); }}>${radiusLabel(r)}</button>`)}
       </div>`;
     const source = html`<p class="source">Source : <a href=${a.species ? exploreUrl(a.center, a.radius, a.species.taxonId) : exploreUrl(a.center, a.radius)}
@@ -454,15 +455,14 @@ export class GfMapPage extends LitElement {
       </section>`;
     }
     const all = result.species;
-    const plural = (/** @type {number} */ n, /** @type {string} */ word) => `${n.toLocaleString('fr-FR')} ${word}${n > 1 ? 's' : ''}`;
     const familyCount = new Set(all.map(sp => sp.family).filter(Boolean)).size;
     const genusCount = new Set(all.map(sp => sp.genus).filter(Boolean)).size;
     const outside = all.filter(sp => !sp.plantId).length;
 
     // Search + two multi-select filters (Famille, Genre). Each filter's counts take the others into account.
     const { q, families, genera, open } = a.filter;
-    const needle = fold(q.trim());
-    const bySearch = (/** @type {any} */ sp) => !needle || fold([sp.common, sp.name, sp.genus, sp.family].filter(Boolean).join(' ')).includes(needle);
+    const needle = foldLetters(q.trim());
+    const bySearch = (/** @type {any} */ sp) => !needle || foldLetters([sp.common, sp.name, sp.genus, sp.family].filter(Boolean).join(' ')).includes(needle);
     const byFamily = (/** @type {any} */ sp) => !families.length || families.includes(sp.family);
     const byGenus = (/** @type {any} */ sp) => !genera.length || genera.includes(sp.genus);
     const shown = all.filter(sp => bySearch(sp) && byFamily(sp) && byGenus(sp));
@@ -484,8 +484,8 @@ export class GfMapPage extends LitElement {
     return html`<section class="sheet around" aria-label="Autour">
       ${head}
       <p class="recap">
-        <strong>${plural(all.length, 'espèce')}</strong> · <strong>${plural(familyCount, 'famille')}</strong>
-        · <strong>${plural(genusCount, 'genre')}</strong> · ${plural(result.observations, 'observation')}
+        <strong>${counted(all.length, 'espèce')}</strong> · <strong>${counted(familyCount, 'famille')}</strong>
+        · <strong>${counted(genusCount, 'genre')}</strong> · ${counted(result.observations, 'observation')}
         ${outside ? html`<span class="muted" title="Absentes de la flore de l’app (TAXREF) : famille inconnue">(${outside} hors flore)</span>` : nothing}
       </p>
       ${all.length ? html`
@@ -505,7 +505,7 @@ export class GfMapPage extends LitElement {
           <gf-facet name="genera" label="Genre" stack="1" searchable ordered limit="6" hide-empty .open=${open.genera || genera.length > 0}
             .selected=${genera} .options=${genusOptions}></gf-facet>
         </div>
-        ${filtered ? html`<div class="meta"><span><strong>${shown.length}</strong> / ${plural(all.length, 'espèce')}</span>
+        ${filtered ? html`<div class="meta"><span><strong>${shown.length}</strong> / ${counted(all.length, 'espèce')}</span>
           <button type="button" class="link" @click=${() => this.#filterAround({ q: '', families: [], genera: [] })}>Effacer</button></div>` : nothing}
         ${shown.length ? html`<ul class="plants species">
           ${shown.map(sp => html`<li><button type="button" class="pick" @click=${() => this.#pickSpecies(sp)}>
@@ -718,7 +718,7 @@ export class GfMapPage extends LitElement {
   /** @param {import('../core/collections.js').Place} spot */
   #distanceTo(spot) {
     const fix = this.#geo.state.fix;
-    return fix ? distance(fix.coordinates, spot.geometry.coordinates) : null;
+    return fix ? metres(fix.coordinates, spot.geometry.coordinates) : null;
   }
 
   #plantOptions() {

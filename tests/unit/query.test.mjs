@@ -4,6 +4,9 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { activeFilterCount, applySuggestion, clearFilters, fromHash, heldSuggestions, letGoSuggestions, toHash, toggleValue } from '../../app/core/query.js';
 import { href, isStart, parse } from '../../app/core/router.js';
+import { FACETS, emptyFilters } from '../../app/config.js';
+import { emptyQuery } from '../../app/core/search-channel.js';
+import { store } from '../../app/core/store.js';
 
 test('fromHash ↔ toHash : aller-retour stable, filtres multiples et tri', () => {
   const q = fromHash('#/?q=ortie&family=Urticaceae,Rosaceae&status=I,J&photo=avec&sort=sci');
@@ -15,6 +18,19 @@ test('fromHash ↔ toHash : aller-retour stable, filtres multiples et tri', () =
   // The facets in their fixed order (mine, status, legal, family…), whatever the order typed.
   assert.equal(toHash(q), '#/?q=ortie&status=I,J&family=Urticaceae,Rosaceae&photo=avec&sort=sci');
   assert.deepEqual(fromHash(toHash(q)), q);
+});
+
+test('les facettes : une seule liste (config.js) — filtres vides, adresse, requête vide, état de départ', () => {
+  assert.deepEqual(FACETS, ['mine', 'status', 'legal', 'family', 'genus', 'photo', 'french']);
+  const a = emptyFilters(), b = emptyFilters();
+  assert.deepEqual(Object.keys(a), [...FACETS]);
+  assert.ok(Object.values(a).every(list => Array.isArray(list) && list.length === 0));
+  a.family.push('Urticaceae');
+  assert.deepEqual(b.family, [], 'deux appels ne partagent pas leurs listes');
+  assert.deepEqual(fromHash('#/').filters, emptyFilters());
+  assert.deepEqual(emptyQuery(), { q: '', filters: emptyFilters(), sort: '' });
+  // deepEqual ignores the keys' order: the store's starts in FACETS' (a search's memory compares them serialized).
+  assert.deepEqual(Object.keys(store.state.query.filters), [...FACETS]);
 });
 
 test('fromHash tolère les adresses vides ou bancales', () => {

@@ -20,9 +20,9 @@ const seed = page => page.evaluate(async ids => {
   const db = await import('/app/core/db.js');
   const [ail, ortie] = await Promise.all(ids.map(id => db.get('plants', id)));
   const place = c.withPlant(c.withPlant(c.newPlace([2.351, 48.851], { name: 'Bois de la Source' }), ail), ortie, [2.3512, 48.8509]);
-  await c.saveCollection(place);
+  await c.savePlace(place);
   const list = c.withPlant(c.newCollection('list', { name: 'À cueillir' }), ail);
-  await c.saveCollection(list);
+  await c.savePlace(list);
   return { place: place.id, list: list.id };
 }, [plantId('Allium ursinum'), plantId('Urtica dioica')]);
 

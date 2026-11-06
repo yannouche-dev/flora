@@ -73,7 +73,7 @@ async function onPlant(page, name, { media = false, sheet = false, inUrl = true 
   });
   await expect(page.locator('ma-distance .leaflet-marker-pane .gf-obs-leaf.hl.chosen').first()).toBeAttached();
   // The heading of each pane names it.
-  const named = await page.evaluate(async id => (await import('/app/miniapp/kit/cards.js')).nameOf(await (await import('/app/core/db.js')).get('plants', id)), id);
+  const named = await page.evaluate(async id => (await import('/app/core/plants.js')).nameOf(await (await import('/app/core/db.js')).get('plants', id)), id);
   if (media) await expect(page.locator('ma-meet-media[mode="pane"]').getByRole('heading', { level: 2 })).toHaveText(`Photos · ${named}`);
   if (sheet) await expect(page.locator('ma-plant-sheet .sheet-head strong')).toHaveText(named);
 }

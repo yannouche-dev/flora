@@ -1,6 +1,6 @@
 // @ts-check
 // The cards of the plants around a place (Rencontres, Cueillette prudente, Mosaïque): what is pure about them — the
-// distances offered, their words and their slider, the order of Cueillette prudente (only the plants of a dangerous
+// next distance and a word for it, and their slider (the stops and their words are core/distance.js's), the order of Cueillette prudente (only the plants of a dangerous
 // confusion, the deadliest first) and its toxic look-alikes (never a match: recognised, to avoid), the deck (the cards
 // not yet swiped), a swipe kept or taken back, what a swipe says aloud (saidOf), a card made of a plant and what was
 // seen of it (cardOf: an activity's and a screen's deck alike), the first sentence of what Wikipédia says, and a card's
@@ -8,7 +8,7 @@
 
 import { UNREAD, rank } from '../../core/danger.js';
 import { gravest, severityOf } from '../../core/lookalikes.js';
-import { STOPS as DISTANCES } from '../../core/distance.js';
+import { STOPS } from '../../core/distance.js';
 import { floweringMonths } from '../../core/plants.js';
 import { thumbCredit } from '../../core/credit.js';
 
@@ -20,17 +20,12 @@ import { thumbCredit } from '../../core/credit.js';
  *   look-alikes recognised (toAvoid); a game without it never gets the key.
  */
 
-// How far to look, in metres (iNaturalist searches a circle; beyond 50 km the list is a region's, not « around »), and
-// the distance shown (« 2 km », unrounded: a free layout's may lie between two stops) and in words, as a screen reader
-// says it (« 2 kilomètres », « 500 mètres »): core/distance.js's.
-export { DISTANCES };
-export { radiusLabel as distLabel, radiusWords as distWords } from '../../core/distance.js';
 /** A word for the distance, for fun. @param {number} m */
 export const distMood = m => m <= 200 ? 'Juste devant la porte' : m <= 1000 ? 'Le quartier' : m <= 5000 ? 'Une balade à pied' : m <= 20000 ? 'Un tour à vélo' : 'Toute la région';
 /** The next distance offered past `m` (none past 50 km). @param {number} m */
-export const nextDistance = m => DISTANCES.find(d => d > m);
+export const nextDistance = m => STOPS.find(d => d > m);
 
-// A slider of the distances (Rencontres' « Jusqu'où ? », a free layout's radius): its stops are DISTANCES, each the
+// A slider of the distances (Rencontres' « Jusqu'où ? », a free layout's radius): its stops are STOPS (core/distance.js), each the
 // same width, and its value a position among them — any distance shown where it is, never moved to a stop it is not:
 // a free layout's address may say r=3km, which sits between 2 and 5 km (the thumb there, the label « 3 km »). So the
 // input is step="any": dragged or touched, it gives the closest stop (distanceNear), and its keys are its own
@@ -42,15 +37,15 @@ export const nextDistance = m => DISTANCES.find(d => d > m);
  * @param {number} m
  */
 export function distanceAt(m) {
-  const at = DISTANCES.indexOf(m);
+  const at = STOPS.indexOf(m);
   if (at >= 0) return at;
-  const next = DISTANCES.findIndex(d => d > m);
-  if (next <= 0) return next === 0 ? 0 : DISTANCES.length - 1;
-  return next - 1 + Math.log(m / DISTANCES[next - 1]) / Math.log(DISTANCES[next] / DISTANCES[next - 1]);
+  const next = STOPS.findIndex(d => d > m);
+  if (next <= 0) return next === 0 ? 0 : STOPS.length - 1;
+  return next - 1 + Math.log(m / STOPS[next - 1]) / Math.log(STOPS[next] / STOPS[next - 1]);
 }
 
 /** The stop closest to a position of the slider (a thumb dragged, the track touched). @param {number} at */
-export const distanceNear = at => DISTANCES[Math.min(DISTANCES.length - 1, Math.max(0, Math.round(Number(at) || 0)))];
+export const distanceNear = at => STOPS[Math.min(STOPS.length - 1, Math.max(0, Math.round(Number(at) || 0)))];
 
 /**
  * The distance a key gives on the slider, from `m`: → ↑ the next stop past it, ← ↓ the one before (from between two
@@ -58,15 +53,15 @@ export const distanceNear = at => DISTANCES[Math.min(DISTANCES.length - 1, Math.
  * @param {string} key @param {number} m @returns {number | null}
  */
 export function distanceKey(key, m) {
-  const up = (/** @type {number} */ n) => { const past = DISTANCES.filter(d => d > m); return past.length ? past[Math.min(n, past.length) - 1] : m; };
-  const down = (/** @type {number} */ n) => { const before = DISTANCES.filter(d => d < m); return before.length ? before[Math.max(0, before.length - n)] : m; };
+  const up = (/** @type {number} */ n) => { const past = STOPS.filter(d => d > m); return past.length ? past[Math.min(n, past.length) - 1] : m; };
+  const down = (/** @type {number} */ n) => { const before = STOPS.filter(d => d < m); return before.length ? before[Math.max(0, before.length - n)] : m; };
   switch (key) {
     case 'ArrowRight': case 'ArrowUp': return up(1);
     case 'ArrowLeft': case 'ArrowDown': return down(1);
     case 'PageUp': return up(2);
     case 'PageDown': return down(2);
-    case 'Home': return DISTANCES[0];
-    case 'End': return DISTANCES[DISTANCES.length - 1];
+    case 'Home': return STOPS[0];
+    case 'End': return STOPS[STOPS.length - 1];
     default: return null;
   }
 }
@@ -95,10 +90,6 @@ export function distanceEvents(now, set) {
 export const MONTH = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'];
 /** The cards shown at first in « Toutes », and each « Voir plus ». */
 export const PAGE = 12;
-
-// A plant's name (its first common name, else its scientific one) is core/plants.js's, offered here too: the kit's
-// screens import it from this module, and so do two e2e specs, in the page.
-export { nameOf } from '../../core/plants.js';
 
 /**
  * Cueillette prudente: only the plants of the Anses / Centres antipoison confusions, the deadliest first, then

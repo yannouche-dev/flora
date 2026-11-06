@@ -1,16 +1,14 @@
 // @ts-check
 // Distances on the ground, and how the app says them. Pure, no imports (tested under Node: tests/unit/distance.test.mjs):
-//  - metres(a, b): the great-circle distance between two [lon, lat], in metres (on R_EARTH, the Earth's mean radius) —
-//    collections.js offers it as `distance`, around3d.js as `metres`;
-//  - formatDistance(m): a distance measured, rounded as it is said (« 350 m », « 1,5 km », « 12 km ») — offered by
-//    collections.js too;
+//  - metres(a, b): the great-circle distance between two [lon, lat], in metres (on R_EARTH, the Earth's mean radius);
+//  - formatDistance(m): a distance measured, rounded as it is said (« 350 m », « 1,5 km », « 12 km »);
 //  - radiusLabel(m) / radiusWords(m): a radius chosen, shown as it is (« 500 m », « 2 km », « 2,5 km » between two
-//    stops) and as a screen reader says it (« 2 kilomètres ») — offered by around3d.js, and by the mini-apps' cards.js
-//    as distLabel / distWords;
+//    stops) and as a screen reader says it (« 2 kilomètres »);
 //  - STOPS (the radii offered, 200 m to 50 km), MAJOR_STOPS (those a slider names), AROUND_STOPS (the Carte's
 //    « Autour »), and nearestStop(m): the stop closest to a distance.
+// Each under this name only, imported from here: no other module offers them (eslint.config.js `relay`).
 // Not here, on purpose (each says its own thing its own way): the free layout's distanceLabel (layout/registry.js), the
-// Parcours' recap (kit/trail-store.js), the flat-Earth sums of geoservices.js and the framings (111 320 m a degree).
+// Parcours' recap (kit/trail-recap.js), the flat-Earth sums of geoservices.js and the framings (111 320 m a degree).
 
 /** The Earth's mean radius, in metres: the sphere of metres(), and of around3d.js circleBox. */
 export const R_EARTH = 6371008.8;
@@ -40,15 +38,15 @@ export const radiusWords = m => {
 
 /**
  * The radii offered, in metres: 200 m to 50 km (what iNaturalist's circle search allows; beyond 50 km the list is a
- * region's, not « around »). The mini-apps' distances (cards.js DISTANCES) and the 3D maps' radii (around3d.js
- * RADII_3D): the same array, frozen, since both read it.
+ * region's, not « around »). The mini-apps' distances (kit/cards.js) and the 3D maps' radii (around3d.js): the same
+ * array, frozen, since both read it.
  */
 export const STOPS = /** @type {number[]} */ (Object.freeze([200, 500, 1000, 2000, 5000, 10000, 20000, 50000]));
 
 /** The stops a distance slider names (the others are its minor marks). */
 export const MAJOR_STOPS = /** @type {number[]} */ (Object.freeze([200, 1000, 5000, 50000]));
 
-/** The radii of the Carte's « Autour » (nearby.js RADII): a radius kept must be one of them (savedRadius), so they stay as they are. */
+/** The radii of the Carte's « Autour »: a radius kept must be one of them (nearby.js savedRadius), so they stay as they are. */
 export const AROUND_STOPS = /** @type {number[]} */ (Object.freeze([500, 1000, 2000, 5000, 10000]));
 
 /**

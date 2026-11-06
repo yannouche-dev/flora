@@ -16,9 +16,7 @@ import { publish, subscribe } from './sync.js';
 import { exportNotes, importNotes } from './sheet-blocks.js';
 import { notesEvents, notesLoaded } from './sheet-notes.js';
 import { readJSON, readText, writeJSON, writeText } from './prefs.js';
-import { metres as distance } from './distance.js';
-
-export { FAVORITES_ID };
+import { metres } from './distance.js';
 
 /**
  * @typedef {import('./place-model.js').Place} Place
@@ -208,7 +206,7 @@ export async function copyAsList(id) {
 export const NEAR_PLACE = 100;
 
 /** Standing within NEAR_PLACE of the lieu (`fix`: where you are; none, never). @param {Collection} c @param {{ coordinates: [number, number] } | null | undefined} fix */
-const nearPlace = (c, fix) => Boolean(fix && c.geometry && distance(fix.coordinates, c.geometry.coordinates) <= NEAR_PLACE);
+const nearPlace = (c, fix) => Boolean(fix && c.geometry && metres(fix.coordinates, c.geometry.coordinates) <= NEAR_PLACE);
 
 /**
  * Where a plant added to a collection went, said (« Ajouter à… », the current list or lieu): in a lieu, at your position
@@ -379,7 +377,6 @@ export async function savePlace(place) {
   if (saved.id !== FAVORITES_ID && !saved.properties.origin) await promoteFavorites(plantIdsOf(saved.properties.plants));
   return saved;
 }
-export const saveCollection = savePlace;
 
 /**
  * Changes a stored collection atomically: `change` gets it as stored now (read in the same transaction as the write,
@@ -877,11 +874,6 @@ export function placeTitle(place) {
 /** @param {number} n */
 export const plantCount = n => `${n} plante${n > 1 ? 's' : ''}`;
 
-// The great-circle distance in metres, and a distance said (« 1,5 km »): core/distance.js's, offered here too (screens
-// import them from this module; `distance` is read here as well).
-export { distance };
-export { formatDistance } from './distance.js';
-
 /**
  * The lieux offered before a new one is made, the same everywhere (« Noter ici », a new lieu's editor:
  * gf-nearby-places): those within NEAR_PLACE of `coordinates`, nearest first, the three nearest — never a parcours (its
@@ -892,7 +884,7 @@ export { formatDistance } from './distance.js';
 export async function placesNear(coordinates, excludeId) {
   return (await listPlaces())
     .filter(place => place.id !== excludeId && !place.properties.walk)
-    .map(place => ({ place, distance: distance(coordinates, place.geometry.coordinates) }))
+    .map(place => ({ place, distance: metres(coordinates, place.geometry.coordinates) }))
     .filter(row => row.distance <= NEAR_PLACE)
     .sort((a, b) => a.distance - b.distance)
     .slice(0, 3);

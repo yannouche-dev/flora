@@ -5,6 +5,7 @@
 // change the one they are given (their `channel`, none: the app's) through SearchController and the functions of
 // core/query.js.
 
+import { emptyFilters } from '../config.js';
 import { store, whenReady } from './store.js';
 import { runSearch, searchIn } from './search.js';
 
@@ -19,7 +20,7 @@ import { runSearch, searchIn } from './search.js';
  */
 
 /** A query with nothing in it. @returns {Query} */
-export const emptyQuery = () => ({ q: '', filters: { status: [], legal: [], family: [], genus: [], photo: [], french: [], mine: [] }, sort: '' });
+export const emptyQuery = () => ({ q: '', filters: emptyFilters(), sort: '' });
 
 /** Results with nothing in them: no answer yet. */
 const noResults = () => ({ total: 0, items: [], facets: {}, suggestions: [], fuzzy: 0, sort: 'fr', counted: false, inZone: null });

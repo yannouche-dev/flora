@@ -37,7 +37,9 @@ import { StoreController } from '../../core/store.js';
 import { emergency } from '../../core/poison.js';
 import { ui } from '../../styles/ui.js';
 import { severityChip, severityStyles } from '../../components/ui-kit.js';
-import { MONTH, PAGE, distLabel, nameOf, nextDistance, saidOf } from './cards.js';
+import { MONTH, PAGE, nextDistance, saidOf } from './cards.js';
+import { nameOf } from '../../core/plants.js';
+import { radiusLabel } from '../../core/distance.js';
 import { sessionOf } from './session.js';
 import './ma-deck.js';
 import './ma-plant-sheet.js';
@@ -504,7 +506,7 @@ export class MaAroundList extends LitElement {
     const cards = s.cards;
     const view = this.#view;
     const month = MONTH[new Date().getMonth()];
-    const km = distLabel(c.radius);
+    const km = radiusLabel(c.radius);
     const left = plantsBeforeFlore();
     const matchCards = s.matchCards, matches = matchCards.length;
     const further = nextDistance(c.radius);
@@ -527,7 +529,7 @@ export class MaAroundList extends LitElement {
       ${this.harvest && s.unread && !s.loading ? html`<p class="banner-warn" role="alert">${icon('exclamation-octagon-fill')}<span><b>${UNREAD_LOOKALIKES}</b>
         <button class="link" type="button" @click=${() => s.load()}>Réessayer</button></span></p>` : nothing}
       ${harvestEmpty ? html`<div class="deck-end"><p><b>Aucune observation confirmée ici pour ces plantes : cela ne veut pas dire qu’elles sont absentes.</b></p>
-        ${further ? html`<button class="primary" type="button" @click=${() => s.widen(further)}>Chercher jusqu’à ${distLabel(further)}</button>` : nothing}</div>` : nothing}
+        ${further ? html`<button class="primary" type="button" @click=${() => s.widen(further)}>Chercher jusqu’à ${radiusLabel(further)}</button>` : nothing}</div>` : nothing}
       ${this.mosaic && cards?.length ? html`<label class="bloom-only"><input type="checkbox" .checked=${this._bloomOnly} @change=${(/** @type {any} */ e) => { this._bloomOnly = e.target.checked; }} /> En fleur maintenant (${cards.filter(x => x.blooming).length})</label>` : nothing}
       ${cards && cards.length ? html`<div class="views segmented" role="tablist" aria-label="Affichage" @keydown=${this.#tabKey}>
         ${[['swipe', 'Rencontres'], ['matches', `Matchs${matches ? ' · ' + matches : ''}`], ['all', 'Toutes']].map(([k, l]) => html`<button type="button" role="tab"

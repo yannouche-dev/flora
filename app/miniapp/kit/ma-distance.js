@@ -22,15 +22,12 @@ import { observationsAround } from '../../core/nearby.js';
 import { StoreController } from '../../core/store.js';
 import { PHONE_QUERY } from '../../core/media.js';
 import { ui } from '../../styles/ui.js';
-import { DISTANCES, distanceAt, distanceEvents, distLabel, distMood, distWords, nameOf } from './cards.js';
-import { commonOf } from '../../core/plants.js';
+import { distanceAt, distanceEvents, distMood } from './cards.js';
+import { commonOf, nameOf } from '../../core/plants.js';
 import { sessionOf } from './session.js';
 import '../../components/gf-map.js';
 import { ringAt } from '../../components/map-style.js';
-import { MAJOR_STOPS } from '../../core/distance.js';
-
-/** The stops labelled under the slider when it is narrow (all of them when there is room). */
-const MAIN_STOPS = new Set(MAJOR_STOPS);
+import { MAJOR_STOPS, STOPS, radiusLabel, radiusWords } from '../../core/distance.js';
 
 /** One element per value: a new one fades in as the value changes (lit's repeat, keyed by the value). @param {string} v @param {(v: string) => unknown} t */
 const fresh = (v, t) => repeat([v], x => x, t);
@@ -299,15 +296,15 @@ export class MaDistance extends LitElement {
 
   /** The slider of the distances: its stops, the main ones labelled. @param {number} radius */
   #range(radius) {
-    const app = /** @type {import('../runtime.js').MiniApp} */ (this.app), at = distanceAt(radius), n = DISTANCES.length - 1;
+    const app = /** @type {import('../runtime.js').MiniApp} */ (this.app), at = distanceAt(radius), n = STOPS.length - 1;
     const on = distanceEvents(() => /** @type {Record<string, any>} */ (this.c).radius, m => app.set({ radius: m }));
     return html`<div class="range" style="--n:${n};--p:${at / n}">
       <div class="rail" aria-hidden="true"></div>
-      ${DISTANCES.map((d, i) => html`<span class="stop ${i <= at ? 'on' : ''}" style="--i:${i}" aria-hidden="true"></span>`)}
-      ${DISTANCES.map((d, i) => html`<span class="mark ${MAIN_STOPS.has(d) ? '' : 'minor'} ${i === 0 ? 'first' : i === n ? 'last' : ''} ${i === at ? 'cur' : ''}"
-        style="--i:${i}" aria-hidden="true">${distLabel(d)}</span>`)}
+      ${STOPS.map((d, i) => html`<span class="stop ${i <= at ? 'on' : ''}" style="--i:${i}" aria-hidden="true"></span>`)}
+      ${STOPS.map((d, i) => html`<span class="mark ${MAJOR_STOPS.includes(d) ? '' : 'minor'} ${i === 0 ? 'first' : i === n ? 'last' : ''} ${i === at ? 'cur' : ''}"
+        style="--i:${i}" aria-hidden="true">${radiusLabel(d)}</span>`)}
       <input type="range" min="0" max=${n} step="any" .value=${String(at)} aria-label="Distance de la recherche"
-        aria-valuetext=${distWords(radius)} @input=${on.input} @keydown=${on.keydown} />
+        aria-valuetext=${radiusWords(radius)} @input=${on.input} @keydown=${on.keydown} />
     </div>`;
   }
 
@@ -315,8 +312,8 @@ export class MaDistance extends LitElement {
   #chip() {
     const app = /** @type {import('../runtime.js').MiniApp} */ (this.app), c = /** @type {Record<string, any>} */ (this.c);
     return html`<div class="chipbar">
-      <button type="button" class="dist-chip" aria-label=${`Distance : ${distWords(c.radius)} autour ${c.place ? 'de ' + c.place : 'de vous'}. Changer`}
-        @click=${() => app.go('map')}>${icon('geo-alt')} <b>${distLabel(c.radius)}</b> · Changer</button>
+      <button type="button" class="dist-chip" aria-label=${`Distance : ${radiusWords(c.radius)} autour ${c.place ? 'de ' + c.place : 'de vous'}. Changer`}
+        @click=${() => app.go('map')}>${icon('geo-alt')} <b>${radiusLabel(c.radius)}</b> · Changer</button>
       ${this.hasAttribute('band') ? html`<button type="button" class="fold" aria-expanded=${String(!this._folded)} aria-label=${this._folded ? 'Montrer la carte' : 'Replier la carte'}
         title=${this._folded ? 'Montrer la carte' : 'Replier la carte'} @click=${() => { this._folded = !this._folded; }}>${icon(this._folded ? 'chevron-down' : 'chevron-up')}</button>` : nothing}
     </div>`;
@@ -330,7 +327,7 @@ export class MaDistance extends LitElement {
       <h1>Jusqu’où part l’expédition ?</h1>
       <p>Autour ${c.place ? 'de ' + c.place : 'de vous'}. Plus le cercle est grand, plus la récolte de rencontres est riche — et plus il faudra marcher pour aller les saluer.</p>
       <div class="dist">
-        <div class="value">${fresh(distLabel(c.radius), v => html`<output>${v}</output>`)}</div>
+        <div class="value">${fresh(radiusLabel(c.radius), v => html`<output>${v}</output>`)}</div>
         <div class="moods">${fresh(distMood(c.radius), v => html`<span class="mood">${v}</span>`)}</div>
         ${this.#range(c.radius)}
       </div>
