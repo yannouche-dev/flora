@@ -5,8 +5,9 @@
 gf-map[data-renderer='3d'] .gf-map-canvas { visibility: hidden; }
 /* The credits stay those of the 2D map (its layers, the photos' sources), shown over the 3D one — never in the way of
    its controls under them (« Observations autour » on a narrow map, where the credits run over two lines): a touch
-   goes through them, but on their links. */
-gf-map[data-renderer='3d'] .gf-map-canvas .leaflet-control-attribution { visibility: visible; }
+   goes through them, but on their links. Hidden with what is around the map (--gf-attrib-visibility: an activity's box
+   under a plant's sheet, app/miniapp/gf-miniapp.js). */
+gf-map[data-renderer='3d'] .gf-map-canvas .leaflet-control-attribution { visibility: var(--gf-attrib-visibility, visible); }
 gf-map[data-renderer='3d'] .gf-map-canvas .leaflet-bottom, gf-map[data-renderer='3d'] .gf-map-canvas .leaflet-control-attribution { pointer-events: none; }
 gf-map[data-renderer='3d'] .gf-map-canvas .leaflet-control-attribution a { pointer-events: auto; }
 

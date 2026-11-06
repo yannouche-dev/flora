@@ -32,6 +32,13 @@ import '../../components/gf-plant-detail.js';
 import '../../components/gf-sheet-block.js';
 import '../../components/gf-media-viewer.js';
 
+/** The element that has the focus, through the shadow roots. @returns {HTMLElement | null} */
+const deepFocus = () => {
+  let el = /** @type {HTMLElement | null} */ (document.activeElement);
+  while (el?.shadowRoot?.activeElement) el = /** @type {HTMLElement} */ (el.shadowRoot.activeElement);
+  return el;
+};
+
 export class MaPlantSheet extends LitElement {
   static properties = {
     /** The plant shown. */
@@ -103,14 +110,15 @@ export class MaPlantSheet extends LitElement {
     super.connectedCallback();
     addEventListener('keydown', this.#onKey);
     this.#wideQuery.addEventListener('change', this.#onWide);
+    // Moved in the page (disconnected, connected again): covering again.
+    if (this.hasUpdated) this.requestUpdate();
   }
 
   disconnectedCallback() {
     super.disconnectedCallback();
     removeEventListener('keydown', this.#onKey);
     this.#wideQuery.removeEventListener('change', this.#onWide);
-    this.#uncover?.();
-    this.#uncover = null;
+    if (this.#uncover) this.#release();
   }
 
   /** Beside the box from 900 px, over it below. */
@@ -118,6 +126,8 @@ export class MaPlantSheet extends LitElement {
   #onWide = () => { this.requestUpdate(); };
   /** Given back by the box while the sheet covers it (a phone): called, the box shown again. @type {(() => void) | null} */
   #uncover = null;
+  /** What had the focus when the sheet covered it (hidden then: the focus would fall to the page). @type {HTMLElement | null} */
+  #focusBefore = null;
 
   /**
    * Under 900 px the sheet covers the whole box (its styles): it tells the box (`sheet-cover`), which hides the rest
@@ -127,14 +137,24 @@ export class MaPlantSheet extends LitElement {
     const covers = this.open != null && this.isConnected && !this.#wideQuery.matches;
     this.toggleAttribute('covering', covers);
     if (covers && !this.#uncover) {
+      // What has the focus outside the sheet goes hidden with the box: the focus into the sheet, given back once it closes.
+      const before = deepFocus();
+      this.#focusBefore = before && before !== document.body && !this.renderRoot.contains(before) ? before : null;
       /** @type {CustomEvent<{ uncover: (() => void) | null }>} */
       const ask = new CustomEvent('sheet-cover', { detail: { uncover: null }, bubbles: true, composed: true });
       this.dispatchEvent(ask);
       this.#uncover = ask.detail.uncover ?? (() => {});
-    } else if (!covers && this.#uncover) {
-      this.#uncover();
-      this.#uncover = null;
-    }
+      if (this.#focusBefore) this.takeFocus();
+    } else if (!covers && this.#uncover) this.#release();
+  }
+
+  /** The box shown again; the focus, fallen to the page with the sheet, back where it was (a frame later: a screen that gives it back itself, Orchidées' row, comes first). */
+  #release() {
+    /** @type {() => void} */ (this.#uncover)();
+    this.#uncover = null;
+    const to = this.#focusBefore;
+    this.#focusBefore = null;
+    if (to) requestAnimationFrame(() => { if (to.isConnected && (!deepFocus() || deepFocus() === document.body)) to.focus({ preventScroll: true }); });
   }
 
   /** @param {Map<string, any>} changed */
