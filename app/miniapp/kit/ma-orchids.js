@@ -154,24 +154,17 @@ export class MaOrchids extends LitElement {
   #toSheet = null;
   /** Where the focus goes once drawn, the button pressed gone with the update (« Effacer les filtres »…): a selector. @type {string | null} */
   #then = null;
-  /** A wide screen: the sheet beside the map (else over everything: the screen under it out of reach). */
-  #wide = matchMedia('(min-width: 900px)');
-
   get #map() { return /** @type {any} */ (this.renderRoot.querySelector('gf-map')); }
 
   connectedCallback() {
     super.connectedCallback();
     addEventListener('online', this.#onOnline);
-    this.#wide.addEventListener('change', this.#onWide);
   }
 
   disconnectedCallback() {
     super.disconnectedCallback();
     removeEventListener('online', this.#onOnline);
-    this.#wide.removeEventListener('change', this.#onWide);
   }
-
-  #onWide = () => { this.requestUpdate(); };
 
   /** The connection back, the observations missing for want of it: asked again (as « Réessayer »). */
   #onOnline = () => { if (/** @type {Found | null} */ (this.c?.obs)?.error?.offline && !this.#loading) this.#retry(); };
@@ -366,7 +359,8 @@ export class MaOrchids extends LitElement {
           @media-index=${this.#onMediaIndex}></ma-plant-sheet>` : nothing;
     // The panel first: the keyboard reaches the filters and the list before the map's points.
     // A phone: the sheet over everything, what is under it out of reach until it closes.
-    return html`<div class="wrap" ?inert=${sheet !== nothing && !this.#wide.matches}>
+    // A phone: the sheet covers the box, which hides the rest (kit/ma-plant-sheet, sheet-cover).
+    return html`<div class="wrap">
       <section class="panel" aria-labelledby="or-title">
         <h1 id="or-title" tabindex="-1">Les orchidées de la colline de Mirabel</h1>
         ${this.#where()}
