@@ -137,6 +137,17 @@ export const config = {
  */
 export const appKey = (id, part) => config.storageKeys.appPrefix + id + '.' + part;
 
+/**
+ * The search's facets (its filters), in the order the filter panel shows them and the address writes them: values
+ * within a facet are OR'ed, facets AND'ed (workers/search-core.js). The one list: the store, the address (query.js),
+ * a screen's search (search-channel.js), the worker and the plant pickers (search.js) all derive from it.
+ */
+export const FACETS = /** @type {const} */ (['mine', 'status', 'legal', 'family', 'genus', 'photo', 'french']);
+/** @typedef {typeof FACETS[number]} Facet */
+/** @typedef {Record<Facet, string[]>} Filters */
+/** Filters with nothing chosen: an empty list for each facet, new ones each call. @returns {Filters} */
+export const emptyFilters = () => /** @type {Filters} */ (Object.fromEntries(FACETS.map(f => [f, []])));
+
 /** TAXREF biogeographic status codes for France métropolitaine. */
 export const STATUS_LABELS = {
   P: 'Présent (indigène ou indéterminé)',

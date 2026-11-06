@@ -4,6 +4,7 @@
 import { getMembership } from './collections.js';
 import { StorageError } from './db.js';
 import { store } from './store.js';
+import { emptyFilters } from '../config.js';
 
 const worker = new Worker(new URL('../workers/search.worker.js', import.meta.url), { type: 'module' });
 
@@ -129,7 +130,6 @@ export async function searchIn({ q, filters, sort }, only, extra = {}) {
   return { total, items, facets, suggestions, fuzzy, sort: effectiveSort, counted, inZone };
 }
 
-const NO_FILTERS = { status: [], family: [], genus: [], photo: [], french: [], mine: [] };
 
 /**
  * The plants of the flora matching a text (French or scientific names, typos forgiven), the closest first —
@@ -140,7 +140,7 @@ const NO_FILTERS = { status: [], family: [], genus: [], photo: [], french: [], m
  */
 export async function findPlants(q, limit = Infinity) {
   if (!q.trim()) return [];
-  const response = await call({ type: 'search', q, filters: NO_FILTERS, sort: 'relevance', membership: {} });
+  const response = await call({ type: 'search', q, filters: emptyFilters(), sort: 'relevance', membership: {} });
   return (response.items || []).slice(0, limit);
 }
 
@@ -167,6 +167,6 @@ function mineValues(filters) {
  * @returns {Promise<{ total: number, items: any[] }>}
  */
 export async function searchPlants(q, { limit = 30 } = {}) {
-  const { total, items } = await call({ type: 'search', q, filters: NO_FILTERS, sort: '' });
+  const { total, items } = await call({ type: 'search', q, filters: emptyFilters(), sort: '' });
   return { total, items: items.slice(0, limit) };
 }

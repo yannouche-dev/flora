@@ -11,7 +11,8 @@ import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { INDEX_FIELDS, indexPlants, mergeFlora, packFlora, PACK_FORMAT } from '../../app/workers/flora-pack.js';
-import { buildIndex, FACETS, legalValues, search, vocabularyOf } from '../../app/workers/search-core.js';
+import { buildIndex, legalValues, search, vocabularyOf } from '../../app/workers/search-core.js';
+import { emptyFilters } from '../../app/config.js';
 import { packFiles } from '../../tools/pack-flora.mjs';
 import { staticGraph } from '../../tools/preload-modules.mjs';
 
@@ -21,7 +22,7 @@ import { staticGraph } from '../../tools/preload-modules.mjs';
 const ROOT = new URL('../../', import.meta.url).pathname;
 const FIXTURE = new URL('../fixtures/', import.meta.url);
 const plants = JSON.parse(readFileSync(new URL('plants.json', FIXTURE), 'utf8'));
-const NONE = Object.fromEntries(FACETS.map(f => [f, []]));
+const NONE = emptyFilters();
 /** Through JSON, as the files travel. @param {any} value */
 const wire = value => JSON.parse(JSON.stringify(value));
 
