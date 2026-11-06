@@ -498,12 +498,13 @@ test('saveMoves : un lieu et ses plantes déplacés, une seule écriture ; un li
   await C.deletePlace(gone.id);
   const [first] = /** @type {any} */ (place).properties.plants;
   /** @type {[number, number]} */ const to = [2.1234567891, 48.9876543219];
-  /** @type {[number, number]} */ const there = [2.2, 48.9];
+  /** @type {[number, number]} */ const there = [2.2000000449, 48.9];
   let writes = 0;
   const counted = () => { writes++; };
   C.spotEvents.addEventListener('change', counted);
   const result = await C.saveMoves({
-    places: [{ id: place.id, coordinates: to }],
+    // The deleted place first: its failure does not stop the others.
+    places: [{ id: gone.id, coordinates: to }, { id: place.id, coordinates: to }],
     plants: [
       { placeId: place.id, entryId: first.id, plantId: 1, coordinates: there },
       { placeId: place.id, plantId: 2, coordinates: there },
@@ -517,7 +518,7 @@ test('saveMoves : un lieu et ses plantes déplacés, une seule écriture ; un li
   assert.equal(await C.getPlace(gone.id), undefined);
   const stored = /** @type {any} */ (await C.getPlace(place.id));
   assert.deepEqual([stored.geometry.coordinates, stored.properties.accuracy], [[2.1234568, 48.9876543], null]);
-  assert.deepEqual(stored.properties.plants.map((/** @type {any} */ e) => [e.plantId, e.coordinates, e.accuracy]), [[1, there, null], [2, there, null]]);
+  assert.deepEqual(stored.properties.plants.map((/** @type {any} */ e) => [e.plantId, e.coordinates, e.accuracy]), [[1, [2.2, 48.9], null], [2, [2.2, 48.9], null]], 'arrondies à 7 décimales');
   assert.equal(writes, 1, 'une seule écriture : le lieu et ses deux plantes ensemble');
   await db.remove('spots', place.id);
 });

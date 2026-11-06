@@ -399,9 +399,9 @@ export class GfSheetMap extends LitElement {
    */
   async #savePositions({ places, plants }) {
     // On the place as stored now (its other plants may have changed meanwhile, in another tab): one write per place.
-    const { failed } = await saveMoves({ places, plants }, id => this._spots.some(p => p.id === id));
+    const { saved, failed } = await saveMoves({ places, plants }, id => this._spots.some(p => p.id === id));
     if (failed.length) this.#map?.toast('Enregistrement impossible : ' + failed[0].error.message);
-    else this.#map?.announce('Position enregistrée');
+    else if (saved.length) this.#map?.announce('Position enregistrée');
   }
 
   /**

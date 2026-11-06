@@ -283,10 +283,10 @@ export class GfMapPage extends LitElement {
     this.#said(await saveMoves({ places, plants }, id => this._spots.some(s => s.id === id)));
   }
 
-  /** What ✓ Valider wrote, said on the map. @param {{ failed: { error: Error }[] }} result */
-  #said({ failed }) {
+  /** What ✓ Valider wrote, said on the map (nothing written, nothing said). @param {{ saved: string[], failed: { error: Error }[] }} result */
+  #said({ saved, failed }) {
     if (failed.length) this.#map?.toast('Enregistrement impossible : ' + failed[0].error.message);
-    else this.#map?.announce('Position enregistrée');
+    else if (saved.length) this.#map?.announce('Position enregistrée');
   }
 
   /** The Carte's map (gf-map: what it says goes through it — the quiet-map rule). @returns {any} */

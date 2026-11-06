@@ -101,9 +101,9 @@ export class GfPlantSpots extends LitElement {
 
   /** ✓ Valider on the map (✎): this plant's new position in each place it was moved in, said on the map. @param {{ placeId: string, entryId?: string, plantId: number | null, coordinates: [number, number] }[]} moves */
   async #savePositions(moves) {
-    const { failed } = await saveMoves({ plants: moves }, id => this._spots.some(p => p.id === id));
+    const { saved, failed } = await saveMoves({ plants: moves }, id => this._spots.some(p => p.id === id));
     if (failed.length) this.#map?.toast('Enregistrement impossible : ' + failed[0].error.message);
-    else this.#map?.announce('Position enregistrée');
+    else if (saved.length) this.#map?.announce('Position enregistrée');
   }
 
   /** The map of these places (gf-map: what it says goes through it — the quiet-map rule). @returns {any} */
