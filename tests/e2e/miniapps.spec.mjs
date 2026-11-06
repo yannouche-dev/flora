@@ -216,6 +216,38 @@ test('Parcours : en marche puis « Recommencer » ; le parcours enregistré quit
   expect(await owned()).toEqual([null, null, null]);
 });
 
+test('⋯ « Remettre la mise en page » : la colonne du Parcours reprend sa largeur, aussitôt et au rechargement ; le parcours en cours reste', async ({ app, page, isMobile }) => {
+  test.skip(Boolean(isMobile), 'la colonne à côté de la carte : un grand écran');
+  await app.open('#/app/parcours');
+  const box = page.locator('gf-miniapp');
+  await box.locator('.go').click();
+  await expect.poll(() => step(page)).toBe('walk');
+  await box.locator('.search input').fill('ortie dioique');
+  await box.locator('.hit').filter({ hasText: 'Urtica dioica' }).locator('.add').click();
+  await expect(box.locator('.mine > li')).toHaveCount(1);
+  const width = () => box.locator('ma-walk .side').evaluate(e => Math.round(e.getBoundingClientRect().width));
+  const stored = () => page.evaluate(() => localStorage.getItem('geoflora.trailLayout'));
+  const w0 = await width();
+  const sep = box.locator('ma-walk [role=separator][data-pane="side"]');
+  await sep.focus();
+  await page.keyboard.press('ArrowRight');
+  await page.keyboard.press('ArrowRight');
+  await expect.poll(width).toBeGreaterThan(w0);
+  expect(await stored()).not.toBeNull();
+  await box.locator('.more summary').click();
+  await box.locator('.menu').getByRole('button', { name: 'Remettre la mise en page' }).click();
+  await expect.poll(width).toBe(w0);
+  expect(await stored()).toBeNull();
+  // The walk stays: its plant, its step, its session.
+  await expect(box.locator('.mine > li')).toHaveCount(1);
+  expect(await step(page)).toBe('walk');
+  expect(await page.evaluate(() => localStorage.getItem('geoflora.trail'))).not.toBeNull();
+  await page.reload();
+  await app.ready();
+  await expect(page.locator('gf-miniapp .mine > li')).toHaveCount(1);
+  await expect.poll(width).toBe(w0);
+});
+
 test('Parcours : ses étapes (Départ › En marche › Bilan), Retour étape par étape ; l’adresse sans étape retrouve la marche', async ({ app, page }) => {
   await app.open('#/discover');
   await app.go('#/app/parcours');
