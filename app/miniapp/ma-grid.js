@@ -14,7 +14,7 @@ import { LitElement, html, css, nothing, repeat } from 'lit';
 import { PaneSizer, paneStyles } from '../core/panes.js';
 import { fit, HANDLE } from './layout.js';
 import { kit } from './kit.js';
-import { storageKey } from './runtime.js';
+import { appKey } from '../config.js';
 import { icon } from '../core/icons.js';
 import { ui } from '../styles/ui.js';
 
@@ -91,20 +91,15 @@ export class MaGrid extends LitElement {
     // The widths of this app's columns, per tier ('wide:list'), kept as Mes plantes keeps its panes'.
     if (changed.has('app') && this.app) {
       this.#sizer?.dispose();
-      this.#sizer = new PaneSizer(this, storageKey(this.app.m.id, 'layout'), {}, {
+      this.#sizer = new PaneSizer(this, appKey(this.app.m.id, 'layout'), {}, {
         // A map beside the separator keeps its frame as its column changes width.
         onChange: () => { for (const m of this.renderRoot.querySelectorAll('gf-map')) /** @type {any} */ (m).holdFrame?.(); }
       });
     }
   }
 
-  /** The widths back to the manifest's (« Remettre la mise en page »). */
-  resetLayout() {
-    const s = this.#sizer;
-    if (!s) return;
-    for (const pane of Object.keys(s.state.widths)) s.reset(pane);
-    this._tabs = {};
-  }
+  /** Its tabs back to the first (« Remettre la mise en page »; the widths: core/panes.js resetPanes). */
+  resetTabs() { this._tabs = {}; }
 
   render() {
     const app = this.app;

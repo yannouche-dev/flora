@@ -96,7 +96,7 @@ export default defineMiniApp({
   scene: 'orchids',
   pitch: 'Les orchidées observées sur la colline de Mirabel, à Ménétrol : sur la carte, et la fiche de chacune d’un toucher.',
   exit: { label: 'Quitter l’activité' },
-  owns: { keys: ['geoflora.app.orchidees.sheet'], label: 'le cercle et les filtres choisis' },
+  owns: { label: 'le cercle et les filtres choisis' },
   shared: ['réglages'],
   context: {
     // The circle: its centre (the hill, or where a long press put it) and its radius (the slider's stops), kept.

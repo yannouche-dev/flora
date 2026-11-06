@@ -283,7 +283,7 @@ test('modules : toute clé gardée est un module coupé, pour tout l’appareil 
   stored(null);
 });
 
-test('prefs : chaque clé que l’app nomme est une clé de config.storageKeys, ou sous le préfixe d’une mini-app', async () => {
+test('prefs : chaque clé que l’app nomme est une clé de config.storageKeys ; celles d’une activité, seul appKey les forme', async () => {
   const { readdir, readFile } = await import('node:fs/promises');
   const root = new URL('../../app/', import.meta.url);
   const keys = new Set(Object.values(config.storageKeys));
@@ -293,7 +293,7 @@ test('prefs : chaque clé que l’app nomme est une clé de config.storageKeys, 
     if (!file.endsWith('.js') || file === 'config.js') continue;
     const text = await readFile(new URL(file, root), 'utf8');
     for (const [, key] of text.matchAll(/['"`](geoflora\.[A-Za-z0-9._-]*)['"`]/g)) {
-      if (!keys.has(key) && !key.startsWith(config.storageKeys.appPrefix) && key !== config.storageKeys.appPrefix) strays.push(`${file}: ${key}`);
+      if (!keys.has(key) || key.startsWith(config.storageKeys.appPrefix)) strays.push(`${file}: ${key}`);
     }
   }
   assert.deepEqual(strays, []);
@@ -319,4 +319,32 @@ test('prefs : les clés que l’app n’a plus, oubliées au lancement — jamai
   assert.equal(localStorage.getItem(config.storageKeys.plantNotes), '{}', 'les notes d’avant : déplacées par sheet-notes.js, jamais effacées ici');
   assert.ok(!config.obsoleteKeys.includes(config.storageKeys.plantNotes));
   localStorage.removeItem(config.storageKeys.plantNotes);
+});
+
+test('les clés d’une activité : écrites une fois, les mêmes chaînes qu’avant ; « Remettre la mise en page » ne vise que des largeurs', async () => {
+  const { appKey } = await import('../../app/config.js');
+  const { layoutKeys } = await import('../../app/miniapp/runtime.js');
+  assert.equal(appKey('faux-amis', 'sheet'), 'geoflora.app.faux-amis.sheet');
+  assert.equal(appKey('rencontres', 'state'), 'geoflora.app.rencontres.state');
+  /** The keys each activity named by hand before (the same strings: nothing stored is lost). */
+  const before = {
+    cueillette: ['geoflora.app.cueillette.sheet'], mosaique: ['geoflora.app.mosaique.sheet'],
+    rencontres: ['geoflora.discoverLayout', 'geoflora.app.rencontres.media', 'geoflora.app.rencontres.sheet'],
+    orchidees: ['geoflora.app.orchidees.sheet'], 'faux-amis': ['geoflora.app.faux-amis.sheet']
+  };
+  const manifests = {
+    cueillette: (await import('../../app/miniapps/cueillette.js')).default, mosaique: (await import('../../app/miniapps/mosaique.js')).default,
+    rencontres: (await import('../../app/miniapps/rencontres.js')).default, orchidees: (await import('../../app/miniapps/orchidees.js')).default,
+    'faux-amis': (await import('../../app/miniapps/faux-amis.js')).default
+  };
+  for (const [id, keys] of Object.entries(before)) {
+    const m = manifests[/** @type {keyof typeof manifests} */ (id)];
+    const widths = layoutKeys(m);
+    for (const key of [...keys, `geoflora.app.${id}.layout`]) assert.ok(widths.includes(key), `${id}: ${key}`);
+    for (const key of widths) {
+      const own = key.startsWith(`geoflora.app.${id}.`) && key !== `geoflora.app.${id}.state`;
+      assert.ok(own || config.paneLayouts.includes(key), `${id}: ${key} is a width`);
+      assert.ok(!(m.owns.keys ?? []).includes(key), `${id}: ${key} not in owns.keys`);
+    }
+  }
 });

@@ -20,7 +20,7 @@
 // the focus on what follows it. It writes only the activity's context (app.set): no mode, no sheet layout.
 
 import { LitElement, html, css, nothing } from 'lit';
-import { config } from '../../config.js';
+import { appKey } from '../../config.js';
 import { forgetFailures } from '../../core/cache.js';
 import { icon } from '../../core/icons.js';
 import { fr } from '../../core/fr.js';
@@ -41,8 +41,6 @@ import '../../components/gf-thumb.js';
  * @typedef {import('./orchids.js').Found} Found
  */
 
-/** Where the width of a plant's sheet beside the map is kept (the manifest's owns.keys: « Recommencer » forgets it). */
-const SHEET_KEY = config.storageKeys.appPrefix + 'orchidees.sheet';
 /** How the circle moves, said under the place and to the map's readers. */
 const PRESS = 'Appui long sur la carte, puis « Confirmer » : le cercle s’y centre.';
 /** The circle's handle on the map: from stop to stop of the slider (core/distance.js STOPS), its keys and its words. */
@@ -355,7 +353,7 @@ export class MaOrchids extends LitElement {
     const found = /** @type {Found | null} */ (c.obs), shown = /** @type {Shown | null} */ (c.shown);
     const ok = found && !found.error;
     const sheet = typeof c.focus === 'number'
-      ? html`<ma-plant-sheet .open=${c.focus} .mediaAt=${c.mediaAt ?? 0} .cards=${this.#cards()} scoped simple layout-key=${SHEET_KEY}
+      ? html`<ma-plant-sheet .open=${c.focus} .mediaAt=${c.mediaAt ?? 0} .cards=${this.#cards()} scoped simple layout-key=${appKey(/** @type {any} */ (this.app).m.id, 'sheet')}
           @media-index=${this.#onMediaIndex}></ma-plant-sheet>` : nothing;
     // The panel first: the keyboard reaches the filters and the list before the map's points.
     // A phone: the sheet over everything, what is under it out of reach until it closes.

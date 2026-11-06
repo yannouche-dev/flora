@@ -59,6 +59,21 @@ export const paneStyles = css`
 
 /** @typedef {import('lit').ReactiveController} ReactiveController */
 
+/** The sizers on screen now, by their key (connected hosts): resetPanes reaches them. @type {Map<string, Set<PaneSizer>>} */
+const live = new Map();
+
+/**
+ * Layouts back to their default widths, unfolded, their keys removed (as if never touched) — those on screen at once,
+ * drawn again (a map beside a separator holds its frame: `onChange`). An activity's « Remettre la mise en page »
+ * (miniapp/runtime.js layoutKeys). @param {string[]} keys
+ */
+export function resetPanes(keys) {
+  for (const key of keys) {
+    writeJSON(key, null); // not written: the default for this visit only, as every width
+    for (const sizer of live.get(key) ?? []) sizer.forget();
+  }
+}
+
 /**
  * Widths and folds of a layout's panes, saved under `storageKey`.
  * @implements {ReactiveController}
@@ -89,9 +104,15 @@ export class PaneSizer {
   };
   #frame = 0;
 
-  hostConnected() { addEventListener('resize', this.#onResize); }
+  hostConnected() {
+    addEventListener('resize', this.#onResize);
+    let mine = live.get(this.key);
+    if (!mine) live.set(this.key, mine = new Set());
+    mine.add(this);
+  }
 
   hostDisconnected() {
+    live.get(this.key)?.delete(this);
     removeEventListener('resize', this.#onResize);
     cancelAnimationFrame(this.#frame);
     this.#frame = 0;
@@ -174,6 +195,13 @@ export class PaneSizer {
         this.setWidth(pane, clamp(now + (side === 'left' ? dir : -dir) * (e.shiftKey ? 64 : 16)));
       }}
       @dblclick=${() => this.reset(pane)}></div>`;
+  }
+
+  /** Every pane back to its default width, unfolded — in memory (resetPanes removed its key). */
+  forget() {
+    for (const pane of Object.keys(this.state.widths)) this.onChange?.(pane);
+    this.state = { widths: {}, folded: {} };
+    this.host.requestUpdate();
   }
 
   /** Back to its default width. @param {string} pane */

@@ -5,7 +5,7 @@
 // Read here for what is not a mini-app: the list of Découvrir (« Continuer »), the place the sheet's map starts from, the
 // privacy page (« Oublier ma dernière position »), the first steps started again (Réglages).
 
-import { config } from '../config.js';
+import { appKey } from '../config.js';
 import { readJSON, writeJSON } from './prefs.js';
 
 /** The mini-apps around a place, Rencontres first (the one whose place is « the last one » for the rest of the app). */
@@ -19,7 +19,7 @@ const V = 1;
  */
 
 /** @param {string} id */
-const keyOf = id => config.storageKeys.appPrefix + id + '.state';
+const keyOf = id => appKey(id, 'state');
 
 /** @param {string} id @returns {Saved | null} */
 function read(id) {

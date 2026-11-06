@@ -11,7 +11,7 @@
 // said, with « Réessayer » (the game kept). It scrolls itself: one h1 a view, the focus on it as a view comes.
 
 import { LitElement, html, css, nothing, repeat } from 'lit';
-import { config } from '../../config.js';
+import { appKey } from '../../config.js';
 import * as db from '../../core/db.js';
 import { creditText } from '../../core/credit.js';
 import { icon } from '../../core/icons.js';
@@ -53,8 +53,6 @@ function plantFor(taxon) {
 
 /** « Titre — Anses et Centres antipoison, 2025 »: what it is, who said it, and when. @param {import('../../core/lookalikes.js').Source} s */
 const sourceLine = s => `${s.title} — ${s.publisher}, ${String(s.date).slice(0, 4)}`;
-/** Where the width of a plant's sheet beside the recap is kept (the manifest's owns.keys: « Recommencer » forgets it). */
-const SHEET_KEY = config.storageKeys.appPrefix + 'faux-amis.sheet';
 
 export class MaFauxAmis extends LitElement {
   static properties = {
@@ -269,7 +267,7 @@ export class MaFauxAmis extends LitElement {
   render() {
     const c = this.c;
     if (!c || !this.app || !c.game) return nothing;
-    const sheet = typeof c.focus === 'number' ? html`<ma-plant-sheet .open=${c.focus} scoped layout-key=${SHEET_KEY}></ma-plant-sheet>` : nothing;
+    const sheet = typeof c.focus === 'number' ? html`<ma-plant-sheet .open=${c.focus} scoped layout-key=${appKey(/** @type {any} */ (this.app).m.id, 'sheet')}></ma-plant-sheet>` : nothing;
     // The file being read, or unreadable (said, never « nothing to fear »; « Réessayer » reads it again, the game kept).
     if (!c.lookalikes) return html`<div class="wrap"><h1 class="visually-hidden">Faux amis</h1><p class="state" role="status">Les cartes…</p></div>`;
     if (c.lookalikes.unread) return html`<div class="wrap"><section class="card-view">

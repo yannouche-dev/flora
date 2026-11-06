@@ -40,7 +40,8 @@ export const config = {
     around3d: 'geoflora.around3d',
     discoverLayout: 'geoflora.discoverLayout',
     trailLayout: 'geoflora.trailLayout',
-    // Mini-apps (app/miniapp): « Afficher les étapes » (auto, on, off); each one's state and layout under the prefix.
+    // Mini-apps (app/miniapp): « Afficher les étapes » (auto, on, off); each one's state and layout under the prefix
+    // (appKey, below).
     showSteps: 'geoflora.showSteps',
     appPrefix: 'geoflora.app.',
     lastExport: 'geoflora.lastExport',
@@ -111,7 +112,8 @@ export const config = {
   /**
    * The keys of the panes' widths (core/panes.js), one per screen: the first steps (core/discover.js) never read
    * them as « used before » — a new visitor who drags a separator keeps them. A new layout's key goes here too.
-   * (A mini-app's layouts are under its own prefix, storageKeys.appPrefix.)
+   * (An activity's own are in its space: appKey; those it keeps here — trailLayout, discoverLayout — its manifest lists
+   * in owns.layouts.)
    */
   paneLayouts: ['geoflora.discoverLayout', 'geoflora.trailLayout', 'geoflora.floraLayout', 'geoflora.collectionsLayout',
     'geoflora.mapLayout', 'geoflora.placeLayout', 'geoflora.mediaLayout', 'geoflora.freeLayout'],
@@ -122,6 +124,18 @@ export const config = {
   /** Desktop layout (filter sidebar) from this width; below, filters open in a bottom sheet. */
   wideQuery: '(min-width: 900px)'
 };
+
+/**
+ * @typedef {'state' | 'layout' | 'sheet' | 'media'} AppPart  what an activity keeps in its own space: `state` its context
+ *   and steps (miniapp/runtime.js); the widths of its panes — `layout` its columns (miniapp/ma-grid.js), `sheet` a
+ *   plant's sheet beside them (kit/ma-plant-sheet.js), `media` Rencontres' photos (kit/ma-around-list.js)
+ */
+
+/**
+ * An activity's own key: geoflora.app.<id>.<part>, under storageKeys.appPrefix — formed here only (its manifest names
+ * none; tests/unit/storage.test.mjs refuses one spelled out elsewhere). @param {string} id @param {AppPart} part
+ */
+export const appKey = (id, part) => config.storageKeys.appPrefix + id + '.' + part;
 
 /** TAXREF biogeographic status codes for France métropolitaine. */
 export const STATUS_LABELS = {

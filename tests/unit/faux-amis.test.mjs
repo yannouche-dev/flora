@@ -8,7 +8,8 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { CARDS, CLUED, SKIP, SHOWN_SPECIES, answered, cardsOf, cluesOf, dealGame, noCriterion, pairKey, pickPlant, scoreOf } from '../../app/miniapp/kit/faux-amis.js';
 import { nextCard, underWay } from '../../app/miniapp/kit/faux-amis-store.js';
-import { MiniApp, storageKey } from '../../app/miniapp/runtime.js';
+import { MiniApp } from '../../app/miniapp/runtime.js';
+import { appKey } from '../../app/config.js';
 import { random } from './support/random.mjs';
 
 const json = async (/** @type {string} */ path) => JSON.parse(await readFile(new URL('../../' + path, import.meta.url), 'utf8'));
@@ -185,12 +186,12 @@ test('Faux amis : « Commencer » quitté avant que la liste arrive ne distribue
     await dealing;
     await new Promise(resolve => setTimeout(resolve, 400));
     assert.equal(app.c.game, null);
-    assert.equal(localStorage.getItem(storageKey('faux-amis', 'state')), null);
+    assert.equal(localStorage.getItem(appKey('faux-amis', 'state')), null);
   } finally { globalThis.fetch = real; }
   // Once read, dealt at once: a game of six, at « play ».
   const app = new MiniApp(m, { saved: null });
   await app.do('deal');
   assert.deepEqual([app.c.game.cards.length, app.step.id], [6, 'play']);
   app.dispose();
-  localStorage.removeItem(storageKey('faux-amis', 'state'));
+  localStorage.removeItem(appKey('faux-amis', 'state'));
 });

@@ -21,7 +21,8 @@ import { readFile } from 'node:fs/promises';
 const db = await import('../../app/core/db.js');
 const { store } = await import('../../app/core/store.js');
 const { territoryAt } = await import('../../app/core/territory.js');
-const { MiniApp, storageKey } = await import('../../app/miniapp/runtime.js');
+const { MiniApp } = await import('../../app/miniapp/runtime.js');
+const { appKey } = await import('../../app/config.js');
 const { NO_GENUS, ORCHIDACEAE, ORCHID_FILTERS, RADIUS, SITE, asked: askedOf, askedKey, factsOf, filterOrchids, filtering, genusWord, markVague, nameRank, orchidFilters, sameSpot, sourcesOf } = await import('../../app/miniapp/kit/orchids.js');
 const { obsNotes } = await import('../../app/core/observations.js');
 const orchidees = (await import('../../app/miniapps/orchidees.js')).default;
@@ -117,7 +118,7 @@ test('Orchidées de Mirabel : seules les orchidées demandées aux deux sources,
   const asked = [];
   t.after(answering(asked));
   const app = new MiniApp(orchidees, { saved: null });
-  t.after(() => { app.dispose(); localStorage.removeItem(storageKey('orchidees', 'state')); });
+  t.after(() => { app.dispose(); localStorage.removeItem(appKey('orchidees', 'state')); });
   assert.deepEqual([app.step.id, app.c.point, app.c.radius, app.c.genera, app.c.marks, app.c.query], ['start', SITE, 500, [], [], '']);
   // « Sur cette carte »: every choice ticked at first.
   assert.deepEqual([app.c.sources, app.c.cultivated, app.c.approximate], [['inat', 'gbif'], true, true]);

@@ -30,7 +30,7 @@ import { UNREAD_LOOKALIKES } from '../../core/lookalikes.js';
 import { moduleEvents, moduleOn } from '../../core/modules.js';
 import { openModal } from '../../core/history.js';
 import { briefToast } from '../../core/toast.js';
-import { config } from '../../config.js';
+import { appKey } from '../../config.js';
 import { PaneSizer, splitStyles } from '../../core/panes.js';
 import { sheetSession } from '../../core/sheet-session.js';
 import { StoreController } from '../../core/store.js';
@@ -252,9 +252,10 @@ export class MaAroundList extends LitElement {
     // A phone, the photos full screen: on the plant chosen, whatever chose it.
     const chosen = s.chosenId;
     if (this._full != null && chosen != null && this._full !== chosen) this._full = chosen;
-    // Rencontres' photos: the width of their pane, the user's (the game's: « Recommencer » forgets it).
+    // Rencontres' photos: the width of their pane, the user's (its own space: « Remettre la mise en page » gives it back,
+    // « Recommencer » forgets it).
     if (this.media && !this.#sizer) {
-      this.#sizer = new PaneSizer(this, config.storageKeys.appPrefix + this.app.m.id + '.media', { media: { width: 440, min: 300, title: 'Photos' } });
+      this.#sizer = new PaneSizer(this, appKey(this.app.m.id, 'media'), { media: { width: 440, min: 300, title: 'Photos' } });
     }
     this.toggleAttribute('media-open', this.#paneId != null);
   }
@@ -551,7 +552,7 @@ export class MaAroundList extends LitElement {
     <p class="visually-hidden" role="status">${this._said || ''}</p>
     ${this._match ? this.#matchView(this._match) : nothing}
     ${this.#fullView()}
-    ${this.#sheetId != null ? html`<ma-plant-sheet .open=${this.#sheetId} .cards=${s.sheetCards} .mediaAt=${c.mediaAt ?? 0} scoped layout-key=${config.storageKeys.appPrefix + this.app.m.id + '.sheet'}
+    ${this.#sheetId != null ? html`<ma-plant-sheet .open=${this.#sheetId} .cards=${s.sheetCards} .mediaAt=${c.mediaAt ?? 0} scoped layout-key=${appKey(this.app.m.id, 'sheet')}
       @ma-plant=${this.#onSheet} @media-index=${this.#onMediaIndex}></ma-plant-sheet>` : nothing}`;
   }
 
