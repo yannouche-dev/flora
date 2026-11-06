@@ -648,12 +648,12 @@ test('un h1 par écran, au bureau comme au téléphone : Mes plantes avec une fi
   await expect.poll(() => h1s(page)).toEqual(['Nouvelle liste']);
   await app.go('#/collection/new?kind=place');
   await expect.poll(() => h1s(page)).toEqual(['Nouveau lieu']);
+  await app.go(`#/app/rencontres?p=${ortie}&fiche=1`);
+  await expect.poll(() => h1s(page)).toEqual([app.phone ? 'Ortie dioïque' : expect.stringMatching(/^Rencontrez les plantes/)]);
   if (app.phone) {
     await app.go(`#/plant/${ortie}?pane=media`);
     await expect.poll(() => h1s(page)).toEqual([expect.stringMatching(/^Médias/)]);
   }
-  await app.go(`#/app/rencontres?p=${ortie}&fiche=1`);
-  await expect.poll(() => h1s(page)).toEqual([app.phone ? 'Ortie dioïque' : expect.stringMatching(/^Rencontrez les plantes/)]);
 });
 
 test('téléphone : rien d’atteignable sous une fiche — Mes plantes (sa liste, l’en-tête), une activité (sa barre, son écran) ; refermée, tout revient', async ({ app, page }) => {
