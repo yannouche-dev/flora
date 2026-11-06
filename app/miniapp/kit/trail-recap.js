@@ -3,7 +3,7 @@
 // the start of the app reads: the walk (core/walk.js) and the altitudes (core/altitude.js) come with the recap only.
 // Tested under Node (tests/unit/trail.test.mjs).
 
-import { metres as distance } from '../../core/distance.js';
+import { metres } from '../../core/distance.js';
 import { altitudeOf, profileOf } from '../../core/altitude.js';
 import { walkOf } from '../../core/walk.js';
 
@@ -23,9 +23,9 @@ export function recapOf(t) {
   const profile = profileOf([
     ...(start ? [{ at: start, m: altitudeOf(t.properties, start), label: 'Départ' }] : []),
     ...own.map(e => ({ at: e.coordinates, m: altitudeOf(e, e.coordinates), label: e.vernacularName || e.scientificName }))
-  ], distance);
+  ], metres);
   let km = 0;
-  for (let i = 1; i < placed.length; i++) km += distance(placed[i - 1], placed[i]) / 1000;
+  for (let i = 1; i < placed.length; i++) km += metres(placed[i - 1], placed[i]) / 1000;
   const times = [Date.parse(t.properties.createdAt), ...steps.map(e => Date.parse(e.addedAt))].filter(Number.isFinite);
   let ms = 0;
   for (let i = 1; i < times.length; i++) { const gap = times[i] - times[i - 1]; if (gap > 0 && gap <= PAUSE_MS) ms += gap; }

@@ -1,12 +1,13 @@
 // @ts-check
 import { LitElement, html, css, nothing } from 'lit';
 import { href } from '../core/router.js';
-import { collectionsForPlant, formatDistance, listCollections, plantMarkers, saveMoves, spotEvents } from '../core/collections.js';
+import { collectionsForPlant, listCollections, plantMarkers, saveMoves, spotEvents } from '../core/collections.js';
 import { APP } from '../core/search-channel.js';
 import { lastFix, oneFix } from '../core/geo.js';
 import { FRANCE_BOUNDS, WORLD_BOUNDS } from '../core/ign.js';
 import { moduleOn } from '../core/modules.js';
-import { observationsAround, RADII, savedRadius, saveRadius } from '../core/nearby.js';
+import { observationsAround, savedRadius, saveRadius } from '../core/nearby.js';
+import { AROUND_STOPS, formatDistance } from '../core/distance.js';
 import { zoneShape } from '../core/geoservices.js';
 import { bundledOutline, mapRegion, myRegion } from '../core/territory.js';
 import { keptPlace } from '../core/around-sessions.js';
@@ -692,7 +693,7 @@ export class GfSheetMap extends LitElement {
         ${frameBtn('france', 'France')}
         ${frameBtn('world', 'Monde')}
       </div>
-      ${about && showRadius ? html`<b>Rayon</b><div class="row">${RADII.map(d => html`<button type="button" data-radius=${d} aria-pressed=${String(r === d)}
+      ${about && showRadius ? html`<b>Rayon</b><div class="row">${AROUND_STOPS.map(d => html`<button type="button" data-radius=${d} aria-pressed=${String(r === d)}
         @click=${() => this.#setRadius(d)}>${formatDistance(d)}</button>`)}</div>` : nothing}
       <b>Données</b><div class="row">
         ${gbifReady ? html`<button type="button" data-layer="gbif-fr" aria-pressed=${String(c.gbif === 'fr')} title="Répartition GBIF en France" @click=${() => this.#set({ gbif: c.gbif === 'fr' ? 'off' : 'fr' })}><i style="background:#f97316"></i>Répartition France</button>

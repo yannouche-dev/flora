@@ -1,7 +1,7 @@
 // app/core/distance.js: the great-circle distance (metres), a distance measured said (formatDistance), a radius shown
 // and said (radiusLabel, radiusWords), the radii offered (STOPS and their subsets) and the stop nearest a distance;
-// and the modules that offered them first offering the same functions and arrays under their old names (collections.js,
-// around3d.js, cards.js, nearby.js). The strings expected are those the code printed before it moved here.
+// each under this one name, offered by no other module (collections.js, around3d.js, cards.js and nearby.js offered
+// them under other names before). The strings expected are those the code printed before it moved here.
 import 'fake-indexeddb/auto';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -17,7 +17,7 @@ const MARSEILLE = /** @type {[number, number]} */ ([5.3698, 43.2965]);
 
 test('metres : la distance à vol d’oiseau, sur la sphère de rayon moyen', () => {
   assert.equal(R_EARTH, 6371008.8);
-  // The value collections.js#distance and around3d.js#metres both gave (the same haversine, bit for bit).
+  // The value collections.js and around3d.js both gave before (the same haversine, bit for bit).
   assert.equal(metres(PARIS, MARSEILLE), 660479.2919652576);
   assert.equal(metres(MARSEILLE, PARIS), metres(PARIS, MARSEILLE));
   assert.equal(metres(PARIS, PARIS), 0);
@@ -25,17 +25,15 @@ test('metres : la distance à vol d’oiseau, sur la sphère de rayon moyen', ()
   assert.ok(Math.abs(metres([0, 0], [1, 0]) - R_EARTH * Math.PI / 180) < 1e-6);
 });
 
-test('les anciens noms donnent les mêmes fonctions et les mêmes listes', () => {
-  assert.equal(collections.distance, metres);
-  assert.equal(collections.formatDistance, formatDistance);
-  assert.equal(around3d.metres, metres);
-  assert.equal(around3d.radiusLabel, radiusLabel);
-  assert.equal(around3d.radiusWords, radiusWords);
-  assert.equal(cards.distLabel, radiusLabel);
-  assert.equal(cards.distWords, radiusWords);
-  assert.equal(cards.DISTANCES, STOPS);
-  assert.equal(around3d.RADII_3D, STOPS);
-  assert.equal(nearby.RADII, AROUND_STOPS);
+test('un nom par chose : distances, rayons et crans ne s’importent que de distance.js', () => {
+  /** @type {[Record<string, unknown>, string[]][]} */
+  const before = [
+    [collections, ['distance', 'formatDistance', 'metres']],
+    [around3d, ['RADII_3D', 'STOPS', 'metres', 'radiusLabel', 'radiusWords']],
+    [cards, ['DISTANCES', 'STOPS', 'distLabel', 'distWords', 'radiusLabel', 'radiusWords']],
+    [nearby, ['RADII', 'AROUND_STOPS']]
+  ];
+  for (const [module, names] of before) for (const name of names) assert.ok(!(name in module), name);
   assert.deepEqual(STOPS, [200, 500, 1000, 2000, 5000, 10000, 20000, 50000]);
   assert.deepEqual(MAJOR_STOPS, [200, 1000, 5000, 50000]);
   // A radius kept (Carte → Autour) must still be one of these (nearby.js savedRadius).

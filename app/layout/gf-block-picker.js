@@ -25,7 +25,8 @@
 import { LitElement, html, css, nothing } from 'lit';
 import { icon } from '../core/icons.js';
 import { ui } from '../styles/ui.js';
-import { DISTANCES, distanceAt, distanceEvents } from '../miniapp/kit/cards.js';
+import { distanceAt, distanceEvents } from '../miniapp/kit/cards.js';
+import { STOPS } from '../core/distance.js';
 import { cellIcon, COMPONENTS, distanceLabel, resolve } from './registry.js';
 import { cell as makeCell } from './grammar.js';
 import { bundleOf, cellChips, changed, groupSummary, intentKey, valueLabel, valueOf } from './summary.js';
@@ -418,7 +419,7 @@ export class GfBlockPicker extends LitElement {
     } else if (kind === 'slider') {
       const m = /** @type {number | null} */ (v);
       const ev = distanceEvents(() => m ?? 2000, x => set(x));
-      body = html`<div class="slider"><input type="range" min="0" max=${DISTANCES.length - 1} step="any" .value=${String(distanceAt(m ?? 2000))}
+      body = html`<div class="slider"><input type="range" min="0" max=${STOPS.length - 1} step="any" .value=${String(distanceAt(m ?? 2000))}
           aria-labelledby=${id} aria-valuetext=${m == null ? 'par défaut' : distanceLabel(m)} @input=${ev.input} @keydown=${ev.keydown} />
         <output>${m == null ? 'Par défaut' : distanceLabel(m)}</output></div>
         ${r.given.has(key) ? html`<div class="seg"><button type="button" data-act="default" @click=${() => set(null)}>Par défaut</button></div>` : nothing}`;

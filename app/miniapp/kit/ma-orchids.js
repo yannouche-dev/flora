@@ -24,11 +24,11 @@ import { appKey } from '../../config.js';
 import { forgetFailures } from '../../core/cache.js';
 import { icon } from '../../core/icons.js';
 import { fr } from '../../core/fr.js';
-import { nearestStop } from '../../core/distance.js';
+import { STOPS, nearestStop, radiusLabel, radiusWords } from '../../core/distance.js';
 import { SOURCES, SOURCE_NAMES, failedText, obsNotes } from '../../core/observations.js';
 import { speciesKey } from '../../components/map-style.js';
 import { ui } from '../../styles/ui.js';
-import { DISTANCES, distanceAt, distanceEvents, distanceKey, distLabel, distWords } from './cards.js';
+import { distanceAt, distanceEvents, distanceKey } from './cards.js';
 import { NO_GENUS, SITE, askedKey, filtering, sameSpot, sourcesOf } from './orchids.js';
 import './ma-plant-sheet.js';
 import '../../components/gf-map.js';
@@ -44,7 +44,7 @@ import '../../components/gf-thumb.js';
 /** How the circle moves, said under the place and to the map's readers. */
 const PRESS = 'Appui long sur la carte, puis « Confirmer » : le cercle s’y centre.';
 /** The circle's handle on the map: from stop to stop of the slider (core/distance.js STOPS), its keys and its words. */
-const HANDLE = { snap: (/** @type {number} */ m) => nearestStop(m), step: distanceKey, label: distLabel };
+const HANDLE = { snap: (/** @type {number} */ m) => nearestStop(m), step: distanceKey, label: radiusLabel };
 /** iNaturalist's observations asked at most, GBIF's page (core/observations.js): more in the circle, said. */
 const INAT_MAX = 1000, GBIF_MAX = 300;
 /** Each source's row of « Sur cette carte »: what it gives. */
@@ -404,9 +404,9 @@ export class MaOrchids extends LitElement {
     const c = /** @type {Record<string, any>} */ (this.c);
     const on = distanceEvents(() => /** @type {Record<string, any>} */ (this.c).radius, m => this.app?.set({ radius: m }));
     return html`<label class="radius"><span>Rayon</span>
-      <input type="range" min="0" max=${DISTANCES.length - 1} step="any" .value=${String(distanceAt(c.radius))} aria-label="Rayon du cercle"
-        aria-valuetext=${distWords(c.radius)} @input=${on.input} @keydown=${on.keydown} />
-      <b>${distLabel(c.radius)}</b></label>`;
+      <input type="range" min="0" max=${STOPS.length - 1} step="any" .value=${String(distanceAt(c.radius))} aria-label="Rayon du cercle"
+        aria-valuetext=${radiusWords(c.radius)} @input=${on.input} @keydown=${on.keydown} />
+      <b>${radiusLabel(c.radius)}</b></label>`;
   }
 
   /**

@@ -4,11 +4,11 @@ import { GeoController } from '../core/geo.js';
 import { href, parse } from '../core/router.js';
 import { backTo, depth, entryValue, markEntry, pushHash, renewBehind, replaceHash } from '../core/history.js';
 import { findEntry,
-  directionsUrl, entryPosition, plantMarkers, distance, entryName, formatDistance, inSeason, listPlaces,
+  directionsUrl, entryPosition, plantMarkers, entryName, inSeason, listPlaces,
   placeAbundance, placeLastHarvest, placeTitle, plantCount, saveMoves, spotEvents
 } from '../core/collections.js';
-import { RADII, exploreUrl, observationsAround, saveRadius, savedRadius, speciesAround } from '../core/nearby.js';
-import { radiusLabel } from '../core/distance.js';
+import { exploreUrl, observationsAround, saveRadius, savedRadius, speciesAround } from '../core/nearby.js';
+import { AROUND_STOPS, formatDistance, metres, radiusLabel } from '../core/distance.js';
 import { StoreController, whenReady } from '../core/store.js';
 import { ui } from '../styles/ui.js';
 import './gf-facet.js';
@@ -420,7 +420,7 @@ export class GfMapPage extends LitElement {
           if (c) this.#searchAround(c, 'centre de la carte');
         }}>Chercher au centre de la carte</button></div>
       <div class="radii" role="group" aria-label="Rayon">
-        ${RADII.map(r => html`<button type="button" aria-pressed=${r === a.radius ? 'true' : 'false'}
+        ${AROUND_STOPS.map(r => html`<button type="button" aria-pressed=${r === a.radius ? 'true' : 'false'}
           @click=${() => { saveRadius(r); this.#searchAround(a.center, a.where, r); }}>${radiusLabel(r)}</button>`)}
       </div>`;
     const source = html`<p class="source">Source : <a href=${a.species ? exploreUrl(a.center, a.radius, a.species.taxonId) : exploreUrl(a.center, a.radius)}
@@ -718,7 +718,7 @@ export class GfMapPage extends LitElement {
   /** @param {import('../core/collections.js').Place} spot */
   #distanceTo(spot) {
     const fix = this.#geo.state.fix;
-    return fix ? distance(fix.coordinates, spot.geometry.coordinates) : null;
+    return fix ? metres(fix.coordinates, spot.geometry.coordinates) : null;
   }
 
   #plantOptions() {

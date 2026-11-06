@@ -20,6 +20,7 @@ globalThis.fetch = /** @type {any} */ (async (/** @type {any} */ input, /** @typ
 const db = await import('../../app/core/db.js');
 const C = await import('../../app/core/collections.js');
 const { normalizeCollection } = await import('../../app/core/place-model.js');
+const { metres } = await import('../../app/core/distance.js');
 
 const plant = (/** @type {number} */ id) => ({ id, scientificName: 'Planta ' + id, vernacularNames: ['Plante ' + id] });
 /** The favourites: plant id → [origin, from] (none: null). */
@@ -292,8 +293,8 @@ test('placesNear : les lieux à moins de 100 m, les trois plus proches d’abord
   const save = (/** @type {string} */ name, /** @type {number} */ m, more = {}) => C.savePlace(C.newPlace(north(m), { name, ...more }));
   const kept = await save('Lisière', 99.5), out = await save('Trop loin', 101);
   // Stored to 1e-7° (about 1 cm): the distances as stored, first.
-  assert.ok(C.distance(HERE, /** @type {any} */ (kept.geometry).coordinates) <= 100);
-  assert.ok(C.distance(HERE, /** @type {any} */ (out.geometry).coordinates) > 100);
+  assert.ok(metres(HERE, /** @type {any} */ (kept.geometry).coordinates) <= 100);
+  assert.ok(metres(HERE, /** @type {any} */ (out.geometry).coordinates) > 100);
   // Two parcours closer still (one made by the Parcours, one received marked): their point is only where they started.
   const walks = [await save('Parcours du matin', 10, { origin: { app: 'parcours' } }), await save('Parcours reçu', 20, { walk: true })];
   const names = async (/** @type {string | undefined} */ exclude) => (await C.placesNear(HERE, exclude)).map(r => r.place.properties.name);

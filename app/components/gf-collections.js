@@ -5,9 +5,10 @@ import { commonOf, getPlant, nameOf } from '../core/plants.js';
 import { GeoController } from '../core/geo.js';
 import { href } from '../core/router.js';
 import {
-  FAVORITES_ID, discardMissingBackup, distance, exportGeoJSON, formatDistance, inSeason, lastExportDate,
+  FAVORITES_ID, discardMissingBackup, exportGeoJSON, inSeason, lastExportDate,
   keptContents, listCollections, missingFromBackup, placeTitle, plantCount, plantMarkers, restoreBackup, restorePending, restoreReason, shareCollection, soon, spotEvents, findEntry,
   downloadBackup, readBackup } from '../core/collections.js';
+import { formatDistance, metres } from '../core/distance.js';
 import { config } from '../config.js';
 import { StoreController, arrangedMode, closeKing, whenReady } from '../core/store.js';
 import { MediaController, PHONE_QUERY } from '../core/media.js';
@@ -603,7 +604,7 @@ export class GfCollections extends LitElement {
       .sort((a, b) => b.properties.updatedAt.localeCompare(a.properties.updatedAt));
     const fix = this.#geo.state.fix;
     const places = all.filter(c => c.properties.kind === 'place' && c.geometry)
-      .map(c => ({ c, d: fix && c.geometry ? distance(fix.coordinates, c.geometry.coordinates) : null }))
+      .map(c => ({ c, d: fix && c.geometry ? metres(fix.coordinates, c.geometry.coordinates) : null }))
       .sort((a, b) => a.d !== null && b.d !== null ? a.d - b.d : b.c.properties.updatedAt.localeCompare(a.c.properties.updatedAt));
     return html`<div class="wrap">
         ${phone ? html`<h1>Mes plantes</h1>` : nothing}

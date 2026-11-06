@@ -24,7 +24,8 @@ import * as cache from './cache.js';
 import { ModuleOffError, moduleOn } from './modules.js';
 import { fetchJson } from './net.js';
 import { binomial, floraPhotos, observationPointsMany, periodQuery } from './nearby.js';
-import { GBIF_MAX, INAT_DATASET, gbifSource, inCircle, metres, sharePhotos } from './around3d.js';
+import { GBIF_MAX, INAT_DATASET, gbifSource, inCircle, sharePhotos } from './around3d.js';
+import { metres } from './distance.js';
 import { FREE_MEDIA } from '../../lib/plant-sources.mjs';
 
 /**

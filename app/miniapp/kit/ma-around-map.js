@@ -22,7 +22,8 @@ import { hideImg, showImg } from '../../core/img.js';
 import { creditText } from '../../core/credit.js';
 import { StoreController } from '../../core/store.js';
 import { ui } from '../../styles/ui.js';
-import { DISTANCES, distanceAt, distanceEvents, distLabel, distMood, nameOf } from './cards.js';
+import { distanceAt, distanceEvents, distMood, nameOf } from './cards.js';
+import { STOPS, radiusLabel } from '../../core/distance.js';
 import { commonOf } from '../../core/plants.js';
 import '../../components/gf-map.js';
 
@@ -476,7 +477,7 @@ export class MaAroundMap extends LitElement {
     const scopes = !quiet && Boolean(card) && discoverState().firstMatch;
     const scope = scopes ? this._scope : 'around';
     const a = this._admin;
-    const km = distLabel(c.radius), mood = distMood(c.radius);
+    const km = radiusLabel(c.radius), mood = distMood(c.radius);
     const slide = distanceEvents(() => /** @type {Record<string, any>} */ (this.c).radius, m => s.setRadius(m, 700));
     /** @type {[Scope, unknown][]} */
     const chips = [['around', html`${icon('crosshair')} ${km}`], ...(a?.department ? [/** @type {[Scope, unknown]} */ (['department', a.department])] : []),
@@ -493,7 +494,7 @@ export class MaAroundMap extends LitElement {
         <button class="icon-btn place" type="button" title="Changer de lieu" aria-label="Changer de lieu" @click=${() => this.app?.go('start')}>${icon('geo-alt')}</button>
       </div>
       ${scope === 'around' ? html`<label class="g-radius">${scopes ? html`<span class="mood">${mood}</span>` : nothing}
-        <input type="range" min="0" max=${DISTANCES.length - 1} step="any" .value=${String(distanceAt(c.radius))} aria-label="Distance de la recherche"
+        <input type="range" min="0" max=${STOPS.length - 1} step="any" .value=${String(distanceAt(c.radius))} aria-label="Distance de la recherche"
           aria-valuetext=${km} @input=${slide.input} @keydown=${slide.keydown} /></label>` : nothing}
     </div>`;
   }
@@ -513,9 +514,9 @@ export class MaAroundMap extends LitElement {
     return html`<section class="g-launch" aria-label="Jusqu’où chercher">
       <h2>${icon('binoculars')} Jusqu’où part l’expédition ?</h2>
       <p class="where">Autour ${c.place ? 'de ' + c.place : 'de vous'} · <button class="link" type="button" @click=${() => this.app?.go('start')}>changer de lieu</button></p>
-      <label class="g-dist"><span class="d">${distLabel(c.radius)}</span><span class="mood">${distMood(c.radius)}</span>
-        <input type="range" min="0" max=${DISTANCES.length - 1} step="any" .value=${String(distanceAt(c.radius))} aria-label="Distance de la recherche"
-          aria-valuetext=${distLabel(c.radius)} @input=${slide.input} @keydown=${slide.keydown} /></label>
+      <label class="g-dist"><span class="d">${radiusLabel(c.radius)}</span><span class="mood">${distMood(c.radius)}</span>
+        <input type="range" min="0" max=${STOPS.length - 1} step="any" .value=${String(distanceAt(c.radius))} aria-label="Distance de la recherche"
+          aria-valuetext=${radiusLabel(c.radius)} @input=${slide.input} @keydown=${slide.keydown} /></label>
       <div class="g-seen" aria-hidden="true">
         ${faces.length ? html`<span class="faces">${faces.map(o => html`<img src=${/** @type {string} */ (o.photo)} alt="" title=${o.credit ? creditText(o.credit) : ''} loading="lazy" referrerpolicy="no-referrer" @error=${(/** @type {any} */ e) => e.target.remove()} />`)}</span>` : nothing}
       </div>

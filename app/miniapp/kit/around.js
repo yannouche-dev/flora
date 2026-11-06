@@ -9,8 +9,8 @@ import { discoverState, discovering, finishDiscover, LAST_STEP } from '../../cor
 import { floreHref } from '../../core/context.js';
 import { openView } from '../../core/history.js';
 import { href } from '../../core/router.js';
-import { distLabel } from './cards.js';
 import { sessionOf } from './session.js';
+import { radiusLabel } from '../../core/distance.js';
 
 /** @typedef {'meet' | 'harvest' | 'mosaic'} AroundKind */
 
@@ -117,7 +117,7 @@ export function aroundStart(c, app, kind) {
     alternatives: [
       { kind: 'place', label: 'ou choisir une commune', field: 'Choisir une commune', pick: p => { stop(); sessionOf(app).setPoint(p.coordinates, p.label); app.go('map'); } },
       placed(c) && { kind: 'choices', label: 'Continuer', items: [{ key: 'kept', icon: 'geo-alt', label: c.place ? `Autour de ${c.place}` : 'Au dernier lieu choisi',
-        meta: distLabel(c.radius || 1000), run: () => { stop(); app.go('map'); } }] }
+        meta: radiusLabel(c.radius || 1000), run: () => { stop(); app.go('map'); } }] }
     ],
     exit: kind === 'meet' && discovering()
       ? { label: 'Passer : montrer toute l’application', href: href.search(), run: (/** @type {Event | undefined} */ e) => { e?.preventDefault(); finishDiscover(); openView(floreHref()); } }

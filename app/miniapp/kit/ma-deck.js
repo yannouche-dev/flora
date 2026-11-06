@@ -29,7 +29,8 @@ import { StoreController } from '../../core/store.js';
 import { modalOpen } from '../../core/history.js';
 import { floweringMonths } from '../../core/plants.js';
 import { ui } from '../../styles/ui.js';
-import { bio, distLabel, nameOf, nextDistance } from './cards.js';
+import { bio, nameOf, nextDistance } from './cards.js';
+import { radiusLabel } from '../../core/distance.js';
 
 /**
  * @typedef {import('./cards.js').Card} Card
@@ -391,7 +392,7 @@ export class MaDeck extends LitElement {
         <p class="muted">${(end?.kept ?? keptInMatches)(matches)}</p>
         ${end?.note ? html`<p class="muted">${end.note}</p>` : nothing}
         ${avoided ? html`<p class="avoided">${icon('exclamation-octagon-fill')}${avoided} plante${avoided > 1 ? 's' : ''} reconnue${avoided > 1 ? 's' : ''} à ne pas cueillir.</p>` : nothing}
-        <div class="row">${next ? html`<button class="primary" type="button" @click=${() => s.widen(next)}>Chercher jusqu’à ${distLabel(next)}</button>` : nothing}
+        <div class="row">${next ? html`<button class="primary" type="button" @click=${() => s.widen(next)}>Chercher jusqu’à ${radiusLabel(next)}</button>` : nothing}
           ${c.passed.length || c.avoided?.length ? html`<button class="secondary" type="button" @click=${() => s.resetPassed()}>Revoir les plantes passées</button>` : nothing}</div>
       </div>`;
     }

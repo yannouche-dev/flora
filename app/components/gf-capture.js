@@ -7,8 +7,9 @@ import { watchLocation } from '../core/geo.js';
 import { href } from '../core/router.js';
 import { openModal } from '../core/history.js';
 import {
-  GoneError, NEAR_PLACE, distance, getPlace, listPlaces, newPlace, placeTitle, placesNear, recentPlants, rememberPlant,
+  GoneError, NEAR_PLACE, getPlace, listPlaces, newPlace, placeTitle, placesNear, recentPlants, rememberPlant,
   savePlace, undoNewPlace, updatePlace, withEntry, withPlant, withoutPlant, entriesOf, lastEntry } from '../core/collections.js';
+import { metres } from '../core/distance.js';
 import { store, StoreController } from '../core/store.js';
 import { lookalikeWarning } from '../core/lookalikes.js';
 import { verdictOf } from '../core/alerts.js';
@@ -245,7 +246,7 @@ export class GfCapture extends LitElement {
       if (this._fix) {
         const fix = this._fix;
         for (const place of await listPlaces()) {
-          const d = place.geometry ? distance(fix.coordinates, place.geometry.coordinates) : Infinity;
+          const d = place.geometry ? metres(fix.coordinates, place.geometry.coordinates) : Infinity;
           if (d > AROUND_RADIUS) continue;
           for (const e of place.properties.plants) {
             if (e.plantId === null) continue;
@@ -337,7 +338,7 @@ export class GfCapture extends LitElement {
         // It lost its point meanwhile (another tab): never put in a list unsaid — nothing written.
         if (!place.geometry) throw new Error('Ce lieu n’a plus de position : rien n’a été enregistré.');
         did.entry = did.harvestOn = null;
-        const same = entriesOf(place, plant.id).find(e => e.coordinates && distance(e.coordinates, here.coordinates) <= SAME_SPOT);
+        const same = entriesOf(place, plant.id).find(e => e.coordinates && metres(e.coordinates, here.coordinates) <= SAME_SPOT);
         let next = same ? place : withPlant(place, plant, here, { again: true });
         if (!same) did.entry = /** @type {any} */ (lastEntry(next)).id;
         if (harvest) {

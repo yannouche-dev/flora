@@ -20,11 +20,8 @@ import { moduleOn } from './modules.js';
 import { fetchJson } from './net.js';
 import { binomial, findPhotos, floraPhotos, fullName, isHybrid, observationPointsMany, speciesAround } from './nearby.js';
 import { readJSON, writeJSON } from './prefs.js';
-import { R_EARTH, STOPS as RADII_3D, metres, nearestStop } from './distance.js';
+import { R_EARTH, STOPS, metres, nearestStop } from './distance.js';
 
-// The radii offered (metres): the mini-apps' distances, 200 m to 50 km (what iNaturalist's circle search allows) —
-// core/distance.js STOPS.
-export { RADII_3D };
 export const DEFAULT_RADIUS_3D = 2000;
 /** Up to this many observations of iNaturalist, and of GBIF, in a circle. */
 export const INAT_MAX = 400;
@@ -32,9 +29,6 @@ export const GBIF_MAX = 300;
 /** GBIF's copy of iNaturalist's research-grade observations: left out (they come from iNaturalist itself). */
 export const INAT_DATASET = '50c9509d-22c7-4a22-a47d-8c48425ef4a7';
 const DAY = 24 * 3600 * 1000;
-
-// The radius shown (« 2 km »), and as a screen reader says it (« 2 kilomètres »): core/distance.js's.
-export { radiusLabel, radiusWords } from './distance.js';
 
 // ── What each map keeps ─────────────────────────────────────────────────────────────────────────
 
@@ -51,7 +45,7 @@ export function cleanAround3d(v) {
   const d = AROUND3D_DEFAULTS, bool = (/** @type {unknown} */ x, /** @type {boolean} */ f) => typeof x === 'boolean' ? x : f;
   return {
     on: bool(o.on, d.on),
-    radius: RADII_3D.includes(/** @type {number} */ (o.radius)) ? /** @type {number} */ (o.radius) : d.radius,
+    radius: STOPS.includes(/** @type {number} */ (o.radius)) ? /** @type {number} */ (o.radius) : d.radius,
     inat: bool(o.inat, d.inat), gbif: bool(o.gbif, d.gbif), density: bool(o.density, d.density)
   };
 }
@@ -65,7 +59,7 @@ function readAll() {
 export function around3dPrefs(scope, radius) {
   const all = readAll();
   const kept = all[scope];
-  const nearest = radius ? nearestStop(radius, RADII_3D) : DEFAULT_RADIUS_3D;
+  const nearest = radius ? nearestStop(radius, STOPS) : DEFAULT_RADIUS_3D;
   return cleanAround3d(kept ?? { radius: nearest });
 }
 
@@ -224,10 +218,6 @@ export async function morePhotos(points) {
 // ── Shapes ──────────────────────────────────────────────────────────────────────────────────────
 
 const RAD = Math.PI / 180;
-
-// The great-circle distance in metres, on R_EARTH: core/distance.js's (inCircle reads it; observations.js and the 3D
-// map import it from here).
-export { metres };
 
 /** Only the points in the circle (a source's search may reach a little past it). @template {{ coordinates: [number, number] }} T @param {T[]} points @param {[number, number]} center @param {number} radius @returns {T[]} */
 export const inCircle = (points, center, radius) => points.filter(p => metres(center, p.coordinates) <= radius * 1.001);

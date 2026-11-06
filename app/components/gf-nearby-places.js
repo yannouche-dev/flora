@@ -7,7 +7,8 @@
 // (« Y ajouter Pâquerette — « Pré », à 60 m »: read alone, it says where it goes).
 
 import { LitElement, html, css, nothing } from 'lit';
-import { findEntry, formatDistance, placeTitle, plantCount } from '../core/collections.js';
+import { findEntry, placeTitle, plantCount } from '../core/collections.js';
+import { formatDistance } from '../core/distance.js';
 import { ui } from '../styles/ui.js';
 
 export class GfNearbyPlaces extends LitElement {

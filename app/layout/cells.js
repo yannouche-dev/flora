@@ -49,7 +49,7 @@ import { hintView, takeHint } from '../core/hints.js';
 import { addFavorite, forgetFavoriteEntry, isFavorite } from '../core/collections.js';
 import { ui } from '../styles/ui.js';
 import { photosOffLine } from '../components/ui-kit.js';
-import { DISTANCES, cardOf, distanceAt, distanceEvents, distanceKey, nameOf, saidOf } from '../miniapp/kit/cards.js';
+import { cardOf, distanceAt, distanceEvents, distanceKey, nameOf, saidOf } from '../miniapp/kit/cards.js';
 import { SwipeCore, memoryStore } from '../miniapp/kit/swipes.js';
 import { pushHash } from '../core/history.js';
 import { addCatalogLayer, defaultOpacity, isOverlay } from '../core/ign.js';
@@ -57,8 +57,7 @@ import { mapLook } from '../core/map-settings.js';
 import { addressOf, baseKeyOf, baseKind, takesLandmarks } from '../core/backgrounds.js';
 import { cleanLandmarks } from '../core/map-layers.js';
 import { loadCatalog } from '../core/ign-catalog.js';
-import { RADII_3D } from '../core/around3d.js';
-import { nearestStop } from '../core/distance.js';
+import { STOPS, nearestStop } from '../core/distance.js';
 import { cellIcon, distanceLabel } from './registry.js';
 import { COMPACT_WIDTH, MAP_INTENTS, MAP_LANDMARKS, MAP_LAYERS, WIDE_FEW, WIDE_FRAMES, catalogLayers, inatTiles, inWhen, layersOf, mapControls, mapPin, opacitiesOf, opacText, overlaysOf, snapRadius, uiMode, viewOf, viewText, wideWords, zoneTaxa } from './map-options.js';
 import { AROUND_MAX, periodQuery, plantOfPoint, taxonIdOf } from '../core/nearby.js';
@@ -207,7 +206,7 @@ const where = s => {
 const radiusSlider = state => {
   const on = distanceEvents(() => state.radius, m => state.set({ r: m }, 'replace'));
   return html`<label class="radius"><span class="visually-hidden">Rayon de la zone</span>
-    <input type="range" min="0" max=${DISTANCES.length - 1} step="any" .value=${String(distanceAt(state.radius))} aria-label="Rayon de la zone"
+    <input type="range" min="0" max=${STOPS.length - 1} step="any" .value=${String(distanceAt(state.radius))} aria-label="Rayon de la zone"
       aria-valuetext=${distanceLabel(state.radius)} @input=${on.input} @keydown=${on.keydown} />
     <b>${distanceLabel(state.radius)}</b></label>`;
 };
@@ -439,7 +438,7 @@ export class DlMap extends LitElement {
   #set(values) { setCell(this, values); }
 
   /** The radius' handle on the circle (gf-map radiusHandle): the slider's stops, its keys, its words. */
-  #radiusHandle = { snap: (/** @type {number} */ m) => snapRadius(m, DISTANCES), step: distanceKey, label: distanceLabel };
+  #radiusHandle = { snap: (/** @type {number} */ m) => snapRadius(m, STOPS), step: distanceKey, label: distanceLabel };
 
   /** The map's view held while its cell changes size (a separator dragged beside it). */
   holdFrame() { /** @type {any} */ (this.renderRoot.querySelector('gf-map'))?.holdFrame?.(); }
@@ -673,7 +672,7 @@ export class DlMap extends LitElement {
    */
   get #around3d() {
     const j = /** @type {string[] | null} */ (this.params?.jumelles ?? null);
-    const radius = nearestStop(this.params?.jrayon ?? this.state?.radius ?? 2000, RADII_3D);
+    const radius = nearestStop(this.params?.jrayon ?? this.state?.radius ?? 2000, STOPS);
     const value = { on: j !== null, inat: j ? j.includes('inat') : true, gbif: j ? j.includes('gbif') : true, density: j ? j.includes('densite') : false, radius };
     const k = JSON.stringify(value);
     if (this.#aroundMemo?.k !== k) this.#aroundMemo = { k, value };
@@ -687,7 +686,7 @@ export class DlMap extends LitElement {
    */
   #onAround(e) {
     const p = e.detail;
-    const zone = nearestStop(this.state?.radius ?? 2000, RADII_3D);
+    const zone = nearestStop(this.state?.radius ?? 2000, STOPS);
     this.#set({
       jumelles: p.on ? [p.inat && 'inat', p.gbif && 'gbif', p.density && 'densite'].filter(Boolean) : null,
       jrayon: p.on && !this.state?.live.at && p.radius !== zone ? p.radius : null
@@ -1068,7 +1067,7 @@ export class DlMap extends LitElement {
       ${failed && !this._zone ? html`<span class="visually-hidden" role="alert">${scopeWords(s, { zone: true })}</span>` : nothing}
       ${this._zone ? html`<div class="drop" id="zone-drop">
         ${where(s)}
-        ${s.live.at ? html`<div class="stops" role="group" aria-label="Rayon de la zone">${DISTANCES.map(m => html`<button type="button" aria-pressed=${String(m === s.radius)}
+        ${s.live.at ? html`<div class="stops" role="group" aria-label="Rayon de la zone">${STOPS.map(m => html`<button type="button" aria-pressed=${String(m === s.radius)}
           @click=${() => { s.set({ r: m }, 'replace'); this._zone = false; }}>${distanceLabel(m)}</button>`)}</div>` : nothing}
         ${around}
       </div>` : nothing}

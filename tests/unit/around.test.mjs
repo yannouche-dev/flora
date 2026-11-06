@@ -7,7 +7,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { avoid, bio, cardOf, deckOf, distanceAt, distanceEvents, distanceKey, distanceNear, distLabel, ethnoSentence, harvestOrder, nameOf, nextDistance, saidOf, swipe, toAvoid, unswipe } from '../../app/miniapp/kit/cards.js';
+import { avoid, bio, cardOf, deckOf, distanceAt, distanceEvents, distanceKey, distanceNear, ethnoSentence, harvestOrder, nameOf, nextDistance, saidOf, swipe, toAvoid, unswipe } from '../../app/miniapp/kit/cards.js';
 import { lookalikesOf } from '../../app/core/lookalikes.js';
 import { UNREAD, dangerLevel, rank } from '../../app/core/danger.js';
 import { verdictOf } from '../../app/core/alerts.js';
@@ -113,8 +113,6 @@ test('cartes : balayées à droite (match) ou à gauche, reprises ; le paquet sa
   assert.deepEqual(unswipe(s, 2), { matches: [1], passed: [] });
   const deck = deckOf([1, 2, 3].map(id => ({ plant: { id } })).map(c => /** @type {any} */ (c)), s);
   assert.deepEqual(deck.map(c => c.plant.id), [3]);
-  assert.equal(distLabel(1000), '1 km');
-  assert.equal(distLabel(500), '500 m');
   assert.equal(nextDistance(1000), 2000);
   assert.equal(nextDistance(50000), undefined);
   assert.equal(ethnoSentence({ sections: [{ theme: 'names', text: 'Son nom vient du latin ursus, l’ours. Et puis…' }] }), 'Son nom vient du latin ursus, l’ours.');
