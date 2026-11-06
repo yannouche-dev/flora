@@ -5,7 +5,9 @@
 //  - lit: the template rules of eslint-plugin-lit (bindings, attributes, no `this` in a template's own string…);
 //  - import-x/named: every name imported from a module of the repository exists there ('lit' and 'leaflet' come
 //    from the import map of index.html: tools/check-imports.mjs checks those against vendor/);
-//  - no-restricted-syntax (RESTRICTED below): what goes through one module only.
+//  - no-restricted-syntax (RESTRICTED below): what goes through one module only; a name exported once, where it is
+//    declared (no relay, no alias);
+//  - import-x/no-restricted-paths: core/ is the bottom layer, importing nothing of the screens above it.
 // The app has no build step and nothing here is deployed: the tools are dev dependencies (package.json).
 
 import js from '@eslint/js';
@@ -50,6 +52,12 @@ const RESTRICTED = {
   geolocation: {
     selector: "MemberExpression[property.name='geolocation']",
     message: 'Ask for the position through core/geo.js (oneFix, takeFix, watchLocation, GeoController): one shared watch, its failures in the app’s words.'
+  },
+  // One name per thing: `export { x } from …`, `export { x }`, `export *` and `export const y = x` give a second way to
+  // import a name, or a second name to one thing (5.7: 13 relays and 9 aliases gone).
+  relay: {
+    selector: "ExportNamedDeclaration[declaration=null], ExportAllDeclaration, ExportNamedDeclaration > VariableDeclaration > VariableDeclarator[id.type='Identifier'][init.type='Identifier']",
+    message: 'Export a name where it is declared, under its own name, and import it from the module that owns it: no relay, no alias (one name per thing).'
   }
 };
 const restricted = (/** @type {(keyof typeof RESTRICTED)[]} */ ...keys) => ['error', ...keys.map(k => RESTRICTED[k])];
@@ -84,18 +92,26 @@ export default [
     ...lit.configs['flat/recommended'],
     rules: {
       ...lit.configs['flat/recommended'].rules,
-      'no-restricted-syntax': restricted('nativeMember', 'tooltip', 'hash', 'replace', 'storage', 'geolocation')
+      'no-restricted-syntax': restricted('nativeMember', 'tooltip', 'hash', 'replace', 'storage', 'geolocation', 'relay')
     }
   },
   // Every import of the app finds its file. Not in tests/ (their page.evaluate imports resolve in the page, from the
   // site's root) nor in scripts/ (SheetJS is installed by scripts/package.json, for the data workflows only).
   { files: ['app/**/*.js', 'lib/**/*.mjs', 'sw.js'], rules: { 'import-x/no-unresolved': 'error' } },
   // The navigation helpers themselves.
-  { files: ['app/core/history.js'], rules: { 'no-restricted-syntax': restricted('nativeMember', 'tooltip', 'storage', 'geolocation') } },
+  { files: ['app/core/history.js'], rules: { 'no-restricted-syntax': restricted('nativeMember', 'tooltip', 'storage', 'geolocation', 'relay') } },
   // localStorage itself: the storage layer, and the channel between tabs it listens to.
-  { files: ['app/core/prefs.js', 'app/core/sync.js'], rules: { 'no-restricted-syntax': restricted('nativeMember', 'tooltip', 'hash', 'replace', 'geolocation') } },
+  { files: ['app/core/prefs.js', 'app/core/sync.js'], rules: { 'no-restricted-syntax': restricted('nativeMember', 'tooltip', 'hash', 'replace', 'geolocation', 'relay') } },
   // The device's position itself: the shared watch.
-  { files: ['app/core/geo.js'], rules: { 'no-restricted-syntax': restricted('nativeMember', 'tooltip', 'hash', 'replace', 'storage') } },
+  { files: ['app/core/geo.js'], rules: { 'no-restricted-syntax': restricted('nativeMember', 'tooltip', 'hash', 'replace', 'storage', 'relay') } },
+  // core/ is the bottom layer: it imports nothing from the screens above it (what both need goes down into core/).
+  {
+    files: ['app/core/**/*.js'],
+    rules: {
+      'import-x/no-restricted-paths': ['error', { zones: [{ target: './app/core', from: ['./app/components', './app/layout', './app/miniapp', './app/miniapps'],
+        message: 'core/ is the bottom layer: move what it needs down into core/ (or let the caller pass it).' }] }]
+    }
+  },
   { files: ['app/workers/**/*.js'], languageOptions: { globals: globals.worker } },
   { files: ['sw.js'], languageOptions: { globals: globals.serviceworker } },
   // Playwright: the functions given to page.evaluate run in the page.
