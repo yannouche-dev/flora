@@ -43,6 +43,8 @@ const STACK_LEAVE = 0.57;
 
 export class GfPlantDetail extends SheetBase {
   static properties = {
+    /** « Ma région » of the sheet's maps (told by them: `map-region`), offered in a map's ⚙ only when known. */
+    _mapRegion: { state: true },
     /** Shown in the Flore tab's plant pane: compact padding, the pane has its own close / back controls. */
     embedded: { type: Boolean, reflect: true },
     /** The plant waiting under the swiped card (Flore): not the page's plant yet, so it leaves the title alone. */
@@ -97,6 +99,8 @@ export class GfPlantDetail extends SheetBase {
 
   constructor() {
     super();
+    /** @type {import('../core/territory.js').MapRegion | null} */
+    this._mapRegion = null;
     /** @type {string | null} */
     this._shareNote = null;
     /** @type {string | null} */
@@ -157,6 +161,7 @@ export class GfPlantDetail extends SheetBase {
     this.addEventListener('scroll', this.#onScroll, { passive: true });
     // The media's controls drawn in its pane's header follow the viewer.
     this.renderRoot.addEventListener('media-bar', () => this.requestUpdate());
+    this.renderRoot.addEventListener('map-region', this.#onMapRegion);
     this.addEventListener('keydown', this.#onEdgeKey);
     // A menu (position, edge options) closes when touching elsewhere.
     this.renderRoot.addEventListener('pointerdown', this.#closeMenus, { capture: true });
@@ -1660,8 +1665,16 @@ export class GfPlantDetail extends SheetBase {
    * its panel ▦, as on every map (gf-map-options.js) — said here.
    * @param {string} key
    */
+  /** A map of the sheet found its « Ma région » (or none). @param {Event} e */
+  #onMapRegion = e => { this._mapRegion = /** @type {CustomEvent} */ (e).detail; };
+
   #mapForm(key) {
     const c = mapConfig(key);
+    // « Ma région » offered only when known; chosen but unknown, said as what the map does then (France).
+    /** @type {[string, string][]} */
+    const frames = [['auto', 'Automatique (selon les couches)'], ['france', 'France entière'], ['world', 'Monde entier'], ['content', 'Ajusté à ce qui est affiché'], ['me', 'Autour de moi']];
+    if (this._mapRegion) frames.push(['region', `Ma région (${this._mapRegion.name})`]);
+    else if (c.frame === 'region') frames.push(['region', 'Ma région (inconnue : France entière)']);
     const set = (/** @type {any} */ patch) => setMapConfig(key, patch);
     /** @param {string} label @param {string} field @param {[string, string][]} options */
     const select = (label, field, options) => html`<label>${label}
@@ -1681,7 +1694,7 @@ export class GfPlantDetail extends SheetBase {
         ${select('Observations proches', 'near', [['off', 'Non'], ['both', 'iNaturalist et GBIF'], ['inat', 'iNaturalist'], ['gbif', 'GBIF']])}
       </fieldset>
       <fieldset><legend>Affichage</legend>
-        ${select('Cadrage', 'frame', [['auto', 'Automatique (selon les couches)'], ['france', 'France entière'], ['world', 'Monde entier'], ['content', 'Ajusté à ce qui est affiché'], ['me', 'Autour de moi'], ['region', 'Ma région']])}
+        ${select('Cadrage', 'frame', frames)}
         ${select('Hauteur', 'height', [['s', 'Petite'], ['m', 'Moyenne'], ['l', 'Grande']])}
       </fieldset>
       <fieldset><legend>Actions</legend>

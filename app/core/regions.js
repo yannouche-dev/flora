@@ -1,6 +1,7 @@
 // @ts-check
-// The regions of France (as the IGN geocoder names them in an address's context), each with its bounding box —
-// for a map to be framed on « Ma région ».
+// The regions of France (as the IGN geocoder names them in an address's context), each with its bounding box — for the
+// region scope of Rencontres' map (miniapp/kit/ma-around-map.js), from the IGN address of its place. A plant sheet's
+// « Ma région »: core/territory.js mapRegion, found on the device.
 
 /** [west, south, east, north] of each region. @type {Record<string, [number, number, number, number]>} */
 export const REGION_BOUNDS = {

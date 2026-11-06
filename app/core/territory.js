@@ -12,6 +12,7 @@ import { readText, writeText } from './prefs.js';
  * @typedef {{ code: string, name: string, region: string, former: string, polygons: number[][][][] }} Department
  * @typedef {{ iso: string, name: string, formers: string[], polygons?: number[][][][] }} Region
  * @typedef {{ dept: string | null, deptName: string | null, region: string, regionName: string, formers: string[] }} Territory
+ * @typedef {{ iso: string, name: string, box: [number, number, number, number], chosen: boolean }} MapRegion
  * @typedef {{ type: string, code: string, label: string, area: string, level: string, iso: string }} Status
  */
 
@@ -147,6 +148,22 @@ export async function territoryFor(point) {
   if (here) return here;
   const iso = myRegion();
   return iso ? territoryOfRegion(iso) : null;
+}
+
+/**
+ * « Ma région » of a map (a plant sheet's « Cadrer »): the region chosen in Réglages, else the one where `point` is —
+ * both found here, in the bundled outlines: nothing sent —, with its box [west, south, east, north]; null when neither
+ * (none chosen, the point unknown or outside metropolitan France). `chosen`: Réglages' one. Rejects when the outlines
+ * cannot be read.
+ * @param {[number, number] | null | undefined} point [lon, lat]
+ * @returns {Promise<MapRegion | null>}
+ */
+export async function mapRegion(point) {
+  const iso = myRegion();
+  const mine = iso ? await territoryOfRegion(iso) : null;
+  const t = mine || (point ? await territoryAt(point) : null);
+  const outline = t ? await bundledOutline('region', t.regionName) : null;
+  return t && outline ? { iso: t.region, name: t.regionName, box: outline.box, chosen: Boolean(mine) } : null;
 }
 
 // ── Statuses ─────────────────────────────────────────────────────────────────

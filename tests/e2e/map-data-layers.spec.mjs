@@ -314,3 +314,63 @@ test('Réglages › Cartes : pas de « Sur cette carte » (les données sont cel
   await expect(options.getByRole('heading', { name: 'Sur cette carte' })).toHaveCount(0);
   await expect(options.getByRole('group', { name: 'Sur cette carte' })).toHaveCount(0);
 });
+
+/** The requests to IGN's geocoder (an address from a position). @param {Page} page */
+const geocoderAsked = page => {
+  /** @type {string[]} */ const asked = [];
+  page.on('request', r => { if (/^https:\/\/data\.geopf\.fr\/geocodage\//.test(r.url())) asked.push(r.url()); });
+  return asked;
+};
+
+test('la carte d’une fiche : « Ma région » trouvée sur l’appareil, sans rien envoyer à l’IGN — celle où vous êtes ; son ⚙ ne la propose que connue', async ({ app, page }) => {
+  const asked = geocoderAsked(page);
+  await app.open('#/');
+  await app.go(`#/plant/${plantId('Urtica dioica')}`);
+  const block = page.locator('gf-sheet-map:not([map-3d="off"])').first();
+  await block.scrollIntoViewIfNeeded();
+  const region = block.locator('.scope [data-frame="region"]');
+  // No position yet, no region chosen: no « Ma région », in its chips nor in its ⚙.
+  await expect(block.locator('.scope [data-frame="me"]')).toBeVisible();
+  await expect(region).toHaveCount(0);
+  await app.king();
+  await page.getByRole('button', { name: 'Configurer la carte « Carte »' }).click();
+  const framing = page.locator('gf-plant-detail .map-form').first().getByRole('combobox', { name: 'Cadrage' });
+  await expect(framing.locator('option')).toHaveText(['Automatique (selon les couches)', 'France entière', 'Monde entier', 'Ajusté à ce qui est affiché', 'Autour de moi']);
+  // Around me (located): the region where I am, found here, offered in its ⚙ too.
+  await block.locator('.scope [data-frame="me"]').click();
+  await expect(region).toHaveText(/Ma région\s*Île-de-France/);
+  await expect(region).toHaveAttribute('title', 'La région où vous êtes, trouvée sur l’appareil');
+  await expect(framing.locator('option[value="region"]')).toHaveText('Ma région (Île-de-France)');
+  await framing.selectOption('region');
+  await expect(region).toHaveAttribute('aria-pressed', 'true');
+  expect(asked).toEqual([]);
+});
+
+test('Réglages › Ma région : « Utiliser ma position » refusée, dite par le mot de l’app ; acceptée, trouvée sur l’appareil ; la carte d’une fiche prend celle de Réglages d’abord', async ({ app, page }) => {
+  const asked = geocoderAsked(page);
+  await app.open('#/settings');
+  const settings = page.locator('gf-settings');
+  const note = settings.getByRole('status').filter({ hasText: /Localisation|Île-de-France|Position/ });
+  // The device refuses (the shared watch's answer).
+  await page.evaluate(() => {
+    navigator.geolocation.watchPosition = (_ok, fail) => {
+      setTimeout(() => fail?.(/** @type {any} */ ({ code: 1, PERMISSION_DENIED: 1, POSITION_UNAVAILABLE: 2, TIMEOUT: 3, message: 'denied' })), 30);
+      return 1;
+    };
+  });
+  await settings.getByRole('button', { name: 'Utiliser ma position' }).click();
+  await expect(note).toHaveText('Localisation refusée. Autorisez-la dans les réglages du navigateur.');
+  await expect(settings.getByRole('combobox', { name: 'Ma région' })).toHaveValue('');
+  // Allowed again (the browser's own, at 48.85, 2.35): its region, found here.
+  await page.evaluate(() => { delete (/** @type {any} */ (navigator.geolocation)).watchPosition; });
+  await settings.getByRole('button', { name: 'Utiliser ma position' }).click();
+  await expect(note).toHaveText('Île-de-France (Paris).');
+  await expect(settings.getByRole('combobox', { name: 'Ma région' })).toHaveValue('FR-IDF');
+  // Another chosen: a sheet's map frames that one, where I am or not.
+  await settings.getByRole('combobox', { name: 'Ma région' }).selectOption('FR-BRE');
+  await app.go(`#/plant/${plantId('Urtica dioica')}`);
+  const region = page.locator('gf-sheet-map:not([map-3d="off"])').first().locator('.scope [data-frame="region"]');
+  await expect(region).toHaveText(/Ma région\s*Bretagne/);
+  await expect(region).toHaveAttribute('title', 'Votre région, choisie dans Réglages');
+  expect(asked).toEqual([]);
+});

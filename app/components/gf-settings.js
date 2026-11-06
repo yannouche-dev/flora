@@ -13,6 +13,7 @@ import { icon, modeIcon } from '../core/icons.js';
 import { exportGeoJSON, importGeoJSON, keptContents, lastExportDate, listCollections, protectStorage, spotEvents, storageReport, transferLink } from '../core/collections.js';
 import { share } from '../core/share.js';
 import { myRegion, setMyRegion, territories, territoryAt } from '../core/territory.js';
+import { geoProblem, oneFix } from '../core/geo.js';
 import { exportLayout, importLayout, resetAll } from '../core/sheet-blocks.js';
 import { ui } from '../styles/ui.js';
 import { discoverEvents, discovering, finishDiscover, restartDiscover, tabShown } from '../core/discover.js';
@@ -228,14 +229,20 @@ export class GfSettings extends LitElement {
     this._regionNote = null;
   }
 
-  #regionFromGps() {
+  /**
+   * « Utiliser ma position »: one position from the shared watch (one fixed in the last 10 minutes at once; 15 s at most),
+   * its region found on the device (territoryAt: nothing sent). A failure in the app's words (geoProblem); none in time
+   * (or the watch's own time-out): « Position indisponible. ».
+   */
+  async #regionFromGps() {
     this._regionNote = 'Recherche de la position…';
-    navigator.geolocation.getCurrentPosition(async pos => {
-      const here = await territoryAt([pos.coords.longitude, pos.coords.latitude]).catch(() => null);
-      if (!here) { this._regionNote = 'Position hors de France métropolitaine.'; return; }
-      this.#setRegion(here.region);
-      this._regionNote = `${here.regionName} (${here.deptName}).`;
-    }, () => { this._regionNote = 'Position indisponible.'; }, { enableHighAccuracy: false, timeout: 15000, maximumAge: 600000 });
+    const fix = await oneFix({ maxAge: 600_000, timeout: 15_000 });
+    if (!fix) { this._regionNote = 'Position indisponible.'; return; }
+    if ('error' in fix) { this._regionNote = fix.code === 'timeout' ? 'Position indisponible.' : geoProblem(fix.code).text; return; }
+    const here = await territoryAt(fix.coordinates).catch(() => null);
+    if (!here) { this._regionNote = 'Position hors de France métropolitaine.'; return; }
+    this.#setRegion(here.region);
+    this._regionNote = `${here.regionName} (${here.deptName}).`;
   }
 
   /** Long links still work in browsers, but some messaging apps cut them. */
@@ -517,8 +524,9 @@ export class GfSettings extends LitElement {
         </p>
 
         <h2>Ma région</h2>
-        <p class="muted">Pour savoir si une plante est protégée ou si sa cueillette est réglementée chez vous (statuts INPN).
-          Dans un lieu, c’est sa position GPS qui compte.</p>
+        <p class="muted">Pour savoir si une plante est protégée ou si sa cueillette est réglementée chez vous (statuts INPN), et pour cadrer
+          les cartes des fiches (« Ma région »). Dans un lieu, c’est sa position GPS qui compte. « Utiliser ma position » trouve la
+          région sur l’appareil : votre position n’est envoyée nulle part.</p>
         <div class="row">
           <select aria-label="Ma région" .value=${this._region || ''} @change=${e => this.#setRegion(e.target.value || null)}>
             <option value="">— Non précisée —</option>
