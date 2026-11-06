@@ -1660,14 +1660,14 @@ export class GfPlantDetail extends SheetBase {
   }
 
 
+  /** A map of the sheet found its « Ma région » (or none). @param {Event} e */
+  #onMapRegion = e => { this._mapRegion = /** @type {CustomEvent} */ (e).detail; };
+
   /**
    * King: what a map block shows and lets do (the same in every mode). Its background, IGN's layers and 2D / 3D:
    * its panel ▦, as on every map (gf-map-options.js) — said here.
    * @param {string} key
    */
-  /** A map of the sheet found its « Ma région » (or none). @param {Event} e */
-  #onMapRegion = e => { this._mapRegion = /** @type {CustomEvent} */ (e).detail; };
-
   #mapForm(key) {
     const c = mapConfig(key);
     // « Ma région » offered only when known; chosen but unknown, said as what the map does then (France).

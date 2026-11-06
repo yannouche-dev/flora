@@ -343,6 +343,9 @@ test('la carte d’une fiche : « Ma région » trouvée sur l’appareil, sans 
   await expect(framing.locator('option[value="region"]')).toHaveText('Ma région (Île-de-France)');
   await framing.selectOption('region');
   await expect(region).toHaveAttribute('aria-pressed', 'true');
+  // Framed on its outline (the bundled one).
+  const box = await page.evaluate(async () => (await (await import('/app/core/territory.js')).bundledOutline('region', 'Île-de-France'))?.box);
+  await expect.poll(() => block.locator('gf-map').evaluate(m => /** @type {any} */ (m).frame?.points)).toEqual([[box?.[0], box?.[1]], [box?.[2], box?.[3]]]);
   expect(asked).toEqual([]);
 });
 
