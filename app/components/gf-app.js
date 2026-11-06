@@ -286,8 +286,8 @@ export class GfApp extends LitElement {
     // A mini-app: alone on the screen (its box has its own bar, its one way out).
     const boxed = route.name === 'app';
     const brand = html`<img src="assets/icons/icon.svg" alt="" /><span>GeoFlora</span>`;
-    // Phone: a plant's sheet covers the header (gf-flora): out of reach until it closes; the tab bar stays.
-    const covered = phone && route.name === 'plant';
+    // Phone: a plant's sheet covers the header (gf-flora, gf-collections): out of reach until it closes; the tab bar stays.
+    const covered = phone && (route.name === 'plant' || (route.name === 'collections' && route.plant != null));
 
     const page = boxed ? html`<main>
         ${updateReady ? html`<div class="banner" role="status">Nouvelle version de GeoFlora disponible.

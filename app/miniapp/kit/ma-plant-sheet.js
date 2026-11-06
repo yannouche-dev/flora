@@ -12,7 +12,9 @@
 // unless the viewer uses it — zoomed, its information shown) and its rubric « L'essentiel », each of its blocks alone,
 // titled as the sheet titles it (gf-sheet-block `titled`: no layout of the sheet read for its places, none
 // written) — as the Épuré sheet orders them on this device, those folded there left out, and those it leaves out
-// when they are empty. takeFocus(): the focus into the sheet (its plant touched: the screen that opened it).
+// when they are empty. takeFocus(): the focus into the sheet (its plant touched: the screen that opened it). On a phone
+// it covers the box and says so (`sheet-cover`: gf-miniapp hides the rest from sight, the keyboard and screen readers);
+// its plant's name is then the screen's h1.
 
 import { LitElement, html, css, nothing } from 'lit';
 import { getPlant } from '../../core/plants.js';
@@ -52,6 +54,8 @@ export class MaPlantSheet extends LitElement {
     :host { display: contents; }
     /* The plant: over the list on a phone; beside it on a wide screen, its width the user's (the separator on its edge). */
     .sheet { position: fixed; inset: 0; z-index: 950; display: flex; background: var(--gf-surface); }
+    /* Covering the box (a phone): shown again under the box's hiding (gf-miniapp [covered]). */
+    :host([covering]) .sheet { visibility: visible; }
     .body { flex: 1; min-width: 0; display: flex; flex-direction: column; }
     @media (min-width: 900px) {
       .sheet { left: auto; top: var(--top, 56px); border-left: 1px solid var(--gf-border); box-shadow: var(--gf-shadow-float); }
@@ -98,11 +102,39 @@ export class MaPlantSheet extends LitElement {
   connectedCallback() {
     super.connectedCallback();
     addEventListener('keydown', this.#onKey);
+    this.#wideQuery.addEventListener('change', this.#onWide);
   }
 
   disconnectedCallback() {
     super.disconnectedCallback();
     removeEventListener('keydown', this.#onKey);
+    this.#wideQuery.removeEventListener('change', this.#onWide);
+    this.#uncover?.();
+    this.#uncover = null;
+  }
+
+  /** Beside the box from 900 px, over it below. */
+  #wideQuery = matchMedia('(min-width: 900px)');
+  #onWide = () => { this.requestUpdate(); };
+  /** Given back by the box while the sheet covers it (a phone): called, the box shown again. @type {(() => void) | null} */
+  #uncover = null;
+
+  /**
+   * Under 900 px the sheet covers the whole box (its styles): it tells the box (`sheet-cover`), which hides the rest
+   * from sight, the keyboard and screen readers — inert could not: the sheet is drawn inside what it covers.
+   */
+  #cover() {
+    const covers = this.open != null && this.isConnected && !this.#wideQuery.matches;
+    this.toggleAttribute('covering', covers);
+    if (covers && !this.#uncover) {
+      /** @type {CustomEvent<{ uncover: (() => void) | null }>} */
+      const ask = new CustomEvent('sheet-cover', { detail: { uncover: null }, bubbles: true, composed: true });
+      this.dispatchEvent(ask);
+      this.#uncover = ask.detail.uncover ?? (() => {});
+    } else if (!covers && this.#uncover) {
+      this.#uncover();
+      this.#uncover = null;
+    }
   }
 
   /** @param {Map<string, any>} changed */
@@ -175,6 +207,7 @@ export class MaPlantSheet extends LitElement {
     const w = this.#wide ? /** @type {PaneSizer} */ (this.#sizer).state.widths.sheet : undefined;
     if (w != null) host?.style.setProperty('--ma-sheet-w', Math.max(360, Math.min(w, this.#max)) + 1 + 'px');
     else host?.style.removeProperty('--ma-sheet-w');
+    this.#cover();
   }
 
   render() {
@@ -185,16 +218,17 @@ export class MaPlantSheet extends LitElement {
     const z = this.#wide ? this.#sizer : null;
     if (z) z.panes.sheet.width = Math.round(Math.min(560, 0.48 * innerWidth) - 1);
     const w = z?.state.widths.sheet;
-    // Simple, over the whole screen (a phone; what is under it out of reach): its plant's name is the screen's title.
+    // Over the whole screen (a phone; what is under it out of reach): its plant's name is the screen's title.
+    const wide = this.#wideQuery.matches;
     const title = html`<strong>${name || 'Plante'}</strong>`;
     return html`<section class="sheet" aria-label="Plante" @touchstart=${this.#touchStart} @touchend=${this.#touchEnd}>
       ${z ? z.split('sheet', 'right', () => this.#max, 'ma-sheet-body') : nothing}
       <div class="body" id="ma-sheet-body" style=${w != null && z ? `--w-sheet: ${Math.max(360, Math.min(w, this.#max))}px` : ''}>
       <div class="sheet-head">
         <button class="icon-btn" type="button" aria-label="Fermer la fiche" title="Fermer (Échap)" @click=${() => this.#show(null)}>${icon('x-lg')}</button>
-        ${this.simple && !matchMedia('(min-width: 900px)').matches ? html`<h1 class="name">${title}</h1>` : title}
+        ${this.simple && !wide ? html`<h1 class="name">${title}</h1>` : title}
       </div>
-      ${this.simple ? this.#simple(name) : html`<gf-plant-detail embedded subheading plant-id=${this.open} view="epure" ?scoped=${this.scoped} .mediaAt=${this.mediaAt}></gf-plant-detail>`}
+      ${this.simple ? this.#simple(name) : html`<gf-plant-detail embedded ?subheading=${wide} plant-id=${this.open} view="epure" ?scoped=${this.scoped} .mediaAt=${this.mediaAt}></gf-plant-detail>`}
       ${at >= 0 ? html`<nav class="pager" aria-label="Plantes autour">
         <button class="secondary prev" type="button" ?disabled=${at <= 0} @click=${() => this.#step(-1)}>${icon('chevron-left')} Préc.</button>
         <span>${at + 1} / ${list.length}</span>

@@ -64,6 +64,10 @@ export class GfMiniapp extends LitElement {
 
   static styles = [ui, startStyles, askStyles, css`
     :host { display: grid; grid-template-rows: auto minmax(0, 1fr); min-height: 0; background: var(--gf-bg, var(--gf-surface-2)); }
+    /* A plant's sheet over the whole box (a phone: kit/ma-plant-sheet, sheet-cover): the rest hidden — out of reach of the
+       keyboard and of screen readers, as under Flore's sheet; the sheet shows itself again (visibility, unlike inert, can
+       be undone below). */
+    :host([covered]) :is(.bar, .body) { visibility: hidden; }
     .bar { display: flex; align-items: center; gap: 8px; min-height: 48px; padding: 4px 8px; background: var(--gf-surface); border-bottom: 1px solid var(--gf-border); min-width: 0; }
     .quit { flex: none; min-height: 40px; padding: 4px 12px 4px 8px; gap: 6px; border: 0; background: none; box-shadow: none; color: var(--gf-text-muted); font-weight: 500; }
     .quit:hover { background: var(--gf-surface-2); color: var(--gf-text); }
@@ -100,6 +104,8 @@ export class GfMiniapp extends LitElement {
   `];
 
   #store = new StoreController(this);
+  /** The sheets covering the box now (a phone), each until it gives it back. @type {Set<object>} */
+  #covers = new Set();
 
   constructor() {
     super();
@@ -128,6 +134,17 @@ export class GfMiniapp extends LitElement {
       if (/** @type {CustomEvent} */ (e).detail?.id !== this._app?.m.id) return;
       /** @type {any} */ (this.renderRoot.querySelector('ma-grid'))?.resetLayout?.();
       this._app?.replay();
+    });
+    // A sheet covers the box (a phone): `covered` until each one gives it back.
+    this.addEventListener('sheet-cover', e => {
+      e.stopPropagation();
+      const token = {};
+      this.#covers.add(token);
+      this.toggleAttribute('covered', true);
+      /** @type {CustomEvent<{ uncover: (() => void) | null }>} */ (e).detail.uncover = () => {
+        this.#covers.delete(token);
+        this.toggleAttribute('covered', this.#covers.size > 0);
+      };
     });
     // A plant opened by a component (detail.id), or closed (null).
     this.addEventListener('ma-plant', e => {
