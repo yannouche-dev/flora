@@ -77,7 +77,8 @@ export class GfMiniapp extends LitElement {
     .title .bi { color: var(--gf-accent); }
     ma-steps { flex: 1; }
     .spacer { flex: 1; }
-    .more { position: relative; flex: none; }
+    /* Its menu over a plant's sheet beside the cards (kit/ma-plant-sheet .sheet: fixed, z-index 950), which it drops onto. */
+    .more { position: relative; flex: none; z-index: 960; }
     .more summary { list-style: none; display: grid; place-items: center; width: 40px; height: 40px; border-radius: 50%; cursor: pointer; color: var(--gf-text-muted); font-size: 1.2rem; }
     .more summary::-webkit-details-marker { display: none; }
     .more summary:hover { background: var(--gf-surface-2); color: var(--gf-text); }

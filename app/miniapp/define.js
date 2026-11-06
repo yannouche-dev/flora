@@ -25,7 +25,7 @@
 import { config } from '../config.js';
 import { MODULES } from '../core/modules.js';
 
-/** The app's storage keys (a manifest's `owns.keys` are among them, or under its prefix). */
+/** The app's storage keys (a manifest's `owns.keys` are among them — never under the activities' prefix nor in config.paneLayouts: those go in `owns.layouts`). */
 const KEYS = new Set(Object.values(config.storageKeys));
 
 /**

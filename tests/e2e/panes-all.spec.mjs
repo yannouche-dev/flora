@@ -161,7 +161,7 @@ test.describe('chaque écran, chaque largeur', () => {
     expect((await stored(page, 'geoflora.mediaLayout')).widths.info).toBeUndefined();
   });
 
-  test('une plante à côté des cartes (Mosaïque) : sa largeur se règle et se garde ; « Recommencer » l’oublie', async ({ app, page }) => {
+  test('une plante à côté des cartes (Mosaïque) : sa largeur se règle et se garde ; « Remettre la mise en page » la rend ; « Recommencer » l’oublie', async ({ app, page }) => {
     await mosaicPlant(app, page);
     const body = page.locator('ma-plant-sheet #ma-sheet-body');
     const sep = page.locator('ma-plant-sheet [role=separator][aria-controls="ma-sheet-body"]');
@@ -186,6 +186,16 @@ test.describe('chaque écran, chaque largeur', () => {
     await page.setViewportSize({ width: 900, height: 900 });
     await expect.poll(width).toBe(Math.min(w0 + 16, 900 - 320));
     await page.setViewportSize({ width: 1280, height: 900 });
+    await expect.poll(width).toBe(w0 + 16);
+    // ⋯ « Remettre la mise en page »: its default width at once, the plant still open (the game's).
+    const box = page.locator('gf-miniapp');
+    await box.locator('.more summary').click();
+    await box.locator('.menu').getByRole('button', { name: 'Remettre la mise en page' }).click();
+    await expect.poll(width).toBe(w0);
+    expect(await stored(page, 'geoflora.app.mosaique.sheet')).toBeNull();
+    await expect(page.locator('ma-plant-sheet .sheet')).toBeVisible();
+    await sep.focus();
+    await page.keyboard.press('ArrowLeft');
     await expect.poll(width).toBe(w0 + 16);
     // « Recommencer » (the mini-app's own storage): the width forgotten.
     await page.evaluate(async () => {
