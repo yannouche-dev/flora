@@ -3,7 +3,8 @@
 // activity alone on the screen — no header, no tab bar (gf-app) —, under a bar of 48 px: « × Quitter l’activité » (the
 // one way out), its title, its steps (ma-steps, when « Afficher les étapes » says so), the film icon (Découvrir over
 // it), and ⋯: show or hide its steps (for this activity alone: runtime.js#setOwnSteps; not while it draws a steps bar
-// of its own), the layout back to its own, « Recommencer ».
+// of its own), every width of its panes back to the activity's (« Remettre la mise en page »: never its state),
+// « Recommencer ».
 //  - Its manifest is loaded when it opens (app/miniapps/index.js), checked against the kit, and run (runtime.js).
 //  - The address is the whole screen, and the screen follows the address (a link, a reload, Back, Forward): the step,
 //    and the context's keys the app has — ?p= its `focus`, &v= its `view`, &m= its `mediaAt`, &fiche=1 its `sheet`
@@ -44,7 +45,8 @@ import { miniApp } from '../miniapps/index.js';
 import { madeByApp } from '../core/collections.js';
 import { kitProblems } from './define.js';
 import { kit } from './kit.js';
-import { MiniApp, replayItems } from './runtime.js';
+import { MiniApp, layoutKeys, replayItems } from './runtime.js';
+import { resetPanes } from '../core/panes.js';
 import './ma-grid.js';
 import './ma-steps.js';
 import './kit/ma-plant-sheet.js';
@@ -132,7 +134,6 @@ export class GfMiniapp extends LitElement {
     this.addEventListener('ma-replay', e => {
       e.stopPropagation();
       if (/** @type {CustomEvent} */ (e).detail?.id !== this._app?.m.id) return;
-      /** @type {any} */ (this.renderRoot.querySelector('ma-grid'))?.resetLayout?.();
       this._app?.replay();
     });
     // A sheet covers the box (a phone): `covered` until each one gives it back.
@@ -381,8 +382,19 @@ export class GfMiniapp extends LitElement {
     // What will be deleted, said: what it made in Mes plantes (its favourites, its parcours), what it keeps of its own.
     const items = replayItems(app.m, await madeByApp(app.m.id).catch(() => ({ favorites: [], collections: [], kept: { favorites: 0, collections: 0 } })));
     if (!(await this.#ask('replay', '', items))) return;
-    /** @type {any} */ (this.renderRoot.querySelector('ma-grid'))?.resetLayout?.();
     await this._app.replay();
+  }
+
+  /**
+   * « Remettre la mise en page » (⋯): every width of its panes as the activity gives it — its columns, a plant's sheet
+   * beside them, Rencontres' photos and guided way, Parcours' column (runtime.js layoutKeys) —, those on screen at once,
+   * its tabs back to the first. Never its state: the game, the walk, the step, the plant open, the panes of Rencontres'
+   * first steps (the game's) stay.
+   */
+  #resetLayout() {
+    if (!this._app) return;
+    resetPanes(layoutKeys(this._app.m));
+    /** @type {any} */ (this.renderRoot.querySelector('ma-grid'))?.resetTabs?.();
   }
 
   /** The answer of a confirmation dialog. @type {((yes: boolean) => void) | null} */ #answer = null;
@@ -433,7 +445,7 @@ export class GfMiniapp extends LitElement {
           <div class="menu" role="group" aria-label="Options de ${fr(m.title)}">
             ${own ? nothing : html`<button type="button" class="own" @click=${(/** @type {Event} */ e) => { this.#closeMenu(e); app.setOwnSteps(!bar); }}>${icon(bar ? 'eye-slash' : 'list-ul')}
               <span>${bar ? 'Masquer les étapes' : 'Afficher les étapes'} <small>Pour cette activité seulement</small></span></button>`}
-            <button type="button" @click=${(/** @type {Event} */ e) => { this.#closeMenu(e); /** @type {any} */ (this.renderRoot.querySelector('ma-grid'))?.resetLayout?.(); }}>${icon('arrows-collapse')} Remettre la mise en page</button>
+            <button type="button" @click=${(/** @type {Event} */ e) => { this.#closeMenu(e); this.#resetLayout(); }}>${icon('arrows-collapse')} Remettre la mise en page</button>
             <button type="button" class="replay" @click=${(/** @type {Event} */ e) => { this.#closeMenu(e); this.#replay(); }}>${icon('arrow-counterclockwise')} Recommencer</button>
           </div>
         </details>

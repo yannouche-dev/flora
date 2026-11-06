@@ -20,7 +20,7 @@
 // the focus on what follows it. It writes only the activity's context (app.set): no mode, no sheet layout.
 
 import { LitElement, html, css, nothing } from 'lit';
-import { config } from '../../config.js';
+import { appKey } from '../../config.js';
 import { forgetFailures } from '../../core/cache.js';
 import { icon } from '../../core/icons.js';
 import { fr } from '../../core/fr.js';
@@ -41,8 +41,8 @@ import '../../components/gf-thumb.js';
  * @typedef {import('./orchids.js').Found} Found
  */
 
-/** Where the width of a plant's sheet beside the map is kept (the manifest's owns.keys: « Recommencer » forgets it). */
-const SHEET_KEY = config.storageKeys.appPrefix + 'orchidees.sheet';
+/** Where the width of a plant's sheet beside the map is kept (its own space: « Remettre la mise en page » gives it back, « Recommencer » forgets it). */
+const SHEET_KEY = appKey('orchidees', 'sheet');
 /** How the circle moves, said under the place and to the map's readers. */
 const PRESS = 'Appui long sur la carte, puis « Confirmer » : le cercle s’y centre.';
 /** The circle's handle on the map: from stop to stop of the slider (core/distance.js STOPS), its keys and its words. */

@@ -30,7 +30,7 @@ export default defineMiniApp({
   scene: 'trail',
   pitch: 'Marchez, nommez les plantes que vous croisez : chacune prend sa place sur la carte de votre parcours.',
   exit: { label: 'Quitter l’activité' },
-  owns: { keys: [config.storageKeys.trail, config.storageKeys.trailDone, config.storageKeys.trailLayout], reset: () => forgetMadeBy('parcours'),
+  owns: { keys: [config.storageKeys.trail, config.storageKeys.trailDone], layouts: [config.storageKeys.trailLayout], reset: () => forgetMadeBy('parcours'),
     made: { label: 'le parcours en cours', kept: ['Votre parcours enregistré dans Mes plantes est conservé.', 'Vos {n} parcours enregistrés dans Mes plantes sont conservés.'] } },
   shared: ['Mes plantes (sauf les parcours qu’il y a enregistrés)', 'favoris', 'réglages'],
   // « Commencer ici »: located, the walk created there (its game: trail-session.js).

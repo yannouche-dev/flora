@@ -71,7 +71,7 @@ export default defineMiniApp({
   scene: 'twins',
   pitch: 'Six paires de plantes qu’on confond : à qui est chaque indice ? Sans indice sûr, on ne cueille pas.',
   exit: { label: 'Quitter l’activité' },
-  owns: { keys: ['geoflora.app.faux-amis.sheet'], label: 'la partie en cours' },
+  owns: { label: 'la partie en cours' },
   shared: ['réglages'],
   context: {
     // The game dealt and its answers (kit/faux-amis.js Game), kept on this device.

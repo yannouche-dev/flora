@@ -18,7 +18,7 @@
 //    plant's id — a card swiped, a plant noted, a new plant opened or chosen, the context's `focus`: the box counts it
 //    for the first steps of the app), 'dispose' (the box gone: a component's game stops its requests and timers).
 
-import { config } from '../config.js';
+import { appKey } from '../config.js';
 import { MODULES, moduleOn } from '../core/modules.js';
 import { readJSON, writeJSON } from '../core/prefs.js';
 import { publish } from '../core/sync.js';
@@ -34,8 +34,16 @@ import { layoutAt } from './layout.js';
  * @typedef {{ v: number, path: string[], ctx: Record<string, unknown>, finished: boolean, ownSteps?: OwnSteps }} Saved
  */
 
-/** Storage key of a mini-app's state, or of its layout. @param {string} id @param {'state' | 'layout'} part */
-export const storageKey = (id, part) => config.storageKeys.appPrefix + id + '.' + part;
+/** The parts of an activity's own space that are widths of panes (config.js AppPart). @type {import('../config.js').AppPart[]} */
+const PANE_PARTS = ['layout', 'sheet', 'media'];
+
+/**
+ * Every key of the widths of an activity's panes: those of its own space (its columns, a plant's sheet beside them,
+ * Rencontres' photos) and those its manifest keeps elsewhere (owns.layouts: Parcours' column, Rencontres' guided way).
+ * « Remettre la mise en page » empties them (gf-miniapp.js, core/panes.js resetPanes), « Recommencer » too; never its
+ * state, nor a key of owns.keys. Pure. @param {Manifest} m @returns {string[]}
+ */
+export const layoutKeys = m => [...PANE_PARTS.map(part => appKey(m.id, part)), ...(m.owns.layouts ?? [])];
 
 /**
  * What « Recommencer » will delete, said in its confirmation — the favourites its matches added, each collection it
@@ -115,7 +123,7 @@ export class MiniApp extends EventTarget {
     super();
     this.m = m;
     this.showSteps = opts.showSteps ?? 'auto';
-    let saved = opts.saved === undefined ? readJSON(storageKey(m.id, 'state'), null) : opts.saved;
+    let saved = opts.saved === undefined ? readJSON(appKey(m.id, 'state'), null) : opts.saved;
     if (saved && saved.v !== m.version) saved = m.migrate ? m.migrate(saved, saved.v) : null;
     /** The path kept from the last visit, offered as « Continuer ». @type {string[]} */
     this.savedPath = Array.isArray(saved?.path) ? saved.path.filter((/** @type {unknown} */ s) => typeof s === 'string') : [];
@@ -245,12 +253,12 @@ export class MiniApp extends EventTarget {
 
   /**
    * « Recommencer » (confirmed by the box): what the activity owns emptied — its own state, the keys listed in
-   * owns.keys, owns.reset() for the rest — and back to its first step. Never what it only uses (manifest `shared`).
+   * owns.keys, the widths of its panes (layoutKeys), owns.reset() for the rest — and back to its first step. Never what it only uses (manifest `shared`).
    * The other tabs are told (core/sync.js): theirs is emptied too.
    */
   async replay(remote = false) {
     await this.m.owns.reset?.();
-    for (const key of [...(this.m.owns.keys ?? []), storageKey(this.m.id, 'state'), storageKey(this.m.id, 'layout')]) {
+    for (const key of [...(this.m.owns.keys ?? []), appKey(this.m.id, 'state'), ...layoutKeys(this.m)]) {
       writeJSON(key, null);
     }
     this.cleared();
@@ -343,7 +351,7 @@ export class MiniApp extends EventTarget {
   flush() {
     clearTimeout(this.saveTimer);
     this.saveTimer = 0;
-    const key = storageKey(this.m.id, 'state');
+    const key = appKey(this.m.id, 'state');
     writeJSON(key, this.pristine ? null : this.saved()); // not written: not kept
   }
 

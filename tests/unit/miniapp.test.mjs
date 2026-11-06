@@ -6,7 +6,8 @@ import assert from 'node:assert/strict';
 import { defineMiniApp, kitProblems, paths, ManifestError } from '../../app/miniapp/define.js';
 import { layoutAt, fit, tierOf, HANDLE } from '../../app/miniapp/layout.js';
 import { createContext } from '../../app/miniapp/context.js';
-import { MiniApp, guided, pathTo, storageKey } from '../../app/miniapp/runtime.js';
+import { MiniApp, guided, layoutKeys, pathTo } from '../../app/miniapp/runtime.js';
+import { appKey, config } from '../../app/config.js';
 import { random } from './support/random.mjs';
 
 /** A manifest on the model of Rencontres: map ┃ deck ┃ side, a fork, a component given blocks along the way. */
@@ -68,6 +69,11 @@ test('defineMiniApp : chaque règle refuse ce qu’elle doit, en le disant', () 
   assert.match(refused({ ...m, context: { ...m.context, focusId: { init: null } } }), /both in context and derive/);
   // What it owns: storage keys of the app only; its session in words.
   assert.match(refused({ ...m, owns: { keys: ['favorites'] } }), /owns.keys/);
+  // Its own space is the runtime's (appKey): none of it named; a width is a layout, a layout only a width.
+  assert.match(refused({ ...m, owns: { keys: [appKey('meet-test', 'sheet')] } }), /owns.keys/);
+  assert.match(refused({ ...m, owns: { keys: [config.storageKeys.trailLayout] } }), /owns.keys/);
+  assert.match(refused({ ...m, owns: { layouts: [config.storageKeys.trail] } }), /owns.layouts/);
+  assert.deepEqual(defineMiniApp({ ...m, owns: { keys: [config.storageKeys.trail], layouts: [config.storageKeys.trailLayout] } }).owns.layouts, [config.storageKeys.trailLayout]);
   assert.match(refused({ ...m, owns: { reset: 'all' } }), /owns.reset/);
   assert.match(refused({ ...m, owns: { label: ' ' } }), /owns.label/);
   // The plant over its start screen: simple or not (its × always « Fermer la fiche »).
@@ -183,17 +189,26 @@ test('runtime : le chemin, can, l’avance par done, guided', () => {
   app.dispose();
 });
 
+test('runtime : « Remettre la mise en page » — layoutKeys : les largeurs de son espace, puis celles que son manifeste garde ailleurs ; jamais son état', () => {
+  const kept = defineMiniApp(meet({ id: 'meet-lay', owns: { keys: [config.storageKeys.trail], layouts: [config.storageKeys.trailLayout] } }));
+  assert.deepEqual(layoutKeys(kept), ['geoflora.app.meet-lay.layout', 'geoflora.app.meet-lay.sheet', 'geoflora.app.meet-lay.media', 'geoflora.trailLayout']);
+  assert.ok(!layoutKeys(kept).includes(appKey('meet-lay', 'state')) && !layoutKeys(kept).includes(config.storageKeys.trail));
+  assert.deepEqual(layoutKeys(defineMiniApp(meet({ id: 'meet-lay2' }))), ['geoflora.app.meet-lay2.layout', 'geoflora.app.meet-lay2.sheet', 'geoflora.app.meet-lay2.media']);
+});
+
 test('runtime : « Recommencer » vide ce que l’application possède, et seulement cela, puis revient au départ', async () => {
-  localStorage.setItem('geoflora.app.meet-replay.session', '"walk"');
+  const mine = [config.storageKeys.trailDone, config.storageKeys.trailLayout, appKey('meet-replay', 'sheet'), appKey('meet-replay', 'media')];
+  for (const key of mine) localStorage.setItem(key, '"x"');
+  localStorage.setItem(appKey('meet-other', 'sheet'), '"theirs"');
   localStorage.setItem('geoflora.favorites-of-the-user', '"kept"');
   let resets = 0;
-  const m = defineMiniApp(meet({ id: 'meet-replay', owns: { keys: ['geoflora.app.meet-replay.session'], reset: () => { resets++; } }, shared: ['favoris'] }));
+  const m = defineMiniApp(meet({ id: 'meet-replay', owns: { keys: [config.storageKeys.trailDone], layouts: [config.storageKeys.trailLayout], reset: () => { resets++; } }, shared: ['favoris'] }));
   const app = new MiniApp(m, { saved: null });
   app.set({ point: [2.35, 48.85], radius: 5000 });
   app.go('cards');
   app.set({ liked: [3] });
   app.flush();
-  assert.ok(localStorage.getItem(storageKey('meet-replay', 'state')));
+  assert.ok(localStorage.getItem(appKey('meet-replay', 'state')));
   /** @type {any[]} */
   const navigations = [];
   app.addEventListener('navigate', e => navigations.push(/** @type {CustomEvent} */ (e).detail));
@@ -203,13 +218,15 @@ test('runtime : « Recommencer » vide ce que l’application possède, et seule
   assert.deepEqual({ point: app.c.point, radius: app.c.radius, liked: app.c.liked }, { point: null, radius: 1000, liked: [] });
   assert.equal(app.generation, generation + 1);
   assert.equal(resets, 1);
-  assert.equal(localStorage.getItem('geoflora.app.meet-replay.session'), null);
+  for (const key of mine) assert.equal(localStorage.getItem(key), null, key);
+  assert.equal(localStorage.getItem(appKey('meet-other', 'sheet')), '"theirs"', 'another activity’s stays');
   assert.equal(localStorage.getItem('geoflora.favorites-of-the-user'), '"kept"', 'what it only uses stays');
+  localStorage.removeItem(appKey('meet-other', 'sheet'));
   assert.deepEqual(navigations, [{ step: 'start', replace: true }]);
   app.flush();
   // Nothing left behind, as if never opened: no state, no layout.
-  assert.equal(localStorage.getItem(storageKey('meet-replay', 'state')), null);
-  assert.equal(localStorage.getItem(storageKey('meet-replay', 'layout')), null);
+  assert.equal(localStorage.getItem(appKey('meet-replay', 'state')), null);
+  assert.equal(localStorage.getItem(appKey('meet-replay', 'layout')), null);
   // As found again on the next visit: nothing to take up again.
   const again = new MiniApp(m);
   assert.deepEqual([again.c.point, again.savedPath, again.finished, again.resume()], [null, [], false, null]);
@@ -224,7 +241,7 @@ test('runtime : « Masquer / Afficher les étapes » du menu ⋯ vaut pour elle 
   app.setOwnSteps(false);
   assert.deepEqual([app.ownSteps, app.guided, app.pristine], ['off', false, false], 'a choice of its own: kept, even at its start');
   app.flush();
-  assert.equal(JSON.parse(localStorage.getItem(storageKey('meet-steps', 'state')) || 'null')?.ownSteps, 'off');
+  assert.equal(JSON.parse(localStorage.getItem(appKey('meet-steps', 'state')) || 'null')?.ownSteps, 'off');
   const again = new MiniApp(m, { showSteps: 'auto' });
   assert.deepEqual([again.ownSteps, again.guided], ['off', false], 'found again at the next visit');
   // Another mini-app follows the setting of all.
@@ -238,7 +255,7 @@ test('runtime : « Masquer / Afficher les étapes » du menu ⋯ vaut pour elle 
   await again.replay();
   assert.deepEqual([again.ownSteps, again.guided], [null, true], '« Recommencer » forgets it');
   again.flush();
-  assert.equal(localStorage.getItem(storageKey('meet-steps', 'state')), null);
+  assert.equal(localStorage.getItem(appKey('meet-steps', 'state')), null);
   again.dispose();
   app.dispose();
   // Read back only as 'on' or 'off'.

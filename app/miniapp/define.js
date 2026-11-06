@@ -4,9 +4,11 @@
 // a mistake in a manifest fails there, with its name and the step at fault, not later on a screen. Pure: tested under
 // Node.
 //
-// What is whose (« Recommencer », see runtime.js#replay): an activity OWNS its context, its own state and layout
-// (geoflora.app.<id>.*) and what its manifest lists in `owns` — the storage keys of its session (`keys`), and
-// `reset()` for the rest of it (a deck's swipes kept by a core module); « Recommencer » empties exactly that, then
+// What is whose (« Recommencer », see runtime.js#replay): an activity OWNS its context, its own space
+// (geoflora.app.<id>.*: config.js appKey — its state, and the widths of its panes: runtime.js layoutKeys) and what its
+// manifest lists in `owns` — the storage keys of its session outside it (`keys`), the widths of its panes kept outside
+// it (`layouts`), and `reset()` for the rest of it (a deck's swipes kept by a core module); « Recommencer » empties
+// exactly that, then
 // starts again at its first step. What it only USES is the user's, and it never clears it: `shared` names it (Mes
 // plantes, the favourites, the places, the settings), for the reader. Doing or leaving an activity changes nothing
 // else in the app: no mode, no setting, no layout of the plant sheet — only a button that says so, pressed by the user.
@@ -65,8 +67,9 @@ const KEYS = new Set(Object.values(config.storageKeys));
  * @property {(c: any) => string | null} [resumeAt]              the step its address opens when it names none (a game under way), else the start
  * @property {{ simple?: boolean }} [plantSheet]   the plant of its address over a start screen, as the box shows it
  *   (kit/ma-plant-sheet.js): `simple`, its « Médias » and « L'essentiel » only
- * @property {{ keys?: string[], reset?: () => unknown, made?: { label: string, kept: [string, string] }, label?: string }} owns     the session
- *   data it owns, emptied by « Recommencer »; `made`: what it calls a collection it makes in Mes plantes, still its own
+ * @property {{ keys?: string[], layouts?: string[], reset?: () => unknown, made?: { label: string, kept: [string, string] }, label?: string }} owns     the session
+ *   data it owns, emptied by « Recommencer »; `layouts`: the widths of its panes kept outside its own space
+ *   (config.paneLayouts: Parcours' column, Rencontres' guided way) — all that « Remettre la mise en page » empties there; `made`: what it calls a collection it makes in Mes plantes, still its own
  *   (« le parcours en cours »), and those the user made their own, kept (one, many — {n} the count); `label`: its
  *   session in words, as « Recommencer » says it goes (a game: « la partie en cours »; none: « l’activité en cours »)
  * @property {string[]} shared                                    the user's data it uses and never clears (said, not enforced)
@@ -147,9 +150,12 @@ export function defineMiniApp(spec) {
   if (!isObj(m.exit) || typeof m.exit.label !== 'string' || !m.exit.label) fail('exit needs a label (« Quitter … »)');
   if (m.exit.confirm !== undefined && !isFn(m.exit.confirm)) fail('exit.confirm must be a function');
   if (!Number.isInteger(m.version) || m.version < 1) fail('version must be a whole number from 1');
-  if (!isObj(m.owns)) fail('owns must be an object: { keys?, reset? }');
-  const appKey = (/** @type {unknown} */ k) => typeof k === 'string' && (KEYS.has(k) || k.startsWith(config.storageKeys.appPrefix));
-  if (m.owns.keys !== undefined && (!Array.isArray(m.owns.keys) || !m.owns.keys.every(appKey))) fail('owns.keys: storage keys of the app (config.storageKeys, or geoflora.app.…)');
+  if (!isObj(m.owns)) fail('owns must be an object: { keys?, layouts?, reset?, made?, label? }');
+  // Its own space (geoflora.app.<id>.*) is the runtime's (config.js appKey): a manifest names none of it; a width is a layout.
+  const ownKey = (/** @type {unknown} */ k) => typeof k === 'string' && KEYS.has(k) && !k.startsWith(config.storageKeys.appPrefix) && !config.paneLayouts.includes(k);
+  const paneKey = (/** @type {unknown} */ k) => typeof k === 'string' && config.paneLayouts.includes(k);
+  if (m.owns.keys !== undefined && (!Array.isArray(m.owns.keys) || !m.owns.keys.every(ownKey))) fail('owns.keys: keys of config.storageKeys, not of its own space (the runtime’s: appKey) nor widths (owns.layouts)');
+  if (m.owns.layouts !== undefined && (!Array.isArray(m.owns.layouts) || !m.owns.layouts.every(paneKey))) fail('owns.layouts: widths of panes, keys of config.paneLayouts');
   if (m.owns.reset !== undefined && !isFn(m.owns.reset)) fail('owns.reset must be a function');
   if (m.owns.made !== undefined && (typeof m.owns.made?.label !== 'string' || !Array.isArray(m.owns.made.kept) || m.owns.made.kept.length !== 2)) fail('owns.made: { label, kept: [one, many] }');
   if (m.owns.label !== undefined && (typeof m.owns.label !== 'string' || !m.owns.label.trim())) fail('owns.label: its session in words (« la partie en cours »)');

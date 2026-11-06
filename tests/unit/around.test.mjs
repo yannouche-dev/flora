@@ -15,7 +15,8 @@ import { keptCtx, forgetPlaces, keptPlace, leftAt, clearAroundGames } from '../.
 import * as M from '../../app/core/place-model.js';
 import { toPortable } from '../../app/core/portable.js';
 import { defineMiniApp } from '../../app/miniapp/define.js';
-import { MiniApp, replayItems, storageKey } from '../../app/miniapp/runtime.js';
+import { MiniApp, replayItems } from '../../app/miniapp/runtime.js';
+import { appKey } from '../../app/config.js';
 
 const plants = JSON.parse(await readFile(new URL('../fixtures/plants.json', import.meta.url), 'utf8'));
 const plant = (/** @type {string} */ name) => plants.find((/** @type {any} */ x) => x.scientificName === name);
@@ -343,16 +344,16 @@ test('runtime : « Recommencer » ne laisse rien derrière lui, comme jamais ouv
   const before = footprint();
   const opened = new MiniApp(m);
   opened.dispose();
-  assert.equal(localStorage.getItem(storageKey('cueillette-t', 'state')), null, 'ouverte puis quittée au départ : rien d’écrit');
+  assert.equal(localStorage.getItem(appKey('cueillette-t', 'state')), null, 'ouverte puis quittée au départ : rien d’écrit');
   const app = new MiniApp(m);
   app.set({ point: [2, 48], matches: [3] });
   app.go('map');
   app.flush();
-  assert.ok(localStorage.getItem(storageKey('cueillette-t', 'state')));
-  localStorage.setItem(storageKey('cueillette-t', 'layout'), '{"widths":{}}');
+  assert.ok(localStorage.getItem(appKey('cueillette-t', 'state')));
+  localStorage.setItem(appKey('cueillette-t', 'layout'), '{"widths":{}}');
   await app.replay();
   app.dispose();
-  assert.equal(localStorage.getItem(storageKey('cueillette-t', 'state')), null);
-  assert.equal(localStorage.getItem(storageKey('cueillette-t', 'layout')), null);
+  assert.equal(localStorage.getItem(appKey('cueillette-t', 'state')), null);
+  assert.equal(localStorage.getItem(appKey('cueillette-t', 'layout')), null);
   assert.deepEqual(footprint(), before);
 });

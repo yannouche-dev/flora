@@ -43,7 +43,7 @@ export default defineMiniApp({
   pitch: 'Les plantes observées autour de vous, une carte à la fois : à droite si elle vous plaît, à gauche sinon.',
   uses: ['inaturalist'],
   exit: { label: 'Quitter l’activité' },
-  owns: { keys: [config.storageKeys.discoverLayout, 'geoflora.app.rencontres.media', 'geoflora.app.rencontres.sheet'], reset: () => { replayMeet(); forgetGame('rencontres'); return forgetMadeBy('rencontres'); },
+  owns: { layouts: [config.storageKeys.discoverLayout], reset: () => { replayMeet(); forgetGame('rencontres'); return forgetMadeBy('rencontres'); },
     label: 'la partie en cours' },
   shared: ['Mes plantes (sauf les favoris ajoutés par ses matchs)', 'lieux', 'premiers pas de l’application', 'réglages'],
   // One plant on the screen, the plant chosen (?p=): the map, the photos its first match brought and the sheet show it

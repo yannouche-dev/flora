@@ -33,7 +33,7 @@ export default defineMiniApp({
   pitch: 'Ce qui se cueille autour de vous… et ses sosies toxiques, les mortels d’abord.',
   uses: ['inaturalist'],
   exit: { label: 'Quitter l’activité' },
-  owns: { keys: ['geoflora.app.cueillette.sheet'], reset: () => { forgetGame('cueillette'); return forgetMadeBy('cueillette'); } },
+  owns: { reset: () => { forgetGame('cueillette'); return forgetMadeBy('cueillette'); } },
   shared: ['Mes plantes (sauf les favoris ajoutés par ses matchs)', 'lieux', 'réglages'],
   // Its own: the toxic look-alikes recognised, to avoid (kit/cards.js#avoid) — never among the matches.
   context: { ...aroundContext(), avoided: { init: [], persist: true } },

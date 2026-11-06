@@ -11,7 +11,7 @@
 // said, with « Réessayer » (the game kept). It scrolls itself: one h1 a view, the focus on it as a view comes.
 
 import { LitElement, html, css, nothing, repeat } from 'lit';
-import { config } from '../../config.js';
+import { appKey } from '../../config.js';
 import * as db from '../../core/db.js';
 import { creditText } from '../../core/credit.js';
 import { icon } from '../../core/icons.js';
@@ -53,8 +53,8 @@ function plantFor(taxon) {
 
 /** « Titre — Anses et Centres antipoison, 2025 »: what it is, who said it, and when. @param {import('../../core/lookalikes.js').Source} s */
 const sourceLine = s => `${s.title} — ${s.publisher}, ${String(s.date).slice(0, 4)}`;
-/** Where the width of a plant's sheet beside the recap is kept (the manifest's owns.keys: « Recommencer » forgets it). */
-const SHEET_KEY = config.storageKeys.appPrefix + 'faux-amis.sheet';
+/** Where the width of a plant's sheet beside the recap is kept (its own space: « Remettre la mise en page » gives it back, « Recommencer » forgets it). */
+const SHEET_KEY = appKey('faux-amis', 'sheet');
 
 export class MaFauxAmis extends LitElement {
   static properties = {

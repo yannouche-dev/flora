@@ -29,7 +29,7 @@ export default defineMiniApp({
   pitch: 'Toutes les photos des plantes du coin, en grand. Une image touchée : toutes celles de la plante.',
   uses: ['inaturalist'],
   exit: { label: 'Quitter l’activité' },
-  owns: { keys: ['geoflora.app.mosaique.sheet'], reset: () => { forgetGame('mosaique'); return forgetMadeBy('mosaique'); } },
+  owns: { reset: () => { forgetGame('mosaique'); return forgetMadeBy('mosaique'); } },
   shared: ['Mes plantes (sauf les favoris ajoutés par ses matchs)', 'lieux', 'réglages'],
   context: aroundContext(),
   actions: { locate },
