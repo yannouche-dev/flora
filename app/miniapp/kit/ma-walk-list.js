@@ -5,7 +5,7 @@
 
 import { LitElement, html, css, nothing, repeat } from 'lit';
 import { ui } from '../../styles/ui.js';
-import { groupsOf } from './trail-store.js';
+import { groupsOf } from '../../core/trail-store.js';
 import { countOf } from '../../core/place-model.js';
 import { SessionWatch } from './watch.js';
 import '../../components/gf-thumb.js';

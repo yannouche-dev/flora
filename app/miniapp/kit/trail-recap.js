@@ -1,5 +1,5 @@
 // @ts-check
-// The recap of a Parcours botanique: how long, how far, how high (ma-trail-recap.js). Apart from trail-store.js, which
+// The recap of a Parcours botanique: how long, how far, how high (ma-trail-recap.js). Apart from core/trail-store.js, which
 // the start of the app reads: the walk (core/walk.js) and the altitudes (core/altitude.js) come with the recap only.
 // Tested under Node (tests/unit/trail.test.mjs).
 

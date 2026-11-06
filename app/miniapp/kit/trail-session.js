@@ -1,7 +1,7 @@
 // @ts-check
 // The game of the Parcours botanique, shared by its kit (the start, ma-walk and its parts, ma-trail-recap): one per
 // activity open, a new one after « Recommencer » (trailSessionOf). The walk under way and the one just ended (their ids
-// kept on the device: kit/trail-store.js), those to continue (the parcours of Mes plantes: every place marked a walk,
+// kept on the device: core/trail-store.js), those to continue (the parcours of Mes plantes: every place marked a walk,
 // received ones too, the last changed first), where I am (followed while walking), the
 // plant touched, the word said after an action (« Annuler »). Its actions: start here (the app's action `locate`) or
 // from a commune, take one up again, add a plant where I stand, take one out, rename, share, end (its recap), start
@@ -16,7 +16,7 @@ import { getPlant } from '../../core/plants.js';
 import { confirmAsk } from '../../components/gf-ask.js';
 import { ACTION_TOAST_MS, TOAST_MS } from '../../core/toast.js';
 import { readJSON, writeJSON } from '../../core/prefs.js';
-import { DONE, KEY, NAMED, continueWalk } from './trail-store.js';
+import { DONE, KEY, NAMED, continueWalk } from '../../core/trail-store.js';
 
 /** @typedef {import('../runtime.js').MiniApp} MiniApp */
 

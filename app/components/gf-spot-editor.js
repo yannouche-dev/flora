@@ -31,7 +31,7 @@ import './gf-nearby-places.js';
 import { map3dProblem, openMap3d } from './gf-map3d.js';
 import { briefToast } from '../core/toast.js';
 import { hintView, takeHint } from '../core/hints.js';
-import { continueWalk } from '../miniapp/kit/trail-store.js';
+import { continueWalk } from '../core/trail-store.js';
 
 const today = () => {
   const d = new Date();

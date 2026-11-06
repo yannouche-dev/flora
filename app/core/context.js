@@ -11,7 +11,7 @@ import { startAt } from './history.js';
 import { href, isStart, parse } from './router.js';
 import { store } from './store.js';
 import { arrivedAt, tabShown } from './discover.js';
-import { walkOn } from '../miniapp/kit/trail-store.js';
+import { walkOn } from './trail-store.js';
 
 /**
  * @typedef {object} Context

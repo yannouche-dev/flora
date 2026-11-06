@@ -15,7 +15,7 @@ import { map3dProblem, openMap3d } from '../../components/gf-map3d.js';
 import { ui } from '../../styles/ui.js';
 import { briefToast } from '../../core/toast.js';
 import { writeJSON } from '../../core/prefs.js';
-import { DONE, groupsOf } from './trail-store.js';
+import { DONE, groupsOf } from '../../core/trail-store.js';
 import { countOf } from '../../core/place-model.js';
 import { recapOf } from './trail-recap.js';
 import { trailSessionOf } from './trail-session.js';

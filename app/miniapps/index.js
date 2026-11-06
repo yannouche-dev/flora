@@ -8,7 +8,7 @@
 
 import { aroundUnderWay, keptCtx, leftAt } from '../core/around-sessions.js';
 import { underWay } from '../miniapp/kit/faux-amis-store.js';
-import { walkUnderWay } from '../miniapp/kit/trail-store.js';
+import { walkUnderWay } from '../core/trail-store.js';
 
 /**
  * @typedef {{ id: string, title: string, icon: import('../core/icons.js').IconName, pitch: string, scene: string, underWay: () => boolean,
