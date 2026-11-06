@@ -18,7 +18,7 @@ test('fail-closed : fichier illisible → avertissement « liste indisponible »
   const fetch = globalThis.fetch;
   t.after(() => { globalThis.fetch = fetch; });
   globalThis.fetch = async () => new Response('', { status: 503 });
-  assert.deepEqual(await lookalikeWarning(plant('Allium ursinum')), { toxic: true, unread: true, text: UNREAD_LOOKALIKES });
+  assert.deepEqual(await lookalikeWarning(plant('Allium ursinum')), { toxic: true, unread: true, level: 'danger', text: UNREAD_LOOKALIKES });
   globalThis.fetch = async () => new Response('{"pairs":[]}', { status: 200 });
   assert.equal((await lookalikeWarning(plant('Urtica dioica')))?.unread, true, 'un fichier sans paire non plus');
   globalThis.fetch = async () => { throw new TypeError('Failed to fetch'); };
@@ -36,6 +36,25 @@ test('colchique (toxique, désigné par son genre) : plante mortelle, confondue 
   const w = await lookalikeWarning(plant('Colchicum autumnale'));
   assert.equal(w?.toxic, true);
   assert.match(w?.text || '', /^Plante mortelle, confondue avec : .*Ail des ours/);
+});
+
+test('« Noter ici » : la ligne des sosies au niveau de la plus grave de ses confusions, celui de son verdict', async () => {
+  const levels = Object.fromEntries(await Promise.all(['Allium ursinum', 'Colchicum autumnale', 'Conium maculatum', 'Petroselinum crispum',
+    'Laurus nobilis', 'Castanea sativa', 'Aesculus hippocastanum'].map(async n => [n, (await lookalikeWarning(plant(n)))?.level])));
+  assert.deepEqual(levels, {
+    'Allium ursinum': 'deadly', 'Colchicum autumnale': 'deadly', 'Conium maculatum': 'danger', 'Petroselinum crispum': 'danger',
+    'Laurus nobilis': 'danger', 'Castanea sativa': 'warn', 'Aesculus hippocastanum': 'danger'
+  });
+  // Every plant of the reduced flora: the line's level is that of its gravest confusion in its verdict (the sheet's).
+  let lines = 0;
+  for (const p of plants) {
+    const w = await lookalikeWarning(p);
+    if (!w) continue;
+    lines++;
+    const side = (await verdictOf(p)).reasons.find(r => r.kind === 'edible-side' || r.kind === 'toxic-side');
+    assert.equal(w.level, side?.level, p.scientificName);
+  }
+  assert.ok(lines > 20, lines + ' lignes');
 });
 
 test('les paires mortelles d’abord ; une plante sans confusion connue : rien', async () => {

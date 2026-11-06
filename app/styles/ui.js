@@ -159,16 +159,6 @@ export const ui = css`
     font-weight: 600;
   }
   :where(.badge.soon) { background: var(--gf-accent-soft); color: var(--gf-text); }
-  :where(.toast) {
-    background: var(--gf-text);
-    color: var(--gf-bg);
-    border-radius: var(--gf-radius);
-    box-shadow: var(--gf-shadow-float);
-    padding: 10px 16px;
-    font-size: 0.9rem;
-  }
-  :where(.toast .link, .toast a) { color: var(--gf-accent-soft); font-weight: 600; }
-
   /* A map's first-use hint (core/hints.js): shown once per device, its ✕ lets it go. */
   :where(.hint-once) {
     display: flex;

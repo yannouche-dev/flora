@@ -58,19 +58,28 @@ export function replayQuestion(title, items, id) {
 export function severityChip(v, { count = false } = {}) {
   if (!v?.word || !v.level || v.level === 'none') return nothing;
   const n = v.reasons?.length ?? 0;
-  const glyph = v.level === 'deadly' || v.level === 'danger' ? icon('exclamation-octagon-fill') : v.level === 'warn' ? icon('exclamation-triangle-fill') : nothing;
-  return html`<span class="sev-chip ${v.level}" title=${n ? v.reasons?.map(r => r.text).join('\n') ?? nothing : nothing}>${glyph}${fr(v.word)}${count && n ? ` · ${n}` : ''}</span>`;
+  return html`<span class="sev-chip ${v.level}" title=${n ? v.reasons?.map(r => r.text).join('\n') ?? nothing : nothing}>${severityGlyph(v.level)}${fr(v.word)}${count && n ? ` · ${n}` : ''}</span>`;
 }
 
-/** The chip's colours (Faux amis' tag, one per level): text at 4.5:1 on its tint, light or dark; `deadly` filled. */
+/** A level's sign: an octagon for danger and deadly, a triangle for a warning, none below. @param {string} level */
+export const severityGlyph = level =>
+  level === 'deadly' || level === 'danger' ? icon('exclamation-octagon-fill') : level === 'warn' ? icon('exclamation-triangle-fill') : nothing;
+
+/**
+ * The colours of a level, one per level: the chip (Faux amis' tag) and the line of a warning (`.sev-line`, the toast of
+ * « Noter ici »), each on its own tint — readable on any surface, text at 4.5:1, light or dark; `deadly` filled.
+ */
 export const severityStyles = css`
   .sev-chip { display: inline-flex; align-items: center; gap: 4px; max-width: 100%; padding: 2px 8px; box-sizing: border-box; border-radius: var(--gf-radius-pill);
     font-size: 0.75rem; font-weight: 700; line-height: 1.35; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; vertical-align: middle;
     background: var(--gf-surface-2); color: var(--gf-text); }
   .sev-chip .bi { flex: none; }
-  .sev-chip.warn { background: var(--gf-warn-bg); color: color-mix(in srgb, var(--gf-warn) 78%, var(--gf-text)); }
-  .sev-chip.danger { background: var(--gf-danger-bg); color: var(--gf-danger); }
-  .sev-chip.deadly { background: var(--gf-deadly); color: var(--gf-deadly-contrast); }
+  .sev-line { display: block; padding: 6px 10px; border-radius: var(--gf-radius-sm); background: var(--gf-surface-2); color: var(--gf-text);
+    font-size: 0.85rem; font-weight: 600; line-height: 1.35; }
+  .sev-line a { color: inherit; }
+  .sev-chip.warn, .sev-line.warn { background: var(--gf-warn-bg); color: color-mix(in srgb, var(--gf-warn) 78%, var(--gf-text)); }
+  .sev-chip.danger, .sev-line.danger { background: var(--gf-danger-bg); color: var(--gf-danger); }
+  .sev-chip.deadly, .sev-line.deadly { background: var(--gf-deadly); color: var(--gf-deadly-contrast); }
 `;
 
 /**

@@ -236,6 +236,15 @@ test('Partager un parcours en cours : demandé, son départ dit ; refusé, il re
   await expect(page.locator('.gf-brief-toast')).toContainText('Lien du parcours copié : collez-le où vous voulez');
   await expect.poll(owner).toEqual([null, 'parcours']);
   const [link] = await copiedOn(page);
+  // Ended, shared from its recap: the app's brief toast too, above « Partager le parcours » (no toast of its own).
+  await trail.locator('.card .end').click();
+  await expect(trail.getByRole('heading', { level: 1, name: 'Parcours terminé' })).toBeVisible();
+  await expect(page.locator('.gf-brief-toast')).toHaveCount(0);
+  await trail.getByRole('button', { name: 'Partager le parcours' }).click();
+  await page.getByRole('alertdialog', { name: 'Partager le parcours ?' }).getByRole('button', { name: 'Partager' }).click();
+  await expect(page.locator('.gf-brief-toast')).toContainText('Lien du parcours copié : collez-le où vous voulez');
+  await expect(page.locator('ma-trail-recap .toast')).toHaveCount(0);
+  await expect(page.locator('.gf-brief-toast'), 'puis il s’en va').toHaveCount(0);
 
   const other = await newDevice();
   await other.page.goto(link);

@@ -6,7 +6,7 @@
 // Never « comestible », never « sans danger »: `none` only says our sources say nothing, and no chip draws it.
 // Fail closed: a file that cannot be read is a reason of its own (`unread`, at the danger level), said first.
 
-import { edibleFilter, gravest, severityNote, severityOf } from './lookalikes.js';
+import { confusionLevel, edibleFilter, gravest, severityNote, severityOf } from './lookalikes.js';
 import { harvestRuleText } from './regulation.js';
 import { appliesIn, isNational } from './territory.js';
 
@@ -37,17 +37,6 @@ export const UNREAD = 'Données de toxicité indisponibles pour le moment : ne c
 const THREATENED = ['CR', 'EN', 'VU'];
 const PROTECTION = ['PN', 'PR', 'PD'];
 const CONFUSIONS = 'Anses, Centres antipoison';
-
-/**
- * The level of one confusion, for this plant's side: « mortel » deadly; « très toxique » (grave) a danger; « toxique »
- * a danger on the toxic side (the plant itself), a warning on the edible side (its look-alike). The confusion chips of
- * the sheet and of Faux amis read it too.
- * @param {import('./lookalikes.js').Pair} pair @param {Lookalike['side']} side @returns {Level}
- */
-export function confusionLevel(pair, side) {
-  const sev = severityOf(pair);
-  return sev.key === 'mortel' ? 'deadly' : sev.danger || side === 'toxic' ? 'danger' : 'warn';
-}
 
 /** A confusion's chip: its level, the pair's severity as its word. @param {import('./lookalikes.js').Pair} pair @param {Lookalike['side']} side */
 export const confusionChip = (pair, side) => ({ level: confusionLevel(pair, side), word: severityOf(pair).tag });

@@ -14,19 +14,19 @@ const LEVEL = { PN: 'Protection nationale', PR: 'Protection régionale', PD: 'Pr
 export const inpnStatusUrl = id => `https://inpn.mnhn.fr/espece/cd_nom/${id}/tab/statut`;
 
 /**
- * One-line warning for toasts (capture, added plant): protection or picking rule where the plant is.
+ * One-line warning for the toast of « Noter ici »: protection (danger) or picking rule (warn) where the plant is.
  * @param {any} plant TAXREF record with `statuses`
  * @param {[number, number] | null} [point] where it is recorded
- * @returns {Promise<string | null>}
+ * @returns {Promise<{ level: 'danger' | 'warn', text: string } | null>}
  */
 export async function statusWarning(plant, point) {
   if (!plant?.statuses?.length) return null;
   const { national, here } = sortStatuses(plant.statuses, await territoryFor(point).catch(() => null));
   const protection = [...national, ...here].find(s => PROTECTION.includes(s.type));
-  if (protection) return `Espèce protégée (${protection.type === 'PN' ? 'France' : protection.area})`;
+  if (protection) return { level: 'danger', text: `Espèce protégée (${protection.type === 'PN' ? 'France' : protection.area})` };
   // Only a picking rule of this department or region (never a CITES annex, an overseas or invasive species list).
   const rule = harvestRules(here)[0];
-  return rule ? `Cueillette réglementée (${rule.area})` : null;
+  return rule ? { level: 'warn', text: `Cueillette réglementée (${rule.area})` } : null;
 }
 
 /**

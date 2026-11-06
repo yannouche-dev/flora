@@ -16,6 +16,7 @@ import { harvestStop } from '../core/danger.js';
 import { statusWarning } from './gf-status.js';
 import { emergency } from '../core/poison.js';
 import { ui } from '../styles/ui.js';
+import { severityGlyph, severityStyles } from './ui-kit.js';
 import './gf-thumb.js';
 import './gf-voice-button.js';
 import { icon } from '../core/icons.js';
@@ -59,7 +60,7 @@ export class GfCapture extends LitElement {
     _toast: { state: true }
   };
 
-  static styles = [ui, css`
+  static styles = [ui, severityStyles, css`
     dialog {
       position: fixed;
       inset: auto 0 0 0;
@@ -124,11 +125,17 @@ export class GfCapture extends LitElement {
       width: min(520px, calc(100% - 24px));
       display: grid;
       gap: 6px;
+      padding: 10px 16px;
+      border-radius: var(--gf-radius);
+      background: var(--gf-text);
+      color: var(--gf-bg);
+      box-shadow: var(--gf-shadow-float);
+      font-size: 0.9rem;
     }
-    .toast .warn { color: #fecaca; font-weight: 600; font-size: 0.85rem; margin-bottom: 4px; }
-    .toast .warn a { color: inherit; }
-    .toast .warn.lookalike { color: #fde68a; }
-    .toast .warn .sos-line { display: block; font-weight: 400; margin-top: 2px; }
+    /* Its own links only: a warning's line keeps its level's colour (ui-kit.js .sev-line). */
+    .toast .row :is(.link, a) { color: var(--gf-accent-soft); font-weight: 600; }
+    .toast .sos-line { display: block; font-weight: 400; margin-top: 2px; }
+    .toast .sos-line a { font-weight: 600; }
     .toast .row { display: flex; gap: 12px; align-items: center; }
     .toast .row span { flex: 1; }
   `];
@@ -160,7 +167,7 @@ export class GfCapture extends LitElement {
     /** Why the last note could not be saved (said in the sheet, until the next try). @type {string | null} */
     this._error = null;
     this._busy = false;
-    /** @type {{ text: string, undo: () => Promise<void>, details: string, warning?: string | null, lookalike?: { toxic: boolean, text: string, unread?: boolean } | null, plantId?: number } | null} */
+    /** @type {{ text: string, undo: () => Promise<void>, details: string, warning?: { level: import('../core/danger.js').Level, text: string } | null, lookalike?: { toxic: boolean, text: string, level: import('../core/danger.js').Level, unread?: boolean } | null, plantId?: number } | null} */
     this._toast = null;
   }
 
@@ -518,8 +525,8 @@ export class GfCapture extends LitElement {
         </footer>
       </dialog>
       ${t ? html`<div class="toast" role="status">
-        ${t.warning ? html`<div class="warn" role="alert">${icon('exclamation-triangle-fill')} ${t.warning} — <a href=${href.plant(/** @type {any} */ (t).plantId)}>voir la fiche</a></div>` : nothing}
-        ${t.lookalike ? html`<div class="warn lookalike" role="alert">${icon(t.lookalike.toxic ? 'exclamation-octagon-fill' : 'exclamation-triangle-fill')} ${t.lookalike.text} — <a href=${href.plant(/** @type {any} */ (t).plantId)}>${t.lookalike.unread ? 'voir la fiche' : 'comment les distinguer'}</a>
+        ${t.warning ? html`<div class="sev-line ${t.warning.level}" role="alert">${severityGlyph(t.warning.level)} ${t.warning.text} — <a href=${href.plant(/** @type {any} */ (t).plantId)}>voir la fiche</a></div>` : nothing}
+        ${t.lookalike ? html`<div class="sev-line ${t.lookalike.level}" role="alert">${severityGlyph(t.lookalike.level)} ${t.lookalike.text} — <a href=${href.plant(/** @type {any} */ (t).plantId)}>${t.lookalike.unread ? 'voir la fiche' : 'comment les distinguer'}</a>
           <span class="sos-line">${emergency()}.</span></div>` : nothing}
         <div class="row"><span>${t.text}</span>
           <button class="link" type="button" @click=${this.#undo}>Annuler</button>
