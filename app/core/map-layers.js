@@ -1,7 +1,7 @@
 // @ts-check
-// The IGN Géoplateforme layers the maps offer over their background, by theme: pure, without import (the start of the
-// app knows them for the maps' look, core/map-settings.js; the tools check each is still served: everyAppLayer(),
-// tools/api-health.mjs, scripts/build-ign-catalog.mjs).
+// The IGN Géoplateforme layers the maps offer over their background, by theme: pure, without import (the maps' look
+// knows them, core/map-settings.js; the tools check each is still served: everyAppLayer(), tools/api-health.mjs,
+// scripts/build-ign-catalog.mjs).
 //  - OVERLAYS: the app's own overlays (core/ign-layers.js gives them with the catalogue's layers added, their tiles
 //    core/ign.js's);
 //  - LANDMARKS: « Noms et réseaux » — the places' names, the roads, the rivers (on by default), the railways, the

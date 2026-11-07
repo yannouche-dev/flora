@@ -409,7 +409,7 @@ test('fiche plante : son ⚙ n’a plus ni fond, ni couches IGN, ni 2D / 3D ; un
   test.slow();
   await app.open('#/');
   // A map block with its own look (set before: its background and the cadastre).
-  await page.evaluate(async () => { (await import('/app/core/sheet-blocks.js')).setMapConfig('map', { look: { base: 'plan', overlays: ['cadastre'] } }); });
+  await page.evaluate(async () => { (await import('/app/core/sheet-layout.js')).setMapConfig('map', { look: { base: 'plan', overlays: ['cadastre'] } }); });
   await app.go(`#/plant/${plantId('Urtica dioica')}`);
   const map = page.locator('gf-sheet-map gf-map').first();
   await map.scrollIntoViewIfNeeded();
@@ -428,14 +428,14 @@ test('fiche plante : son ⚙ n’a plus ni fond, ni couches IGN, ni 2D / 3D ; un
   await expect(panel.locator('.scope')).toContainText('Cette carte a son propre fond et ses propres couches');
   await expect(panel.getByRole('checkbox', { name: /Parcelles cadastrales/ })).toBeChecked();
   await panel.getByRole('button', { name: 'Revenir aux réglages communs' }).click();
-  await expect.poll(() => page.evaluate(async () => (await import('/app/core/sheet-blocks.js')).mapConfig('map').look)).toBe(null);
+  await expect.poll(() => page.evaluate(async () => (await import('/app/core/sheet-layout.js')).mapConfig('map').look)).toBe(null);
   await expect.poll(() => shown(map)).toEqual({ base: 'photo', overlays: [] });
   await expect(panel.locator('.scope')).toContainText('Réglages communs à toutes les cartes');
   // A change there now: the common settings (every map's), the block's configuration left as it is.
   await panel.getByRole('button', { name: /Plan IGN/ }).click();
   await expect.poll(() => stored(page)).toEqual({ base: 'plan', overlays: [], distribution: false });
   await expect.poll(() => shown(map)).toEqual({ base: 'plan', overlays: [] });
-  expect(await page.evaluate(async () => (await import('/app/core/sheet-blocks.js')).mapConfig('map').look)).toBe(null);
+  expect(await page.evaluate(async () => (await import('/app/core/sheet-layout.js')).mapConfig('map').look)).toBe(null);
   await panel.getByRole('button', { name: 'Fermer' }).click();
   await expect(form).toContainText('dans le panneau ▦ de la carte (réglages communs à toutes les cartes)');
 });

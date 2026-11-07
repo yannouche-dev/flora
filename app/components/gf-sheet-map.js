@@ -12,7 +12,7 @@ import { zoneShape } from '../core/geoservices.js';
 import { bundledOutline, mapRegion, myRegion } from '../core/territory.js';
 import { keptPlace } from '../core/around-sessions.js';
 import * as sources from '../core/sources.js';
-import { MAP_DEFAULTS } from '../core/sheet-blocks.js';
+import { MAP_CONFIG_DEFAULTS } from '../core/sheet-layout.js';
 import { FOCUS_EVENT, focusId, isPlaceFilter, noFocus } from '../core/map-focus.js';
 import { lookalikesOf } from '../core/lookalikes.js';
 import { icon } from '../core/icons.js';
@@ -85,7 +85,7 @@ export class GfSheetMap extends LitElement {
     /** GBIF Backbone key and iNaturalist taxon id of the plant (from the sheet's details). */
     gbifKey: { attribute: false },
     inatId: { attribute: false },
-    /** What it shows and lets do (sheet-blocks.js › MapConfig). */
+    /** What it shows and lets do (sheet-layout.js › MapConfig). */
     config: { attribute: false },
     /** Pinned: fills the dock's height instead of its own. */
     fill: { type: Boolean, reflect: true },
@@ -178,8 +178,8 @@ export class GfSheetMap extends LitElement {
     this.gbifKey = null;
     /** @type {number | null} */
     this.inatId = null;
-    /** @type {import('../core/sheet-blocks.js').MapConfig} */
-    this.config = MAP_DEFAULTS;
+    /** @type {import('../core/sheet-layout.js').MapConfig} */
+    this.config = MAP_CONFIG_DEFAULTS;
     this.fill = false;
     /** @type {import('../core/map-focus.js').SheetFocus} */
     this.mapFocus = noFocus();

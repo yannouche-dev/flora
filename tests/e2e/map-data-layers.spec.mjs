@@ -29,10 +29,14 @@ async function openPanel(map) {
   return panel;
 }
 
-/** The panel closed (its ✕). @param {Locator} panel */
+/**
+ * The panel closed (its ✕), and its step in history gone: closing a dialog goes back a step after a timer
+ * (core/history.js openModal), which would abort a reload or undo an address set meanwhile. @param {Locator} panel
+ */
 async function closePanel(panel) {
   await panel.getByRole('button', { name: 'Fermer', exact: true }).click();
   await expect(panel).toBeHidden();
+  await expect.poll(() => panel.page().evaluate(() => history.state?.gfModal ?? null)).toBe(null);
 }
 
 /** The headings shown in a panel, top first (as laid out: across the shadow roots of its parts). @param {Locator} panel */
@@ -46,8 +50,8 @@ const onThisMap = panel => panel.getByRole('group', { name: 'Sur cette carte' })
 const kept = (page, key) => page.evaluate(k => JSON.parse(localStorage.getItem(k) || 'null'), key);
 
 
-/** A plant sheet's map block's settings as kept (core/sheet-blocks.js mapConfig). @param {Page} page */
-const sheetConfig = page => page.evaluate(async () => (await import('/app/core/sheet-blocks.js')).mapConfig('map'));
+/** A plant sheet's map block's settings as kept (core/sheet-layout.js mapConfig). @param {Page} page */
+const sheetConfig = page => page.evaluate(async () => (await import('/app/core/sheet-layout.js')).mapConfig('map'));
 
 /** One of my places, the nettle noted in it: its id. @param {Page} page @param {[number, number]} at @param {string} [name] */
 function seedPlace(page, at, name = 'Jardin des Plantes') {

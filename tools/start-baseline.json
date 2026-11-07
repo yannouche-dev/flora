@@ -1,6 +1,6 @@
 {
   "entry": "app/main.js",
-  "total": 64,
+  "total": 57,
   "modules": [
     "app/components/gf-active-filters.js",
     "app/components/gf-app.js",
@@ -20,7 +20,6 @@
     "app/components/ui-kit.js",
     "app/config.js",
     "app/core/around-sessions.js",
-    "app/core/backgrounds.js",
     "app/core/cache.js",
     "app/core/collections.js",
     "app/core/context.js",
@@ -33,10 +32,7 @@
     "app/core/highlight.js",
     "app/core/history.js",
     "app/core/icons.js",
-    "app/core/ign-layers.js",
     "app/core/img.js",
-    "app/core/map-layers.js",
-    "app/core/map-settings.js",
     "app/core/media.js",
     "app/core/modes.js",
     "app/core/modules.js",
@@ -52,10 +48,8 @@
     "app/core/scenes.js",
     "app/core/search-channel.js",
     "app/core/search.js",
-    "app/core/share.js",
     "app/core/sheet-blocks.js",
     "app/core/sheet-notes.js",
-    "app/core/sources.js",
     "app/core/store.js",
     "app/core/sync.js",
     "app/core/trail-store.js",
@@ -64,7 +58,6 @@
     "app/miniapp/kit/faux-amis-store.js",
     "app/miniapps/index.js",
     "app/styles/ui.js",
-    "lib/plant-sources.mjs",
     "vendor/lit.js"
   ]
 }

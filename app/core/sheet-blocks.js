@@ -7,17 +7,16 @@
 // while that module is off (Réglages › Modules, a choice for the whole device, whatever the mode): there is nothing
 // to show. Folding or showing a block never switches a module. Plantes à confondre and Usages (its Prudence first)
 // are safety: never folded, in any mode, whatever a stored or imported layout says (LOCKED).
-// The layout can be exported to a file and imported back: the layout and the modes made here, never the Note blocks'
-// texts (they travel with Mes plantes: GeoJSON export, transfer link, backup copy) nor this device's settings.
+// A Carte block's settings (MapConfig) and the layout file (Exporter / Importer) are core/sheet-layout.js's: they read
+// the maps' look (core/map-settings.js), which this module, in the app's start, does not load.
 
 import { config } from '../config.js';
 import { MODULES, moduleOn } from './modules.js';
-import { baseOf, importModes, modeKeys, ownModes } from './modes.js';
+import { baseOf } from './modes.js';
 import { emptyLayout, store } from './store.js';
 import { deleteNoteTexts, fromPortable, mergeNoteTexts, noteText as storedText, portableNotes, setNoteText as storeText } from './sheet-notes.js';
 import { writeJSON } from './prefs.js';
-import { cleanOwnLook } from './map-settings.js';
-import { SHEET, dock, normalize, patchStack, setSizes, sheetInRow, stackOf, undock, validTree } from './pane-tree.js';
+import { SHEET, dock, normalize, patchStack, setSizes, sheetInRow, stackOf, undock } from './pane-tree.js';
 
 /** @typedef {import('./modes.js').Mode} Mode */
 /** @typedef {import('./modules.js').ModuleKey} ModuleKey */
@@ -216,8 +215,11 @@ export function isCustom(view) {
   return Boolean(l.order[view] || l.hidden[view] || l.subOrder[view] || l.subHidden[view] || l.styles?.[view] || l.titleShown?.[view] || l.hideEmpty?.[view] || l.tree?.[view]);
 }
 
-/** Saves a new layout (only what differs from the defaults). @param {Partial<SheetLayout>} patch */
-function save(patch) {
+/**
+ * Saves a new layout (only what differs from the defaults): every change of it, here and in core/sheet-layout.js (a
+ * Carte block's settings, a file imported). @param {Partial<SheetLayout>} patch
+ */
+export function saveLayout(patch) {
   const next = { ...layout(), ...patch };
   for (const part of /** @type {const} */ (['order', 'hidden', 'subOrder', 'subHidden', 'styles', 'titleShown', 'hideEmpty'])) {
     for (const [view, value] of Object.entries(next[part])) {
@@ -237,7 +239,7 @@ export function setBlockOrder(view, keys) {
   const order = { ...layout().order };
   if (keys.join() === defaults(view).join()) delete order[view];
   else order[view] = keys;
-  save({ order });
+  saveLayout({ order });
 }
 
 /** @param {Mode} view @param {Set<string>} keys */
@@ -246,7 +248,7 @@ function writeHidden(view, keys) {
   const byDefault = DEFAULT_HIDDEN[baseOf(view)] || [];
   // The defaults: nothing kept; anything else, kept whole (an empty list too: everything shown).
   if (keys.size === byDefault.length && byDefault.every(k => keys.has(k))) delete all[view]; else all[view] = [...keys];
-  save({ hidden: all });
+  saveLayout({ hidden: all });
 }
 
 /**
@@ -345,7 +347,7 @@ export function setSubOrder(view, block, keys) {
   const mine = { ...all[view] };
   if (keys.join() === (SUBS[block] || []).map(s => s.key).join()) delete mine[block]; else mine[block] = keys;
   all[view] = mine;
-  save({ subOrder: all });
+  saveLayout({ subOrder: all });
 }
 
 /** @param {Mode} view @param {string} block @param {string} key @param {boolean} hidden */
@@ -359,7 +361,7 @@ export function setSubHidden(view, block, key, hidden) {
   // Back to the mode's own choice: nothing stored; otherwise the whole list (an empty one included).
   if (keys.size === byDefault.size && [...keys].every(k => byDefault.has(k))) delete mine[block]; else mine[block] = [...keys];
   all[view] = mine;
-  save({ subHidden: all });
+  saveLayout({ subHidden: all });
 }
 
 // ── Styles ─────────────────────────────────────────────────────────────────
@@ -380,7 +382,7 @@ export function setBlockStyle(view, block, style) {
   const mine = { ...all[view] };
   if (style === (def.defaults?.[baseOf(view)] || def.styles[0].key)) delete mine[block]; else mine[block] = style;
   all[view] = mine;
-  save({ styles: all });
+  saveLayout({ styles: all });
 }
 
 // ── Titles shown or not ────────────────────────────────────────────────────
@@ -400,7 +402,7 @@ export function setTitleShown(view, key, shown) {
   const mine = { ...all[view] };
   if (shown === !UNTITLED.includes(key)) delete mine[key]; else mine[key] = shown;
   all[view] = mine;
-  save({ titleShown: all });
+  saveLayout({ titleShown: all });
 }
 
 // ── Positions: the tree of panes of the plant pane ─────────────────────────
@@ -429,7 +431,7 @@ export function treeOf(view) {
 function setTree(view, tree) {
   const all = { ...layout().tree };
   if (tree.t === 'sheet') delete all[view]; else all[view] = tree;
-  save({ tree: all });
+  saveLayout({ tree: all });
 }
 
 /**
@@ -506,7 +508,7 @@ export function setHidesEmpty(view, key, on) {
   const mine = { ...all[view] };
   if (on === EMPTY_HIDDEN.includes(key)) delete mine[key]; else mine[key] = on;
   all[view] = mine;
-  save({ hideEmpty: all });
+  saveLayout({ hideEmpty: all });
 }
 
 // ── Titles and note blocks ─────────────────────────────────────────────────
@@ -516,23 +518,23 @@ export function renameBlock(key, title) {
   const text = title.trim().slice(0, 60);
   if (isNote(key)) {
     if (!text) return;
-    save({ notes: layout().notes.map(n => 'note:' + n.id === key ? { ...n, title: text } : n) });
+    saveLayout({ notes: layout().notes.map(n => 'note:' + n.id === key ? { ...n, title: text } : n) });
     return;
   }
   if (isAddedMap(key)) {
     if (!text) return;
-    save({ mapBlocks: (layout().mapBlocks || []).map(m => 'map:' + m.id === key ? { ...m, title: text } : m) });
+    saveLayout({ mapBlocks: (layout().mapBlocks || []).map(m => 'map:' + m.id === key ? { ...m, title: text } : m) });
     return;
   }
   const titles = { ...layout().titles };
   if (!text || text === defaultTitle(key)) delete titles[key]; else titles[key] = text;
-  save({ titles });
+  saveLayout({ titles });
 }
 
 /** A new note block, at the end of every mode. @param {string} title @returns {string} its key */
 export function createNote(title) {
   const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
-  save({ notes: [...layout().notes, { id, title: title.trim().slice(0, 60) || 'Note' }] });
+  saveLayout({ notes: [...layout().notes, { id, title: title.trim().slice(0, 60) || 'Note' }] });
   return 'note:' + id;
 }
 
@@ -546,60 +548,15 @@ export function deleteNote(key) {
   const strip = (/** @type {Partial<Record<Mode, string[]>>} */ per) =>
     Object.fromEntries(Object.entries(per).map(([v, keys]) => [v, (keys || []).filter(k => k !== key)]));
   deleteNoteTexts(id).catch(error => console.error(error));
-  save({ notes: layout().notes.filter(n => n.id !== id), order: strip(layout().order), hidden: strip(layout().hidden), tree: untree(key) });
+  saveLayout({ notes: layout().notes.filter(n => n.id !== id), order: strip(layout().order), hidden: strip(layout().hidden), tree: untree(key) });
 }
 
 // ── Map blocks ─────────────────────────────────────────────────────────────
 
-/**
- * What a map block shows and lets do (the same in every mode).
- * @typedef {{ gbif: 'fr' | 'world' | 'off', places: boolean, near: 'off' | 'gbif' | 'inat' | 'both',
- *   look: Partial<import('./map-settings.js').MapLook> | null, frame: 'auto' | 'france' | 'world' | 'content' | 'me' | 'region',
- *   height: 's' | 'm' | 'l', actions: { open: boolean, create: boolean, edit: boolean, spot: boolean, locate: boolean },
- *   subject: 'plant' | 'results' | 'collection', collection: string | null }} MapConfig
- * `subject`: what the map is about — the plant of the sheet, the plants of the results (the search and its
- * filters), or a collection (`collection`: its id) — its places shown. `look`: its own look (core/map-settings.js),
- * changed in its panel ▦ — null: the maps' common look, followed (2D or 3D always is).
- */
-
-/** @type {MapConfig} */
-export const MAP_DEFAULTS = {
-  gbif: 'fr', places: true, near: 'off', look: null, frame: 'auto', height: 'm',
-  actions: { open: true, create: true, edit: true, spot: true, locate: true }, subject: 'plant', collection: null
-};
-
-const MAP_CHOICES = { gbif: ['fr', 'world', 'off'], near: ['off', 'gbif', 'inat', 'both'], frame: ['auto', 'france', 'world', 'content', 'me', 'region'], height: ['s', 'm', 'l'], subject: ['plant', 'results', 'collection'] };
-
-/** A map's configuration, cleaned (unknown values give the default). @param {any} saved @returns {MapConfig} */
-function cleanMap(saved) {
-  const c = saved && typeof saved === 'object' ? saved : {};
-  /** @type {any} */ const out = { ...MAP_DEFAULTS, actions: { ...MAP_DEFAULTS.actions } };
-  for (const [k, values] of Object.entries(MAP_CHOICES)) if (values.includes(c[k])) out[k] = c[k];
-  if (typeof c.places === 'boolean') out.places = c.places;
-  if (typeof c.collection === 'string' && c.collection.length < 80) out.collection = c.collection;
-  if (out.subject === 'collection' && !out.collection) out.subject = 'plant';
-  // Its look: kept as `look` (null: the common one).
-  out.look = cleanOwnLook(c.look);
-  for (const a of Object.keys(MAP_DEFAULTS.actions)) if (typeof c.actions?.[a] === 'boolean') out.actions[a] = c.actions[a];
-  return out;
-}
-
-/** @param {string} key @returns {MapConfig} */
-export const mapConfig = key => cleanMap(layout().maps?.[key]);
-
-/** Changes a map's configuration (`actions` merged). @param {string} key @param {Partial<MapConfig>} patch */
-export function setMapConfig(key, patch) {
-  const current = mapConfig(key);
-  const next = cleanMap({ ...current, ...patch, actions: { ...current.actions, ...(patch.actions || {}) } });
-  const maps = { ...(layout().maps || {}) };
-  if (JSON.stringify(next) === JSON.stringify(MAP_DEFAULTS)) delete maps[key]; else maps[key] = next;
-  save({ maps });
-}
-
 /** A new map block, at the end of every mode. @param {string} title @returns {string} its key */
 export function createMap(title) {
   const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
-  save({ mapBlocks: [...(layout().mapBlocks || []), { id, title: title.trim().slice(0, 60) || 'Carte' }] });
+  saveLayout({ mapBlocks: [...(layout().mapBlocks || []), { id, title: title.trim().slice(0, 60) || 'Carte' }] });
   return 'map:' + id;
 }
 
@@ -611,7 +568,7 @@ export function deleteMap(key) {
     Object.fromEntries(Object.entries(per).map(([v, keys]) => [v, (keys || []).filter(k => k !== key)]));
   const maps = { ...(layout().maps || {}) };
   delete maps[key];
-  save({ mapBlocks: (layout().mapBlocks || []).filter(m => m.id !== id), maps, order: strip(layout().order), hidden: strip(layout().hidden), tree: untree(key) });
+  saveLayout({ mapBlocks: (layout().mapBlocks || []).filter(m => m.id !== id), maps, order: strip(layout().order), hidden: strip(layout().hidden), tree: untree(key) });
 }
 
 /** The text of a note block for a plant (sheet-notes.js). @param {string} key @param {number} plantId */
@@ -636,11 +593,11 @@ export async function importNotes(list) {
   const have = new Set(layout().notes.map(n => n.id));
   const blocks = /** @type {any[]} */ (list).filter(b => texts.some(t => t.note === b.id) && !have.has(b.id))
     .map(b => ({ id: b.id, title: String(b.title || 'Note').trim().slice(0, 60) || 'Note' }));
-  if (blocks.length) save({ notes: [...layout().notes, ...blocks] });
+  if (blocks.length) saveLayout({ notes: [...layout().notes, ...blocks] });
   return mergeNoteTexts(texts);
 }
 
-// ── Reset, export, import ──────────────────────────────────────────────────
+// ── Reset ──────────────────────────────────────────────────────────────────
 
 /**
  * Back to the mode's defaults: order, folded blocks and sub-blocks, styles, titles shown, blocks left out when empty,
@@ -651,7 +608,7 @@ export async function importNotes(list) {
 export function resetBlocks(view) {
   const l = layout();
   const without = (/** @type {any} */ per) => { const next = { ...per }; delete next[view]; return next; };
-  save({ order: without(l.order), hidden: without(l.hidden), subOrder: without(l.subOrder), subHidden: without(l.subHidden), styles: without(l.styles || {}), titleShown: without(l.titleShown || {}), hideEmpty: without(l.hideEmpty || {}), tree: without(l.tree || {}) });
+  saveLayout({ order: without(l.order), hidden: without(l.hidden), subOrder: without(l.subOrder), subHidden: without(l.subHidden), styles: without(l.styles || {}), titleShown: without(l.titleShown || {}), hideEmpty: without(l.hideEmpty || {}), tree: without(l.tree || {}) });
 }
 
 /**
@@ -659,89 +616,7 @@ export function resetBlocks(view) {
  * every mode, shown; added Carte blocks, titles, panes go. The services (Réglages › Modules) and Réglages › Cartes stay.
  */
 export function resetAll() {
-  save({ ...emptyLayout(), notes: layout().notes });
-}
-
-/**
- * What a layout file carries, and nothing else (an allowlist: no key of an earlier version, no setting of this device):
- * per mode, the order, folded blocks and sub-blocks (never a locked one), styles, titles shown, blocks left out when
- * empty and the tree of panes (sound: no block that is gone, no bare sheet); the titles, the Note and Carte blocks (no
- * text), the maps' settings.
- */
-function portableLayout() {
-  const l = layout();
-  const per = (/** @type {Partial<Record<Mode, any>>} */ all, /** @type {(view: Mode, value: any) => any} */ clean = (_, v) => v) =>
-    Object.fromEntries(Object.entries(all || {}).map(([view, v]) => [view, clean(/** @type {Mode} */ (view), v)]));
-  /** @type {Partial<Record<Mode, import('./pane-tree.js').PaneNode>>} */
-  const tree = {};
-  for (const view of /** @type {Mode[]} */ (Object.keys(l.tree || {}))) { const t = treeOf(view); if (t.t !== 'sheet') tree[view] = t; }
-  return {
-    order: per(l.order),
-    hidden: per(l.hidden, (_, keys) => keys.filter((/** @type {string} */ k) => !isLocked(k))),
-    subOrder: per(l.subOrder),
-    subHidden: per(l.subHidden, (_, blocks) => Object.fromEntries(Object.entries(blocks).map(([block, keys]) => [block, keys.filter((/** @type {string} */ k) => !isSubLocked(block, k))]))),
-    styles: per(l.styles),
-    titleShown: per(l.titleShown),
-    hideEmpty: per(l.hideEmpty),
-    tree,
-    titles: { ...l.titles },
-    notes: l.notes.map(n => ({ id: n.id, title: n.title })),
-    mapBlocks: (l.mapBlocks || []).map(m => ({ id: m.id, title: m.title })),
-    maps: Object.fromEntries(Object.entries(l.maps || {}).map(([k, c]) => [k, cleanMap(c)]))
-  };
-}
-
-/**
- * The layout as a file: the layout (portableLayout) and the modes made here. Not the Note blocks' texts (they travel
- * with Mes plantes), nor what is this device's: the services (Réglages › Modules), Réglages › Cartes.
- */
-export function exportLayout() {
-  return JSON.stringify({ app: 'geoflora', kind: 'sheet-layout', version: 2, layout: portableLayout(), modes: ownModes() }, null, 2);
-}
-
-/** @param {any} v */
-const isKeyList = v => Array.isArray(v) && v.every(k => typeof k === 'string' && k.length < 80);
-/** @param {any} v @param {(x: any) => boolean} ok */
-const perView = (v, ok) => v && typeof v === 'object' && !Array.isArray(v) && Object.entries(v).every(([view, x]) => (modeKeys().includes(view) || /^m[a-z0-9]{2,12}$/.test(view)) && ok(x));
-/** @param {any} v */
-const perBlock = v => v && typeof v === 'object' && !Array.isArray(v) && Object.entries(v).every(([block, keys]) => block in SUBS && isKeyList(keys));
-
-/**
- * Applies a layout file. Throws (and changes nothing) when it is not one. Every Note block of this device stays (after
- * the file's: those it does not have). A file of before carries note texts: they are added to this device's, never over
- * them (a layout shared by someone else does not erase what was written here). A file of version 1 is read without its
- * panes. The layout is applied at once; the promise resolves once the texts are stored.
- * @param {string} text @returns {Promise<number>} how many texts were added
- */
-export function importLayout(text) {
-  let data;
-  try { data = JSON.parse(text); } catch { throw new Error('Ce fichier n’est pas du JSON.'); }
-  if (data?.app !== 'geoflora' || data?.kind !== 'sheet-layout') throw new Error('Ce fichier n’est pas une mise en page de fiche GeoFlora.');
-  if (data.version !== 1 && data.version !== 2) throw new Error('Version de mise en page inconnue : ' + data.version);
-  // Version 1 (before the tree of panes) is read as it is: its blocks go into the sheet, its panes are left out.
-  const l = data.layout || {};
-  const valid = perView(l.order || {}, isKeyList) && perView(l.hidden || {}, isKeyList)
-    && perView(l.subOrder || {}, perBlock) && perView(l.subHidden || {}, perBlock)
-    && perView(l.titleShown || {}, (/** @type {any} */ x) => x && typeof x === 'object' && Object.values(x).every(v => typeof v === 'boolean'))
-    && perView(l.hideEmpty || {}, (/** @type {any} */ x) => x && typeof x === 'object' && Object.values(x).every(v => typeof v === 'boolean'))
-    && perView(l.styles || {}, (/** @type {any} */ x) => x && typeof x === 'object' && Object.entries(x).every(([block, st]) => STYLES[block]?.styles.some(s => s.key === st)))
-    && perView(l.tree || {}, validTree)
-    && l.titles && typeof l.titles === 'object' && Object.values(l.titles).every(t => typeof t === 'string' && t.length <= 60)
-    && Array.isArray(l.notes) && l.notes.every((/** @type {any} */ n) => typeof n?.id === 'string' && /^[a-z0-9]{1,24}$/.test(n.id) && typeof n.title === 'string' && n.title.length <= 60)
-    && (!l.mapBlocks || (Array.isArray(l.mapBlocks) && l.mapBlocks.every((/** @type {any} */ m) => typeof m?.id === 'string' && /^[a-z0-9]{1,24}$/.test(m.id) && typeof m.title === 'string' && m.title.length <= 60)))
-    && (!l.maps || (typeof l.maps === 'object' && !Array.isArray(l.maps) && Object.keys(l.maps).every(k => k === 'map' || /^map:[a-z0-9]{1,24}$/.test(k))))
-    && (!data.notes || (typeof data.notes === 'object' && Object.values(data.notes).every(byPlant => byPlant && typeof byPlant === 'object' && Object.values(byPlant).every(t => typeof t === 'string'))));
-  // Any other field is left aside (a file of before: its services, Réglages › Cartes, version 1's panes): a layout never
-  // changes this device's settings.
-  if (!valid) throw new Error('Mise en page illisible ou incomplète.');
-  importModes(data.modes || []);
-  // This device's Note blocks the file has not are kept, after the file's (with or without a text yet).
-  const kept = layout().notes.filter(n => !l.notes.some((/** @type {any} */ m) => m.id === n.id));
-  const texts = Object.entries(data.notes || {}).flatMap(([note, byPlant]) => Object.entries(/** @type {Record<string, string>} */ (byPlant))
-    .map(([plantId, t]) => ({ key: '', note, plantId: Number(plantId), text: t, updatedAt: '' })));
-  save({ ...emptyLayout(), order: l.order || {}, hidden: l.hidden || {}, subOrder: l.subOrder || {}, subHidden: l.subHidden || {}, styles: l.styles || {}, titleShown: l.titleShown || {}, hideEmpty: l.hideEmpty || {}, tree: l.tree || {}, titles: l.titles, notes: [...l.notes, ...kept],
-    mapBlocks: l.mapBlocks || [], maps: Object.fromEntries(Object.entries(l.maps || {}).map(([k, c]) => [k, cleanMap(c)])) });
-  return mergeNoteTexts(texts, { keepMine: true });
+  saveLayout({ ...emptyLayout(), notes: layout().notes });
 }
 
 // ── Modes made here ────────────────────────────────────────────────────────
@@ -760,7 +635,7 @@ export function copyLayout(from, to) {
     patch[part] = per;
   }
   // A map's settings are per block, the same in every mode: nothing to copy.
-  save(patch);
+  saveLayout(patch);
 }
 
 /** A mode deleted: its layout goes. @param {Mode} mode */
@@ -769,5 +644,5 @@ export function dropLayout(mode) {
   /** @type {any} */
   const patch = {};
   for (const part of PER_MODE) { const per = { .../** @type {any} */ (l)[part] }; delete per[mode]; patch[part] = per; }
-  save(patch);
+  saveLayout(patch);
 }

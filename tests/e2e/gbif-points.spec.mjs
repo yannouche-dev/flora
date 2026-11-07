@@ -103,7 +103,7 @@ async function plantCard(card) {
  */
 async function sheetMap(page, app, near) {
   await app.open('#/collections');
-  await page.evaluate(async n => { (await import('/app/core/sheet-blocks.js')).setMapConfig('map', { near: n, gbif: 'off' }); }, near);
+  await page.evaluate(async n => { (await import('/app/core/sheet-layout.js')).setMapConfig('map', { near: n, gbif: 'off' }); }, near);
   await app.go(`#/plant/${plantId('Urtica dioica')}`);
   const block = page.locator('gf-sheet-map:not([map-3d="off"])').first();
   await block.scrollIntoViewIfNeeded();
@@ -166,7 +166,7 @@ test('fiche plante : GBIF seul autour de moi, puis les occurrences d’une zone 
   await plantCard(await cardSaying(map, 'Observation : GBIF', app.phone));
 
   // An area touched in the sheet (a région): its occurrences, the same photo markers.
-  await page.evaluate(async n => { (await import('/app/core/sheet-blocks.js')).setMapConfig('map', { near: n }); }, 'off');
+  await page.evaluate(async n => { (await import('/app/core/sheet-layout.js')).setMapConfig('map', { near: n }); }, 'off');
   await page.locator('gf-plant-detail').first().evaluate(async el => {
     const { sendFocus } = await import('/app/core/map-focus.js');
     sendFocus(el, { kind: 'filter', label: 'Île-de-France', params: { gadmGid: 'FRA.8_1' } });
@@ -190,7 +190,7 @@ test('fiche plante sans photo dans la flore : le point touché dans la fiche, pu
   // Allium coloratum has no thumbnail in the flora: its sheet finds iNaturalist's photo of its taxon, under CC BY.
   await answerPlantNear(page, { inat: 3, gbif: 4, plant: { sci: 'Allium coloratum', gbifKey: 7777, taxonId: 999, common: 'Ail coloré', license: 'cc-by', author: 'Jane Doe' } });
   await app.open('#/collections');
-  await page.evaluate(async () => { (await import('/app/core/sheet-blocks.js')).setMapConfig('map', { near: 'both', gbif: 'off' }); });
+  await page.evaluate(async () => { (await import('/app/core/sheet-layout.js')).setMapConfig('map', { near: 'both', gbif: 'off' }); });
   await app.go(`#/plant/${plantId('Allium coloratum')}`);
   const block = page.locator('gf-sheet-map:not([map-3d="off"])').first();
   await block.scrollIntoViewIfNeeded();
