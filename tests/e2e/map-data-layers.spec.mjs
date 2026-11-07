@@ -29,10 +29,14 @@ async function openPanel(map) {
   return panel;
 }
 
-/** The panel closed (its ✕). @param {Locator} panel */
+/**
+ * The panel closed (its ✕), and its step in history gone: closing a dialog goes back a step after a timer
+ * (core/history.js openModal), which would abort a reload or undo an address set meanwhile. @param {Locator} panel
+ */
 async function closePanel(panel) {
   await panel.getByRole('button', { name: 'Fermer', exact: true }).click();
   await expect(panel).toBeHidden();
+  await expect.poll(() => panel.page().evaluate(() => history.state?.gfModal ?? null)).toBe(null);
 }
 
 /** The headings shown in a panel, top first (as laid out: across the shadow roots of its parts). @param {Locator} panel */
