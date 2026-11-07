@@ -4,7 +4,6 @@ import { config, STATUS_LABELS, STATUS_SHORT } from '../config.js';
 import { highlight } from '../core/highlight.js';
 import { rememberSearch } from '../core/query.js';
 import { href } from '../core/router.js';
-import * as sources from '../core/sources.js';
 import { toggleFavorite } from '../core/collections.js';
 import { StoreController } from '../core/store.js';
 import { icon } from '../core/icons.js';
@@ -226,13 +225,16 @@ export class GfPlantCard extends LitElement {
     this.#cancel();
   }
 
-  // Wait a little so fast scrolling doesn't fire hundreds of API calls.
+  // Wait a little so fast scrolling doesn't fire hundreds of API calls. The remote lookup (core/sources.js, with
+  // lib/plant-sources.mjs) comes then, not with the start of the app: most plants have their thumbnail in the flora.
+  // It cannot be loaded (offline, nothing cached yet): 🌿, as when the services fail.
   #schedule() {
     const plant = this.plant;
     if (!this.#photos) return;
     this.#timer = setTimeout(() => {
-      this.#abort = new AbortController();
-      sources.thumbnail(plant, this.#abort.signal)
+      const { signal } = this.#abort = new AbortController();
+      import('../core/sources.js')
+        .then(sources => sources.thumbnail(plant, signal))
         .then(thumb => { if (this.plant === plant) this._thumb = thumb || null; })
         .catch(() => { if (this.plant === plant) this._thumb = null; });
     }, config.thumbnailDelay);

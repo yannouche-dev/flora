@@ -1,6 +1,6 @@
 {
   "entry": "app/main.js",
-  "total": 64,
+  "total": 62,
   "modules": [
     "app/components/gf-active-filters.js",
     "app/components/gf-app.js",
@@ -55,7 +55,6 @@
     "app/core/share.js",
     "app/core/sheet-blocks.js",
     "app/core/sheet-notes.js",
-    "app/core/sources.js",
     "app/core/store.js",
     "app/core/sync.js",
     "app/core/trail-store.js",
@@ -64,7 +63,6 @@
     "app/miniapp/kit/faux-amis-store.js",
     "app/miniapps/index.js",
     "app/styles/ui.js",
-    "lib/plant-sources.mjs",
     "vendor/lit.js"
   ]
 }
