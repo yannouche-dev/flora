@@ -303,7 +303,7 @@ test.describe('la carte d’une fiche plante', () => {
   test('ses observations autour de moi : la légende dans son panneau, les nombres dits ; ses puces disent leur état dans leur nom ; ses gestes une fois', async ({ app, page }) => {
     await answerPlantNear(page, { inat: 6, gbif: 7 });
     await app.open('#/collections');
-    await page.evaluate(async () => { (await import('/app/core/sheet-blocks.js')).setMapConfig('map', { near: 'both', gbif: 'off' }); });
+    await page.evaluate(async () => { (await import('/app/core/sheet-layout.js')).setMapConfig('map', { near: 'both', gbif: 'off' }); });
     await app.go(`#/plant/${plantId('Urtica dioica')}`);
     const block = page.locator('gf-sheet-map:not([map-3d="off"])').first();
     // Its rubric at the top of the sheet: the map under its heading, not scrolled beneath it (a sticky heading).
@@ -346,7 +346,7 @@ test.describe('la carte d’une fiche plante', () => {
       await refuseLocation(page);
       await answerPlantNear(page);
       await app.open('#/collections');
-      await page.evaluate(async () => { (await import('/app/core/sheet-blocks.js')).setMapConfig('map', { near: 'both', gbif: 'off' }); });
+      await page.evaluate(async () => { (await import('/app/core/sheet-layout.js')).setMapConfig('map', { near: 'both', gbif: 'off' }); });
       await app.go(`#/plant/${plantId('Urtica dioica')}`);
       const block = page.locator('gf-sheet-map:not([map-3d="off"])').first();
       await block.scrollIntoViewIfNeeded();

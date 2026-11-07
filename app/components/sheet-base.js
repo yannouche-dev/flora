@@ -27,8 +27,9 @@ import { ONE_GL_PER_SHEET } from './map3d-options.js';
 import { ui } from '../styles/ui.js';
 import { icon } from '../core/icons.js';
 import {
-  isMap, mapConfig, setMapConfig, blockOrder, blockStyle, blockTitle, isTitleShown, isHidden, isNote, isSubHidden, noteText, setNoteText, shownSubs, paneOf
+  isMap, blockOrder, blockStyle, blockTitle, isTitleShown, isHidden, isNote, isSubHidden, noteText, setNoteText, shownSubs, paneOf
 } from '../core/sheet-blocks.js';
+import { mapConfig, setMapConfig } from '../core/sheet-layout.js';
 import { gripStyles } from '../core/split-grip.js';
 import { FOCUS_EVENT, isFocused, noFocus, toggleFocus } from '../core/map-focus.js';
 import * as openData from '../core/open-data.js';

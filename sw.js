@@ -132,6 +132,7 @@ const SHELL = [
   'app/core/poison.js',
   'app/core/safe-url.js',
   'app/core/sheet-blocks.js',
+  'app/core/sheet-layout.js',
   'app/core/sheet-notes.js',
   'app/core/protected.js',
   'app/core/voice.js',

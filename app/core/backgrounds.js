@@ -2,7 +2,7 @@
 // The maps' backgrounds (« Fond », one at a time): the IGN plan, the aerial photos — the most recent, or those of one
 // year, of a period, the historical ones —, the SPOT satellite images of one year; whether « Noms et réseaux » are
 // drawn over them (the look's `landmarks`, core/map-layers.js: over the photos and SPOT's images — the plan has its
-// own). Pure, without import: the start of the app checks a stored background with it (core/map-settings.js), the 2D
+// own). Pure, without import: the maps' look checks a stored background with it (core/map-settings.js), the 2D
 // maps draw it (core/ign.js), the 3D ones know it in the 2D map's layers (core/gl-style.js), the panel ▦ offers it
 // (components/gf-map-options.js), a free layout's cell writes it (base=, annee=: layout/registry.js).
 // Each layer's identifier, format, style and native zooms are the Géoplateforme catalogue's (data/ign-catalog.json:

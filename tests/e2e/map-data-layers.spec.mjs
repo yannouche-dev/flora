@@ -46,8 +46,8 @@ const onThisMap = panel => panel.getByRole('group', { name: 'Sur cette carte' })
 const kept = (page, key) => page.evaluate(k => JSON.parse(localStorage.getItem(k) || 'null'), key);
 
 
-/** A plant sheet's map block's settings as kept (core/sheet-blocks.js mapConfig). @param {Page} page */
-const sheetConfig = page => page.evaluate(async () => (await import('/app/core/sheet-blocks.js')).mapConfig('map'));
+/** A plant sheet's map block's settings as kept (core/sheet-layout.js mapConfig). @param {Page} page */
+const sheetConfig = page => page.evaluate(async () => (await import('/app/core/sheet-layout.js')).mapConfig('map'));
 
 /** One of my places, the nettle noted in it: its id. @param {Page} page @param {[number, number]} at @param {string} [name] */
 function seedPlace(page, at, name = 'Jardin des Plantes') {

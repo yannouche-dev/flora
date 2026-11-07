@@ -9,6 +9,7 @@ import assert from 'node:assert/strict';
 /** @type {any} */ (globalThis).window ??= globalThis;
 
 const SB = await import('../../app/core/sheet-blocks.js');
+const SL = await import('../../app/core/sheet-layout.js');
 const notes = await import('../../app/core/sheet-notes.js');
 const { store } = await import('../../app/core/store.js');
 const { nodes } = await import('../../app/core/pane-tree.js');
@@ -24,9 +25,9 @@ test('le fichier de mise en page : l’arbre de panneaux sans la clé d’un blo
   await SB.setNoteText(key, PLANT, 'Station de 30 pieds');
   SB.dockBlock('standard', key, 'sheet', 'right');
   SB.dockBlock('standard', 'map', /** @type {any} */ (SB.paneOf('standard', key)).id, 'center');
-  assert.ok(!SB.exportLayout().includes('Station de 30 pieds'), 'les textes voyagent avec Mes plantes, pas dans ce fichier');
+  assert.ok(!SL.exportLayout().includes('Station de 30 pieds'), 'les textes voyagent avec Mes plantes, pas dans ce fichier');
   SB.deleteNote(key);
-  const text = SB.exportLayout();
+  const text = SL.exportLayout();
   assert.ok(!text.includes(idOf(key)), 'plus rien de ce bloc');
   assert.deepEqual(nodes(JSON.parse(text).layout.tree.standard).filter(n => n.t === 'stack').map(n => /** @type {any} */ (n).tabs), [['map']], 'son panneau garde la carte');
   SB.resetAll();
@@ -60,17 +61,17 @@ test('« Tout rétablir » garde les blocs Note et leurs textes, rien d’autre'
 
 test('importer une mise en page garde tous les blocs Note d’ici ; les textes d’un fichier ancien s’ajoutent, sans rien remplacer', async () => {
   SB.resetAll();
-  const empty = SB.exportLayout();
+  const empty = SL.exportLayout();
   const written = SB.createNote('Récolte');
   const blank = SB.createNote('Vide');
   await SB.setNoteText(written, PLANT, 'le mien');
-  assert.equal(await SB.importLayout(empty), 0);
+  assert.equal(await SL.importLayout(empty), 0);
   assert.deepEqual(store.state.sheetLayout.notes.map(n => n.id), [idOf(written), idOf(blank)], 'un bloc sans texte aussi');
   // A file of before: its own Note blocks, one of them also here (renamed there), and their texts.
   const old = JSON.parse(empty);
   old.layout.notes = [{ id: 'ancienne', title: 'Ancienne' }, { id: idOf(written), title: 'Récolte 2024' }];
   old.notes = { ancienne: { [PLANT]: 'texte ancien' }, [idOf(written)]: { [PLANT]: 'pas le mien', 7: 'nouveau' } };
-  assert.equal(await SB.importLayout(JSON.stringify(old)), 2, 'deux textes ajoutés');
+  assert.equal(await SL.importLayout(JSON.stringify(old)), 2, 'deux textes ajoutés');
   assert.deepEqual(store.state.sheetLayout.notes, [{ id: 'ancienne', title: 'Ancienne' }, { id: idOf(written), title: 'Récolte 2024' }, { id: idOf(blank), title: 'Vide' }]);
   assert.equal(SB.noteText(written, PLANT), 'le mien', 'jamais par-dessus le texte d’ici');
   assert.equal(SB.noteText(written, 7), 'nouveau');

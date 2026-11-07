@@ -1,6 +1,6 @@
 {
   "entry": "app/main.js",
-  "total": 61,
+  "total": 57,
   "modules": [
     "app/components/gf-active-filters.js",
     "app/components/gf-app.js",
@@ -20,7 +20,6 @@
     "app/components/ui-kit.js",
     "app/config.js",
     "app/core/around-sessions.js",
-    "app/core/backgrounds.js",
     "app/core/cache.js",
     "app/core/collections.js",
     "app/core/context.js",
@@ -33,10 +32,7 @@
     "app/core/highlight.js",
     "app/core/history.js",
     "app/core/icons.js",
-    "app/core/ign-layers.js",
     "app/core/img.js",
-    "app/core/map-layers.js",
-    "app/core/map-settings.js",
     "app/core/media.js",
     "app/core/modes.js",
     "app/core/modules.js",
