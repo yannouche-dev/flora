@@ -1,6 +1,9 @@
 // @ts-check
 // Sharing without a server: links carry everything. Collections travel inside the URL itself,
 // as compact JSON → deflate-raw → base64url. Notes and harvest logs are never included.
+// Not in the app's start: core/collections.js imports it when a link is made (« Partager », the transfer link).
+
+import { byAddedAt } from './walk.js';
 
 /**
  * Shares a link with the system share sheet, or copies it to the clipboard.
@@ -68,8 +71,7 @@ export async function encodeCollection(collection) {
   const p = collection.properties;
   const isPlace = p.kind === 'place' && collection.geometry;
   const walk = Boolean(isPlace && p.walk);
-  // Inlined (walk.js byAddedAt): this module is in the app's start, walk.js is not.
-  const plants = walk ? [...p.plants].sort((a, b) => String(a.addedAt).localeCompare(String(b.addedAt))) : p.plants;
+  const plants = walk ? [...p.plants].sort(byAddedAt) : p.plants;
   const compact = {
     v: 1,
     n: p.kind === 'favorites' ? 'Favoris partagés' : p.name,

@@ -1,6 +1,6 @@
 {
   "entry": "app/main.js",
-  "total": 62,
+  "total": 61,
   "modules": [
     "app/components/gf-active-filters.js",
     "app/components/gf-app.js",
@@ -52,7 +52,6 @@
     "app/core/scenes.js",
     "app/core/search-channel.js",
     "app/core/search.js",
-    "app/core/share.js",
     "app/core/sheet-blocks.js",
     "app/core/sheet-notes.js",
     "app/core/store.js",
