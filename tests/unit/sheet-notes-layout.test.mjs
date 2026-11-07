@@ -1,6 +1,7 @@
 // app/core/sheet-blocks.js with the Note blocks' texts (sheet-notes.js, in an IndexedDB in memory: fake-indexeddb):
-// « Tout rétablir » (resetAll) and the layout file (exportLayout, importLayout) never lose what the user wrote — the
-// Note blocks and their texts stay; the file carries the blocks, not the texts (they travel with Mes plantes).
+// « Tout rétablir » (resetAll) and the layout file (sheet-layout.js: exportLayout, importLayout) never lose what the
+// user wrote — the Note blocks and their texts stay; the file carries the blocks, not the texts (they travel with
+// Mes plantes).
 import 'fake-indexeddb/auto';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
