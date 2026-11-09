@@ -12,7 +12,7 @@
 //   &place=<words> without at=         a place to find: the IGN geocoder asked (core/geoservices.js#findPlace:
 //                                      « mirabel, menetrol, 63 »), the scope set there and the address replaced by its
 //                                      at= and the label found (r= kept, else the layout's); not found, offline or the
-//                                      module off: no scope, the reason said where the scope is (cells.js#scopeWords),
+//                                      module off: no scope, the reason said where the scope is (cell-kit.js#scopeWords),
 //                                      place= left in the address so that a reload asks again;
 //   &o=<observation>                   an observation lit on the map (a point touched);
 //   &periode=<toujours|annee|mois>     the period every cell shows: the plants observed in the zone that year, or that
@@ -22,7 +22,7 @@
 //                                      the zone's observations: their sources and the filters every source applies
 //                                      (core/observations.js); not said, the defaults — both sources (but one switched
 //                                      off in Réglages › Modules: defaultSources; a map's src= is its own, never the
-//                                      group's: cells.js), every observation (every quality, every dataset);
+//                                      group's: map-cell.js), every observation (every quality, every dataset);
 //   &q=…&family=…&sort=…               the search itself: the screen's own (core/query.js — the same words as #/?q=…),
 //                                      never Flore's.
 // A layout's other groups (a cell's groupe=b: its own zone, plant, period and search, apart from the others) have
@@ -265,7 +265,7 @@ export class LayoutState extends EventTarget {
     /**
      * What a map shows of the zone (moved by hand: its box [west, south, east, north], the sources of its points, the
      * map), the list kept to it; null: the whole zone (a map that shows all of the circle too). In the address as the
-     * leading map's vue= (cells.js; replaced, never a new entry).
+     * leading map's vue= (map-cell.js; replaced, never a new entry).
      * @type {{ box: number[], kinds: string[] | null, by: object | null } | null}
      */
     this.view = null;
@@ -310,7 +310,7 @@ export class LayoutState extends EventTarget {
   /**
    * The zone's observations loaded, when a source has more, each apart (core/observations.js): iNaturalist's past
    * ZONE_MAX — its most recent —, GBIF's past its page of GBIF_MAX — one page, asked in no order —: how many of its
-   * points are shown, of how many it counts (null: all of them); null: every source's all (cells.js says it).
+   * points are shown, of how many it counts (null: all of them); null: every source's all (cell-kit.js scopeNote says it).
    * @returns {{ inat: { shown: number, total: number } | null, gbif: { shown: number, total: number } | null } | null}
    */
   get sample() {
@@ -407,7 +407,7 @@ export class LayoutState extends EventTarget {
 
   /**
    * A map moved by hand in use takes the lead of the list (`lead`, detail: { by }): its view is the one the address
-   * keeps (its vue=, cells.js) — the group's other maps that lead it let theirs go. One author.
+   * keeps (its vue=, map-cell.js) — the group's other maps that lead it let theirs go. One author.
    * @param {object} by
    */
   lead(by) { this.dispatchEvent(new CustomEvent('lead', { detail: { by } })); }

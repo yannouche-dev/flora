@@ -30,7 +30,8 @@ import './gf-sortable-list.js';
 import { registerWebPane, unregisterWebPane } from '../core/web-pane.js';
 import { verdictOf } from '../core/alerts.js';
 import { sheetSession, setAnchorLock } from '../core/sheet-session.js';
-import { SheetBase, sheetStyles, KEEP_MAX_MS, WIKI_THEMES } from './sheet-base.js';
+import { SheetBase, KEEP_MAX_MS, WIKI_THEMES } from './sheet-base.js';
+import { sheetStyles } from './sheet-styles.js';
 import './gf-sheet-block.js';
 
 /** A block not moved: the layout would have too many panes nested to be exported and read back (pane-tree.js dock). */

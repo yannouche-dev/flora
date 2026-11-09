@@ -213,6 +213,7 @@ app/
     plants.js            une plante de la flore : son nom (commun, sinon scientifique), sa lecture (null si absente ou illisible), ses mois de floraison
     sheet-blocks.js      la fiche personnalisée : ordre, présence, styles et panneaux de ses blocs, blocs Note (`saveLayout`) — au démarrage
     sheet-notes.js       textes des blocs Note (IndexedDB, déplacés une fois depuis le localStorage)
+    sheet-data.js        ce que les blocs de la fiche lisent des données chargées (pur, sans import) : ses photos, les descriptions, la répartition, les autres noms, les profils d'espèce et les synonymes de GBIF, Trefle ; des noms sans doublons (`dedupNames`) — hors du démarrage
     sheet-layout.js      la fiche personnalisée là où elle touche l'allure des cartes : réglages d'un bloc Carte (`mapConfig`), fichier de mise en page (`exportLayout`, `importLayout`) — hors du démarrage, où reste sheet-blocks.js (les blocs)
     sync.js              entre onglets : BroadcastChannel et événement storage
     prefs.js             le localStorage, lu et écrit ici seulement : clés de config.storageKeys, jamais d'exception, réglages suivis entre onglets (definePref)
@@ -245,8 +246,10 @@ app/
     router.js            routes par hash : #/, #/plant/:id, #/map, #/collection/:id, #/collection/new, #/settings, #/app/:id/:étape?p=&v=&m=&fiche=, #/layout/<disposition>[?…&edit=1]
     split-grip.js        poignée entre deux parts d'un partage (arbre des panneaux de la fiche, écrans sur mesure)
   layout/                « Écran sur mesure » : grammar.js (la grammaire), registry.js (les composants), state.js (l'état partagé),
-                         cells.js (chaque composant branché), gf-layout.js (l'écran, son accueil, sa modification), sizes.js,
-                         models.js (grilles et modèles), screens.js et screen-list.js (Mes écrans)
+                         cells.js (chaque composant branché ; la carte et le paquet à part : map-cell.js, deck-cell.js ; ce
+                         qu'ils partagent — l'état suivi, la zone en mots, sa ligne, son curseur : cell-kit.js), gf-layout.js
+                         (l'écran, son accueil, sa modification), sizes.js, models.js (grilles et modèles), screens.js et
+                         screen-list.js (Mes écrans)
   workers/
     search.worker.js     recherche, filtres à facettes, tri, abréviations, fautes de frappe ; téléchargement, vérification et
                          enregistrement de la flore (hors du fil de la page)
@@ -254,7 +257,7 @@ app/
   components/            gf-app, gf-search-bar, gf-results-bar, gf-active-filters,
                          gf-filter-panel, gf-facet, gf-plant-list (virtualisée),
                          gf-plant-card, gf-plant-detail (la fiche ; sheet-base.js, ce qu'elle partage avec gf-sheet-block, un
-                         bloc seul), gf-attribution, gf-settings,
+                         bloc seul ; sheet-styles.js, leur allure), gf-attribution, gf-settings,
                          gf-map (Leaflet en 2D, MapLibre en 3D : gf-map-gl), gf-map-panel (le panneau ▦) et gf-map-options
                          (ses options, aussi dans Réglages › Cartes : gf-layer-stack, les couches affichées ; gf-ign-layers, le
                          catalogue de l'IGN), gf-map3d (dialogue Vue 3D), gf-map-page, gf-spot-editor, gf-plant-spots,
@@ -352,7 +355,7 @@ Exemples :
 | `media` | photos, médias | `style` `scene`, `mosaic` ou `slideshow` | la visionneuse de photos de la plante courante (`gf-media-viewer`) ; dessinée d'elle-même (une plante venue), elle ne prend jamais le focus — ni le bloc `plant.media` d'une case Fiche (`gf-sheet-block` `local`) |
 | `deck` | cartes, rencontres | — | les plantes trouvées dans la zone en cartes de Rencontres (`ma-deck`) : celle du dessus est la plante courante ; à droite un coup de cœur (vos favoris : la plante ajoutée si elle n'y est pas, jamais retirée), à gauche la suivante, ↺ (il ne retire que le favori que son cœur a ajouté, tel qu'il l'a laissé : annoté, noté ou récolté depuis, il reste) ; chaque choix est annoncé (« Match : Ail des ours, ajoutée aux favoris. Carte suivante : … ») ; une plante passée puis choisie ailleurs revient sur le dessus, son passage hors de ↺ (le ↺ suivant reprend le choix d'avant ; une plante déjà aimée, non) ; « ⋯ » (et ↑) seulement quand toucher ouvre la fiche (`toucher=fiche`, `ecrit=0`) ; la fin du paquet compte les coups de cœur (« 2 coups de cœur dans vos favoris. ») ; ← → n'agissent que sur un paquet visible (replié ou dans un onglet caché : rien), et avec deux paquets à l'écran, sur celui qui a le focus ; les sources de la zone injoignables (ou hors ligne), ou l'une d'elles et l'autre sans plante ici (iNaturalist en panne, GBIF sans observation à lui) : le paquet le dit, avec « Réessayer » (son module coupé : Réglages › Modules), jamais la fin du paquet |
 
-**Les réglages de la carte** (`app/layout/registry.js`, `app/layout/map-options.js`, branchés dans `cells.js#DlMap`) : tous écrits dans `map(...)`, séparés par `;` ou `,`. Sans réglage, la carte est celle de toujours (les valeurs par défaut ci-dessous) : les dispositions existantes ne changent pas.
+**Les réglages de la carte** (`app/layout/registry.js`, `app/layout/map-options.js`, branchés dans `map-cell.js#DlMap`) : tous écrits dans `map(...)`, séparés par `;` ou `,`. Sans réglage, la carte est celle de toujours (les valeurs par défaut ci-dessous) : les dispositions existantes ne changent pas.
 
 | Groupe | Réglage | Valeurs (défaut en premier) | Effet |
 | --- | --- | --- | --- |
@@ -394,7 +397,7 @@ Exemples :
 
 Une intention ajoute aussi des commandes (sauf `ui=nue`) : `floraison` les puces de période (`periode`), `protege` la légende (`legende`), `repartition` la pastille de la plante (`plante`), `terrain` « Me localiser » en grand (`gps`).
 
-**Les commandes sur la carte** (`ctl=`, `app/layout/map-options.js` `MAP_CONTROLS`, dessinées par `cells.js#DlMap`), chacune à sa place fixe :
+**Les commandes sur la carte** (`ctl=`, `app/layout/map-options.js` `MAP_CONTROLS`, dessinées par `map-cell.js#DlMap`), chacune à sa place fixe :
 
 ```text
 ┌ recherche d'adresse (lieu) ───────── couches ▣ ┐

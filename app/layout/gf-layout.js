@@ -83,7 +83,8 @@ import { forgetShares, savedShares, saveShares } from './sizes.js';
 import { MODELS } from './models.js';
 import { labelOf, rememberScreen, screenEvents, screenKey, screens } from './screens.js';
 import { screenList, screenListStyles } from './screen-list.js';
-import { renderCell, revealFacet, scopeWords } from './cells.js';
+import { renderCell, revealFacet } from './cells.js';
+import { scopeWords } from './cell-kit.js';
 import { cellOf, cellText } from './picker-model.js';
 import { pickerBounds } from './gf-block-picker.js';
 import { boxOf, canSplit, placesOf, remove as removeBox, SLOT, specOf, split } from './builder-grid.js';
@@ -1013,7 +1014,7 @@ export class GfLayout extends LitElement {
    * zone cell (r=), the period of a map (when=: this year, this month), the place it starts on (a map's lieu=, autour) —
    * the first in reading order, where two disagree (said in the edit strip: #notes). Its sources are no cell's: both,
    * but one whose module is off (core/observations.js defaultSources: never said missing on every map) — a map's src= is
-   * its own (cells.js). Returns whether the radius, the period or the sources changed. @param {Shown} l
+   * its own (map-cell.js). Returns whether the radius, the period or the sources changed. @param {Shown} l
    */
   #defaults(l) {
     let changed = false;

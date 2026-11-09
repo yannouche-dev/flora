@@ -18,7 +18,7 @@
 // would still be the first ones).
 // It decides nothing itself: the card flown off, the event `deck-decide` (detail { card, liked }); `deck-open`
 // (detail { id }), `deck-undo`, `deck-photos` (detail { id }). Its host (`session`, DeckHost: an activity's game,
-// kit/session.js, or a screen's deck, layout/cells.js — both on the swipe core, kit/swipes.js) gives the rest.
+// kit/session.js, or a screen's deck, layout/deck-cell.js — both on the swipe core, kit/swipes.js) gives the rest.
 
 import { LitElement, html, css, nothing, repeat } from 'lit';
 import { icon } from '../../core/icons.js';
@@ -38,7 +38,7 @@ import { radiusLabel } from '../../core/distance.js';
  * @typedef {EventTarget & { deck: Card[], matchCards: Card[], avoidCards: Card[], history: readonly import('./swipes.js').Swiped[],
  *   burst: number, hintOnce(): boolean, avoids(card: Card): boolean, ethnoOf(card: Card): string | null | undefined,
  *   widen(m: number): void, resetPassed(): void }} DeckHost
- *   what the deck asks of its host — an activity's game (kit/session.js) or a screen's deck (layout/cells.js), both on
+ *   what the deck asks of its host — an activity's game (kit/session.js) or a screen's deck (layout/deck-cell.js), both on
  *   the swipe core (kit/swipes.js): its cards not swiped, matched, recognised to avoid (a screen's: none), ↺'s swipes, the
  *   heart flying off, the hint once, which cards are to avoid (a screen's: none), what Wikipédia says (a screen's:
  *   nothing), further (« Chercher jusqu’à … »), the cards passed again; `change` when any of it changed
@@ -64,7 +64,7 @@ const decks = new Set();
 
 export class MaDeck extends LitElement {
   static properties = {
-    /** Its host (DeckHost: kit/session.js, layout/cells.js). */
+    /** Its host (DeckHost: kit/session.js, layout/deck-cell.js). */
     session: { attribute: false },
     /** The cards as shown, the top one first. */
     cards: { attribute: false },
@@ -76,14 +76,14 @@ export class MaDeck extends LitElement {
     active: { type: Boolean },
     /**
      * A card opens its sheet (`deck-open`: a touch, a swipe up, ↑, « ⋯ ») — not on a screen's deck whose touch opens
-     * none (layout/cells.js: its card on top is the current plant already, or a touch does nothing).
+     * none (layout/deck-cell.js: its card on top is the current plant already, or a touch does nothing).
      */
     opens: { type: Boolean },
     /** A button for the photos of the card on top (Rencontres, once they were shown: kit/ma-meet-media.js). */
     photos: { type: Boolean },
     /**
      * What its end says, by its host (DeckEnd): the matches counted in its words (a screen's, Rencontres while
-     * discovering: no tab « Matchs »); a deck cut short (a screen's: its cards the first ones of more, layout/cells.js),
+     * discovering: no tab « Matchs »); a deck cut short (a screen's: its cards the first ones of more, layout/deck-cell.js),
      * its headline instead of « toutes les plantes du coin », and a line besides. null: as the activities' list says it.
      */
     end: { attribute: false }

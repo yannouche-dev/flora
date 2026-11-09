@@ -6,7 +6,7 @@
 // (gf-plant-card lit), and its plant's points on the other maps (the one hovered lights them itself); the list kept to
 // what the map shows once moved by hand (state.js setView, workers/search-core.js within), « Toute la zone » back,
 // never for a move the map makes itself, nor with liste=zone, nor by a map of the current plant alone (plante=seule);
-// the view of the map that leads it in the address (its vue=, replaced: cells.js), the same list reloaded, let go by
+// the view of the map that leads it in the address (its vue=, replaced: map-cell.js), the same list reloaded, let go by
 // « Toute la zone » (every map leading it), another circle (not a map of France's, nor the one a place to start on
 // finds), another map taking the lead or « Seule » (the map left where it is) — never written by a map that does not
 // lead it —, kept by Back (gf-layout.js #follow: never a step); on a phone too, the map in its tab and the list in

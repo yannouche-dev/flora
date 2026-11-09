@@ -1,4 +1,4 @@
-// « Écran sur mesure » : cells that mirror each other (state.js, cells.js dl-map). The list is the map's: the map
+// « Écran sur mesure » : cells that mirror each other (state.js, map-cell.js dl-map). The list is the map's: the map
 // shows the zone's observations (iNaturalist's latest, of the period), the list their plants (one each, the flora's),
 // and a filter keeps both to its plants; the period is every cell's (periode= in the address: the zone's observations
 // that month, their plants the results) — while they come, the map, the list and their counts kept, dimmed (« Mise à

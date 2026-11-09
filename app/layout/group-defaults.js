@@ -5,7 +5,7 @@
 // the whole group (registry.js `shared`: « pour tout le groupe » in the editor). Where two cells disagree, the first
 // wins, and the edit strip says it; where the address says another radius, another period or has a zone of its own,
 // said too, with the way to take the cell's (the address keeps writing r=: it is never rewritten behind one's back).
-// The group's sources are no cell's: a map's src= is its own, a pin (cells.js). Pure, tested under Node
+// The group's sources are no cell's: a map's src= is its own, a pin (map-cell.js). Pure, tested under Node
 // (tests/unit/group-defaults.test.mjs).
 
 import { fold } from '../core/fold.js';
@@ -126,7 +126,7 @@ export function startToFind(d, live) {
  * @param {GroupDefaults} d
  * @param {{ r: number | null, periode: string | null, at: [number, number] | null, place: string | null }} live the group's address
  * @param {{ letter?: string, zone?: string, startAt?: [number, number] | null }} [o] `letter`: the group's (A, B), ''
- *   with one group; `zone`: the address' zone in words (cells.js scopeWords); `startAt`: where the starting place's
+ *   with one group; `zone`: the address' zone in words (cell-kit.js scopeWords); `startAt`: where the starting place's
  *   words lead (startToFind: [lon, lat]; null: nowhere, not found; undefined: not known yet — said once known)
  * @returns {GroupNote[]}
  */
