@@ -83,7 +83,7 @@ export class GfBlockPicker extends LitElement {
   static styles = [ui, css`
     :host { position: fixed; z-index: 40; top: var(--picker-top, 0px); right: 0; bottom: var(--picker-bottom, 0px); width: min(380px, 100%); display: flex; color: var(--gf-text); }
     .panel { flex: 1; min-width: 0; display: flex; flex-direction: column; background: var(--gf-surface); border-left: 1px solid var(--gf-border);
-      box-shadow: var(--gf-shadow-float, -8px 0 30px rgb(0 0 0 / .15)); }
+      box-shadow: var(--gf-shadow-float); }
     @media (max-width: 699px) {
       :host { top: auto; left: 0; width: auto; max-height: min(85vh, 100vh - var(--picker-top, 0px) - var(--picker-bottom, 0px)); }
       .panel { border-left: 0; border-top: 1px solid var(--gf-border); border-radius: 16px 16px 0 0; }
@@ -104,7 +104,7 @@ export class GfBlockPicker extends LitElement {
     .hint { margin: 0; font-size: 0.85rem; color: var(--gf-text-muted); }
     .tiles { display: grid; gap: 8px; }
     .tile { all: unset; box-sizing: border-box; cursor: pointer; display: grid; grid-template-columns: auto 1fr auto; gap: 2px 12px; align-items: center; padding: 10px 12px;
-      border: 1px solid var(--gf-border); border-radius: var(--gf-radius-lg, 14px); background: var(--gf-surface); }
+      border: 1px solid var(--gf-border); border-radius: var(--gf-radius-lg); background: var(--gf-surface); }
     .tile:hover { border-color: var(--gf-accent); }
     .tile:focus-visible { outline: none; box-shadow: var(--gf-focus); }
     .tile[aria-pressed='true'] { border-color: var(--gf-accent); box-shadow: 0 0 0 2px var(--gf-accent); }
@@ -114,13 +114,13 @@ export class GfBlockPicker extends LitElement {
     .tile .go { grid-row: span 3; grid-column: 3; color: var(--gf-text-muted); }
     .tile .why { grid-column: 2; font-size: 0.78rem; font-weight: 600; }
     .tile .why.sugg { color: var(--gf-accent); }
-    .tile .why.warn { color: var(--gf-warn, #9a5b00); }
+    .tile .why.warn { color: var(--gf-warn); }
     .tile .why.small { color: var(--gf-text-muted); font-weight: 500; }
     .tiles.small .tile { padding: 8px 12px; }
     .tiles.small .tile > .bi { font-size: 1.2rem; grid-row: auto; }
     .chips { display: flex; flex-wrap: wrap; gap: 4px; grid-column: 2; }
     .chips span { font-size: 0.74rem; padding: 1px 8px; border-radius: var(--gf-radius-pill); background: var(--gf-accent-soft); color: var(--gf-text); }
-    .card { display: grid; gap: 6px; padding: 10px 12px; border: 1px solid var(--gf-border); border-radius: var(--gf-radius-lg, 14px); }
+    .card { display: grid; gap: 6px; padding: 10px 12px; border: 1px solid var(--gf-border); border-radius: var(--gf-radius-lg); }
     .card .top { display: flex; align-items: center; gap: 8px; }
     .card .top .bi { font-size: 1.3rem; color: var(--gf-accent); }
     .card .top b { flex: 1; }

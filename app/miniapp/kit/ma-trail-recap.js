@@ -32,7 +32,7 @@ export class MaTrailRecap extends LitElement {
   };
 
   static styles = [ui, startStyles, css`
-    :host { display: block; position: relative; height: 100%; background: var(--gf-bg, var(--gf-surface-2)); container-type: inline-size; }
+    :host { display: block; position: relative; height: 100%; background: var(--gf-bg); container-type: inline-size; }
     .wrap { display: grid; grid-template-columns: minmax(0, 1fr); min-height: 100%; align-content: start; }
     .start .art > .recap { display: grid; gap: 10px; }
     .start .art:has(> .recap) { width: min(100%, 420px); }

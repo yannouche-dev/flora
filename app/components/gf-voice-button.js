@@ -44,17 +44,17 @@ export class GfVoiceButton extends LitElement {
     button:hover { background: var(--gf-surface-2); color: var(--gf-text); }
     button:active { transform: scale(0.9); }
     button:focus-visible { outline: none; box-shadow: var(--gf-focus); }
-    button.starting { background: color-mix(in srgb, var(--gf-danger, #dc2626) 70%, transparent); color: #fff; }
-    button.listening { background: var(--gf-danger, #dc2626); color: #fff; animation: pulse 1.1s ease-in-out infinite; }
+    button.starting { background: color-mix(in srgb, var(--gf-danger) 70%, transparent); color: #fff; }
+    button.listening { background: var(--gf-danger); color: #fff; animation: pulse 1.1s ease-in-out infinite; }
     @keyframes pulse { 50% { box-shadow: 0 0 0 7px color-mix(in srgb, #dc2626 28%, transparent); } }
     svg { width: 18px; height: 18px; flex: none; }
 
     /* Large: a thumb's button, always visible — the accent, filled. */
-    :host([size='large']) button { width: 52px; height: 52px; background: var(--gf-accent); color: var(--gf-accent-contrast, #fff);
+    :host([size='large']) button { width: 52px; height: 52px; background: var(--gf-accent); color: var(--gf-accent-contrast);
       box-shadow: 0 3px 10px color-mix(in srgb, var(--gf-accent) 40%, transparent); }
-    :host([size='large']) button:hover { background: color-mix(in srgb, var(--gf-accent) 88%, #000); color: var(--gf-accent-contrast, #fff); }
-    :host([size='large']) button.starting { background: color-mix(in srgb, var(--gf-danger, #dc2626) 75%, var(--gf-accent)); }
-    :host([size='large']) button.listening { background: var(--gf-danger, #dc2626); animation: pulse-large 1.1s ease-in-out infinite; }
+    :host([size='large']) button:hover { background: color-mix(in srgb, var(--gf-accent) 88%, #000); color: var(--gf-accent-contrast); }
+    :host([size='large']) button.starting { background: color-mix(in srgb, var(--gf-danger) 75%, var(--gf-accent)); }
+    :host([size='large']) button.listening { background: var(--gf-danger); animation: pulse-large 1.1s ease-in-out infinite; }
     @keyframes pulse-large { 0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, #dc2626 45%, transparent); } 50% { box-shadow: 0 0 0 12px color-mix(in srgb, #dc2626 0%, transparent); } }
     :host([size='large']) svg { width: 26px; height: 26px; }
     @media (prefers-reduced-motion: reduce) { button.listening, :host([size='large']) button.listening { animation: none; } button:active { transform: none; } }

@@ -317,7 +317,7 @@ export class GfLayout extends LitElement {
       .cell-head .pin-chip::before { content: ''; position: absolute; inset: -5px; }
     }
     /* A results cell's list / grid switch (view=). */
-    .cell-head .cell-views { flex: none; display: inline-flex; gap: 2px; padding: 2px; border-radius: 8px; background: var(--gf-surface-2, var(--gf-bg)); }
+    .cell-head .cell-views { flex: none; display: inline-flex; gap: 2px; padding: 2px; border-radius: 8px; background: var(--gf-surface-2); }
     .cell-head .cell-views .icon-btn { width: 28px; height: 26px; min-height: 0; padding: 0; font-size: 0.85rem; border-radius: 6px; }
     .cell-head .cell-views .icon-btn[aria-pressed='true'] { background: var(--gf-surface); color: var(--gf-accent); box-shadow: 0 1px 2px rgb(0 0 0 / 15%); }
     .cell-head .pin { color: var(--gf-accent); }
@@ -341,7 +341,7 @@ export class GfLayout extends LitElement {
     .cell-body .scroll { overflow-y: auto; }
     .cell-body .pad { padding: 0 12px; }
     .placeholder { display: grid; align-content: center; justify-items: center; gap: 6px; padding: 16px; text-align: center; font-size: 0.9rem; overflow-y: auto; }
-    .placeholder > .bi { font-size: 1.6rem; color: var(--gf-warn, #b45309); }
+    .placeholder > .bi { font-size: 1.6rem; color: var(--gf-warn); }
     .placeholder.quiet { color: var(--gf-text-muted); }
     .placeholder.quiet .bi { color: var(--gf-accent); }
     .placeholder p { margin: 0; max-width: 34em; }

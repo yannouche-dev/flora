@@ -69,7 +69,7 @@ export class MaFauxAmis extends LitElement {
   static styles = [ui, severityStyles, css`
     /* It scrolls itself (a grid cell gives it its height), its background all the way down — what is out of the flow too
        (the visually hidden words: positioned, it is their box). */
-    :host { display: block; position: relative; height: 100%; min-height: 0; overflow-y: auto; overscroll-behavior: contain; background: var(--gf-bg, var(--gf-surface-2));
+    :host { display: block; position: relative; height: 100%; min-height: 0; overflow-y: auto; overscroll-behavior: contain; background: var(--gf-bg);
       container-type: inline-size; }
     /* A plant's sheet beside the recap (a wide screen): the recap keeps clear of it. */
     @media (min-width: 900px) { :host([sheet]) { padding-right: var(--ma-sheet-w, min(560px, 48vw)); box-sizing: border-box; } }

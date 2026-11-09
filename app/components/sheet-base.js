@@ -757,7 +757,7 @@ export const sheetStyles = [ui, severityStyles, css`
     .frame.edged.narrow.panes-only { overflow-y: auto; }
     /* Panes only (Découvrir): the tree left without its sheet fills the whole frame — one pane alone too. */
     .frame.edged.panes-only:not(.narrow) > * { flex: 1 1 0; min-width: 0; }
-    .edge { position: relative; z-index: 7; display: flex; flex-direction: column; min-width: 0; min-height: 0; background: var(--gf-bg, var(--gf-surface-2)); }
+    .edge { position: relative; z-index: 7; display: flex; flex-direction: column; min-width: 0; min-height: 0; background: var(--gf-bg); }
     /* Over the whole plant pane for a while (the frame holds it: the cells are not positioned). */
     .edge.max { position: absolute; inset: 0; z-index: 30; box-shadow: var(--gf-shadow-float); }
     .edge-bar { flex: none; display: flex; align-items: center; gap: 4px; min-height: 36px; padding: 2px 6px 2px 8px; color: var(--gf-text-muted); font-size: 0.75rem; }
@@ -860,8 +860,8 @@ export const sheetStyles = [ui, severityStyles, css`
     .rub-ic { flex: none; display: grid; place-items: center; width: 22px; color: var(--gf-accent); font-size: 0.95rem; }
     .rub-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .rub-badge { flex: none; min-width: 18px; height: 18px; padding: 0 5px; box-sizing: border-box; border-radius: var(--gf-radius-pill); display: inline-grid; place-items: center;
-      font-size: 0.7rem; font-weight: 700; color: #fff; background: var(--gf-warn, #b45309); }
-    .rub-badge.danger { background: var(--gf-danger, #dc2626); }
+      font-size: 0.7rem; font-weight: 700; color: #fff; background: var(--gf-warn); }
+    .rub-badge.danger { background: var(--gf-danger); }
     .rub-badge.deadly { background: var(--gf-deadly); color: var(--gf-deadly-contrast); }
     .rub-badge.info { background: var(--gf-text-muted); }
     @media (prefers-color-scheme: dark) { .rub-badge { color: #1d1405; } }

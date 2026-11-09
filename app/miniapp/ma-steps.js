@@ -32,7 +32,7 @@ export class MaSteps extends LitElement {
     nav { min-width: 0; overflow-x: auto; scrollbar-width: none; }
     ol { display: flex; align-items: center; gap: 2px; margin: 0; padding: 0; list-style: none; white-space: nowrap; }
     li { display: flex; align-items: center; gap: 2px; color: var(--gf-text-muted); font-size: 0.85rem; }
-    li + li::before { content: '›'; padding: 0 4px; color: var(--gf-border-strong, var(--gf-text-muted)); }
+    li + li::before { content: '›'; padding: 0 4px; color: var(--gf-text-muted); }
     li > span, li > button { display: inline-flex; align-items: center; gap: 6px; min-height: 32px; padding: 2px 10px; border-radius: var(--gf-radius-pill); }
     li > button { border: 0; background: none; color: var(--gf-text); font-weight: 500; box-shadow: none; }
     li > button:hover { background: var(--gf-surface-2); }

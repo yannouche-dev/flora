@@ -162,9 +162,9 @@ export const scene = kind => {
 /** Styles for `scene()`, to include in the component's styles. */
 export const sceneStyles = css`
   .scene { display: block; justify-self: center; margin: 0 auto; width: min(380px, 100%); height: auto; overflow: visible;
-    --green: var(--gf-accent, #2f6b3a); --leaf: #4f9a5c; --leaf2: #7cc36b; --sun: #f5c518; --red: #e4572e; --pink: #e86fa4; --violet: #8e6cc8;
-    --blue: #3b82c4; --amber: #e8a317; --cloud: color-mix(in srgb, var(--gf-text, #1f2a1f) 14%, transparent); --card: var(--gf-surface, #fff); --line: var(--gf-border, #dfe6da);
-    --ground: var(--gf-accent-soft, #e2eedf); --rim: var(--gf-surface, #fff); --shade: color-mix(in srgb, var(--gf-text, #1f2a1f) 22%, transparent);
+    --green: var(--gf-accent); --leaf: #4f9a5c; --leaf2: #7cc36b; --sun: #f5c518; --red: #e4572e; --pink: #e86fa4; --violet: #8e6cc8;
+    --blue: #3b82c4; --amber: #e8a317; --cloud: color-mix(in srgb, var(--gf-text) 14%, transparent); --card: var(--gf-surface); --line: var(--gf-border);
+    --ground: var(--gf-accent-soft); --rim: var(--gf-surface); --shade: color-mix(in srgb, var(--gf-text) 22%, transparent);
     --ink-dark: #1f2a1f; }
   .scene .dots { fill: none; stroke: var(--green); stroke-width: 3.4; stroke-linecap: round; stroke-dasharray: 0.1 9; }
   .scene .pop { transform-box: fill-box; transform-origin: 50% 50%; animation: scene-pop 0.55s cubic-bezier(0.3, 1.7, 0.5, 1) both; animation-delay: var(--d, 0s); }

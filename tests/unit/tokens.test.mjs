@@ -1,10 +1,31 @@
-// The CSS custom properties of app/ (tokens.css and the components' styles): none defined by itself — `--x: var(--x)`
-// makes the property invalid, so whatever reads it falls back to nothing (a transparent danger box).
+// The CSS custom properties of app/ (tokens.css and the components' styles), and how they are read:
+//  - none defined by itself — `--x: var(--x)` makes the property invalid, so whatever reads it falls back to nothing
+//    (a transparent danger box);
+//  - a token of tokens.css read without a fallback: it is defined on :root, for both themes (the dark one only
+//    changes values), in the app's one page (index.html links tokens.css first) and in every shadow root (custom
+//    properties inherit), so a fallback `var(--gf-x, #2e7d32)` is never used — a second colour, kept in step for
+//    nothing; every --gf- name read is defined somewhere (tokens.css, or set by the code: --gf-tilt, --gf-credits…).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile, readdir } from 'node:fs/promises';
 
 const app = new URL('../../app/', import.meta.url);
+const root = new URL('../../', import.meta.url);
+
+/** The styles of the app: app/**\/*.{css,js} and index.html (its launch screen), as [path, text]. */
+async function sources() {
+  const files = (await readdir(app, { recursive: true })).filter(f => /\.(css|js)$/.test(f)).map(f => 'app/' + f);
+  return Promise.all([...files, 'index.html'].map(async f => /** @type {[string, string]} */ ([f, await readFile(new URL(f, root), 'utf8')])));
+}
+const lineOf = (/** @type {string} */ text, /** @type {number} */ index) => text.slice(0, index).split('\n').length;
+
+/** The tokens of tokens.css: its :root, and the dark theme's (values only). */
+async function tokens() {
+  const css = await readFile(new URL('styles/tokens.css', app), 'utf8');
+  const [light, dark] = css.split('@media (prefers-color-scheme: dark)');
+  const names = (/** @type {string} */ block) => [...block.matchAll(/(--gf-[\w-]+)\s*:\s*([^;]+);/g)].map(([, name, value]) => [name, value.trim()]);
+  return { light: new Map(names(light)), dark: new Map(names(dark || '')) };
+}
 
 test('aucune propriété CSS ne se définit par elle-même', async () => {
   const files = (await readdir(app, { recursive: true })).filter(f => /\.(css|js)$/.test(f));
@@ -17,4 +38,23 @@ test('aucune propriété CSS ne se définit par elle-même', async () => {
     }
   }
   assert.deepEqual(found, []);
+});
+
+test('un jeton de tokens.css se lit sans repli (toujours défini) ; un nom --gf- lu est défini quelque part', async () => {
+  const { light, dark } = await tokens();
+  // The dark theme only changes values: every token it sets is one of :root's (defined in both themes).
+  assert.deepEqual([...dark.keys()].filter(name => !light.has(name)), []);
+  const all = await sources();
+  const fallbacks = [], undefinedNames = new Set();
+  for (const [file, text] of all) {
+    for (const m of text.matchAll(/var\(\s*(--gf-[\w-]+)\s*(,?)/g)) {
+      const [, name, comma] = m;
+      if (comma && light.has(name)) fallbacks.push(`${file}:${lineOf(text, m.index)} var(${name}, …)`);
+      // Set in a stylesheet (`--gf-x:`), a style string ('--gf-x: ' + n) or by setProperty('--gf-x', …).
+      const set = new RegExp(`${name}\\s*:|['"\`]${name}['"\`]`);
+      if (!light.has(name) && !all.some(([, t]) => set.test(t))) undefinedNames.add(`${file}: ${name}`);
+    }
+  }
+  assert.deepEqual(fallbacks, []);
+  assert.deepEqual([...undefinedNames], []);
 });

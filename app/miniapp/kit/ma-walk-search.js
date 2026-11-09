@@ -22,7 +22,7 @@ export const addPin = html`<span class="addpin" aria-hidden="true">${icon('geo-a
 export const addPinStyles = css`
   .addpin { position: relative; display: inline-grid; place-items: center; font-size: 1.2rem; line-height: 1; }
   .addpin > i { position: absolute; right: -8px; top: -7px; width: 15px; height: 15px; border-radius: 50%; display: grid; place-items: center; font-size: 0.6rem; font-style: normal;
-    background: var(--gf-accent-contrast, #fff); color: var(--gf-accent); box-shadow: 0 0 0 1.5px var(--gf-accent); }
+    background: var(--gf-accent-contrast); color: var(--gf-accent); box-shadow: 0 0 0 1.5px var(--gf-accent); }
 `;
 
 /** Plants proposed at first, and added by each « Voir plus ». */
@@ -55,7 +55,7 @@ export class MaWalkSearch extends LitElement {
      * bottom, and stays so when it grows or shrinks (the keyboard).
      */
     .sheet { grid-area: 1 / 1 / 4 / 2; z-index: 4; min-height: 0; overflow-y: auto; overscroll-behavior: contain; display: flex; flex-direction: column; gap: 6px;
-      padding: 10px 12px 12px; background: var(--gf-bg, var(--gf-surface-2)); border-radius: 16px 16px 0 0; box-shadow: 0 -10px 28px rgb(0 0 0 / 16%);
+      padding: 10px 12px 12px; background: var(--gf-bg); border-radius: 16px 16px 0 0; box-shadow: 0 -10px 28px rgb(0 0 0 / 16%);
       transform: translateY(calc(100% + 24px)); visibility: hidden; transition: transform 0.26s cubic-bezier(0.3, 0.7, 0.4, 1), visibility 0s linear 0.26s; }
     .sheet.open { transform: none; visibility: visible; transition: transform 0.26s cubic-bezier(0.2, 0.8, 0.3, 1), visibility 0s; }
     .sheet > :first-child { margin-top: auto; }
@@ -73,8 +73,8 @@ export class MaWalkSearch extends LitElement {
     .search input { padding: 13px 48px 13px 46px; font-size: 1.08rem; }
     .bar { display: flex; align-items: center; gap: 10px; }
     .bar .search { flex: 1; min-width: 0; }
-    .search.listening input { border-color: var(--gf-danger, #dc2626); box-shadow: 0 0 0 3px color-mix(in srgb, var(--gf-danger, #dc2626) 22%, transparent); }
-    .search.listening input::placeholder { color: var(--gf-danger, #dc2626); }
+    .search.listening input { border-color: var(--gf-danger); box-shadow: 0 0 0 3px color-mix(in srgb, var(--gf-danger) 22%, transparent); }
+    .search.listening input::placeholder { color: var(--gf-danger); }
     .search input:focus { border-color: var(--gf-accent); outline: none; box-shadow: var(--gf-focus); }
     .search input::-webkit-search-cancel-button { display: none; }
     .search .lens { position: absolute; left: 16px; top: 50%; transform: translateY(-50%); color: var(--gf-text-muted); font-size: 1.1rem; pointer-events: none; }

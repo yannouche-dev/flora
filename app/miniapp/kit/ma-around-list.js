@@ -82,7 +82,7 @@ export class MaAroundList extends LitElement {
   static styles = [ui, splitStyles, severityStyles, css`
     /* Its column's size known (cqh): « Rencontres » fits it, the deck shrinking on a short window, never a scrollbar;
        the grids scroll, a thin bar against the column's edge (never a second divider beside the separator). */
-    :host { display: block; position: relative; min-height: 0; overflow-y: auto; background: var(--gf-bg, var(--gf-surface-2)); container-type: size;
+    :host { display: block; position: relative; min-height: 0; overflow-y: auto; background: var(--gf-bg); container-type: size;
       scrollbar-width: thin; scrollbar-color: color-mix(in srgb, var(--gf-text-muted) 45%, transparent) transparent; }
     /* « Rencontres » in a column (a wide screen): the list as tall as it, the deck taking the room left (its actions
        under it), the card shrinking to fit — no scrolling. A phone: the page scrolls, the card its full size. */

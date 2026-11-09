@@ -74,7 +74,7 @@ export class MaOrchids extends LitElement {
 
   static styles = [ui, css`
     /* A grid cell gives it its height; the panel and the map share it. */
-    :host { display: block; position: relative; height: 100%; min-height: 0; background: var(--gf-bg, var(--gf-surface-2)); container-type: inline-size; }
+    :host { display: block; position: relative; height: 100%; min-height: 0; background: var(--gf-bg); container-type: inline-size; }
     /* A plant's sheet beside the map (a wide screen): the map keeps clear of it. */
     @media (min-width: 900px) { :host([sheet]) { padding-right: var(--ma-sheet-w, min(560px, 48vw)); box-sizing: border-box; } }
     .wrap { height: 100%; display: grid; grid-template-columns: minmax(280px, 360px) minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); }
