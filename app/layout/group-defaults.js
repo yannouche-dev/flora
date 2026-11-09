@@ -126,7 +126,7 @@ export function startToFind(d, live) {
  * @param {GroupDefaults} d
  * @param {{ r: number | null, periode: string | null, at: [number, number] | null, place: string | null }} live the group's address
  * @param {{ letter?: string, zone?: string, startAt?: [number, number] | null }} [o] `letter`: the group's (A, B), ''
- *   with one group; `zone`: the address' zone in words (cells.js scopeWords); `startAt`: where the starting place's
+ *   with one group; `zone`: the address' zone in words (cell-kit.js scopeWords); `startAt`: where the starting place's
  *   words lead (startToFind: [lon, lat]; null: nowhere, not found; undefined: not known yet — said once known)
  * @returns {GroupNote[]}
  */

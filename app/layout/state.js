@@ -12,7 +12,7 @@
 //   &place=<words> without at=         a place to find: the IGN geocoder asked (core/geoservices.js#findPlace:
 //                                      « mirabel, menetrol, 63 »), the scope set there and the address replaced by its
 //                                      at= and the label found (r= kept, else the layout's); not found, offline or the
-//                                      module off: no scope, the reason said where the scope is (cells.js#scopeWords),
+//                                      module off: no scope, the reason said where the scope is (cell-kit.js#scopeWords),
 //                                      place= left in the address so that a reload asks again;
 //   &o=<observation>                   an observation lit on the map (a point touched);
 //   &periode=<toujours|annee|mois>     the period every cell shows: the plants observed in the zone that year, or that
@@ -310,7 +310,7 @@ export class LayoutState extends EventTarget {
   /**
    * The zone's observations loaded, when a source has more, each apart (core/observations.js): iNaturalist's past
    * ZONE_MAX — its most recent —, GBIF's past its page of GBIF_MAX — one page, asked in no order —: how many of its
-   * points are shown, of how many it counts (null: all of them); null: every source's all (cells.js says it).
+   * points are shown, of how many it counts (null: all of them); null: every source's all (cell-kit.js scopeNote says it).
    * @returns {{ inat: { shown: number, total: number } | null, gbif: { shown: number, total: number } | null } | null}
    */
   get sample() {
