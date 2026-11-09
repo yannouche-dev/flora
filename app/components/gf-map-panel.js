@@ -71,7 +71,7 @@ export class GfMapPanel extends LitElement {
     .state > b { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--gf-text-muted); }
     .state li { display: flex; gap: 6px; align-items: baseline; }
     .state li .bi { flex: none; color: var(--gf-text-muted); }
-    .state li.warn .bi { color: #b45309; }
+    .state li.warn .bi { color: var(--gf-warn); }
     .state li.error .bi { color: var(--gf-danger); }
     .state li a { color: var(--gf-accent); white-space: nowrap; }
     .areas { list-style: none; margin: 0 4px 6px; padding: 8px 10px; display: grid; gap: 4px; border-left: 4px solid #15803d;

@@ -1,5 +1,5 @@
 {
-  "total": 462,
+  "total": 461,
   "files": {
     "app/components/gf-app.js": 1,
     "app/components/gf-calendar.js": 3,
@@ -7,7 +7,7 @@
     "app/components/gf-lookalikes.js": 3,
     "app/components/gf-map-obs3d.js": 15,
     "app/components/gf-map-page.js": 3,
-    "app/components/gf-map-panel.js": 7,
+    "app/components/gf-map-panel.js": 6,
     "app/components/gf-map-search.js": 1,
     "app/components/gf-map.js": 20,
     "app/components/gf-media-viewer.js": 28,
