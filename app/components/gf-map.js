@@ -10,6 +10,7 @@ import { defaultOpacity, isOverlay, overlayDef } from '../core/ign-layers.js';
 import { isBaseKey } from '../core/backgrounds.js';
 import { lookFor, mapLookEvents, setMapLook } from '../core/map-settings.js';
 import { inSeason, placeAbundance, placeTitle } from '../core/collections.js';
+import { PIN_COLORS } from '../core/map-colours.js';
 import { store as appStore } from '../core/store.js';
 import { cachedThumb, thumbUrl } from '../core/thumb.js';
 import { moduleEvents, moduleOn } from '../core/modules.js';
@@ -33,9 +34,6 @@ const STYLESHEETS = [
   new URL('../../vendor/leaflet.css', import.meta.url).href,
   new URL('../styles/map.css', import.meta.url).href
 ];
-
-/** A plant's ring, by its abundance (gf-map3d.js too). */
-export const PIN_COLORS = { rare: '#fb7185', moyen: '#fbbf24', abondant: '#38bdf8' };
 
 /** Plants are drawn from this zoom level on (places are always drawn). */
 export const PLANT_ZOOM = 16;

@@ -17,7 +17,7 @@ import { harvestStop } from '../core/danger.js';
 import { statusWarning } from './gf-status.js';
 import { emergency } from '../core/poison.js';
 import { ui } from '../styles/ui.js';
-import { severityGlyph, severityStyles } from './ui-kit.js';
+import { gpsDot, gpsStyles, severityGlyph, severityStyles, sheetStyles } from './ui-kit.js';
 import './gf-thumb.js';
 import './gf-voice-button.js';
 import { icon } from '../core/icons.js';
@@ -61,23 +61,9 @@ export class GfCapture extends LitElement {
     _toast: { state: true }
   };
 
-  static styles = [ui, severityStyles, css`
-    dialog {
-      position: fixed;
-      inset: auto 0 0 0;
-      width: 100%;
-      max-width: 560px;
-      max-height: 86dvh;
-      margin: 0 auto;
-      padding: 0;
-      border: 0;
-      border-radius: var(--gf-radius-lg) var(--gf-radius-lg) 0 0;
-      background: var(--gf-surface);
-      color: var(--gf-text);
-      flex-direction: column;
-    }
-    dialog[open] { display: flex; }
-    dialog::backdrop { background: rgb(0 0 0 / 40%); }
+  static styles = [ui, sheetStyles, severityStyles, gpsStyles, css`
+    /* The app's sheet from the bottom (ui-kit.js sheetStyles: the harvest warning's width). */
+    dialog.drawer { --drawer-w: 560px; }
     header { padding: 14px 16px 10px; border-bottom: 1px solid var(--gf-border); display: grid; gap: 6px; }
     .ask { position: relative; display: grid; }
     /* Right of the field: [✕ effacer] [micro], side by side; the input leaves them room (padding set in render). */
@@ -101,10 +87,6 @@ export class GfCapture extends LitElement {
     .clear:focus-visible { outline: none; box-shadow: var(--gf-focus); }
     h2 { margin: 0; font-size: 1.1rem; }
     .gps { font-size: 0.85rem; color: var(--gf-text-muted); display: flex; align-items: center; gap: 8px; }
-    .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--gf-text-muted); flex: none; }
-    .dot.good { background: #16a34a; }
-    .dot.weak { background: #f59e0b; }
-    .dot.none { background: var(--gf-danger); }
     .body { overflow-y: auto; padding: 8px 16px 16px; flex: 1; }
     h3 { margin: 12px 0 6px; }
     .chips { display: flex; flex-wrap: wrap; gap: 8px; }
@@ -481,9 +463,9 @@ export class GfCapture extends LitElement {
 
   #gps() {
     const fix = this._fix;
-    if (!fix) return html`<span class="dot ${this._gpsError ? 'none' : ''}"></span>${this._gpsError || 'Recherche de la position GPS…'}`;
+    if (!fix) return html`${gpsDot(this._gpsError ? 'none' : '')}${this._gpsError || 'Recherche de la position GPS…'}`;
     const good = fix.accuracy <= config.goodAccuracy;
-    return html`<span class="dot ${good ? 'good' : 'weak'}"></span>Position GPS ± ${Math.round(fix.accuracy)} m${good ? '' : ' — précision faible'}`;
+    return html`${gpsDot(good ? 'good' : 'weak')}Position GPS ± ${Math.round(fix.accuracy)} m${good ? '' : ' — précision faible'}`;
   }
 
   render() {
@@ -491,7 +473,7 @@ export class GfCapture extends LitElement {
     const harvestMode = this.#store.state.harvestMode;
     const t = this._toast;
     return html`
-      <dialog aria-label="Noter une plante ici" @close=${this.#onClosed} @keydown=${this.#keepKeys}
+      <dialog class="drawer" aria-label="Noter une plante ici" @close=${this.#onClosed} @keydown=${this.#keepKeys}
         @click=${e => { if (e.target === e.currentTarget) this.#close(); }}>
         <header>
           <h2>Noter ici</h2>

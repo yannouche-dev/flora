@@ -34,6 +34,7 @@ import { appKey } from '../../config.js';
 import { PaneSizer, splitStyles } from '../../core/panes.js';
 import { sheetSession } from '../../core/sheet-session.js';
 import { StoreController } from '../../core/store.js';
+import { photoOf } from '../../core/thumb.js';
 import { emergency } from '../../core/poison.js';
 import { ui } from '../../styles/ui.js';
 import { severityChip, severityStyles } from '../../components/ui-kit.js';
@@ -285,9 +286,6 @@ export class MaAroundList extends LitElement {
     const at = Number(e.detail?.index) || null;
     if (this.c && this.c.mediaAt !== at) this.app?.set({ mediaAt: at });
   };
-
-  /** A plant's photo, unless the « Photos en ligne » module is off (a leaf shows instead). @param {string | null | undefined} url */
-  #photo(url) { return url && moduleOn('photos') ? url : null; }
 
   /** A plant opened in its sheet (Rencontres: chosen, its sheet open), which steps through `ids`. @param {number} id @param {number[]} ids */
   #openPlant(id, ids) {
@@ -574,7 +572,7 @@ export class MaAroundList extends LitElement {
    */
   #matchView(c) {
     const name = nameOf(c.plant);
-    const photo = this.#photo(c.photo);
+    const photo = photoOf(c.photo);
     // A modal <dialog> (opened in updated(), by openModal): the focus goes to its button and stays in it, the rest of
     // the page is out of reach. Échap is held back (cancel); should the browser close it anyway, it is as the button.
     return html`<dialog class="match" aria-labelledby="match-title" aria-describedby="match-text"
@@ -605,7 +603,7 @@ export class MaAroundList extends LitElement {
    */
   #card(c, ids, pick = null) {
     const p = c.plant, name = nameOf(p);
-    const photo = this.#photo(c.photo);
+    const photo = photoOf(c.photo);
     const mosaic = this.mosaic && this.#view === 'all';
     const ds = discoverState();
     // The photo's credit, shown on it; not in the button's name (the plant's), which a screen reader says at each tile.

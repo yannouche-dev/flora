@@ -1,8 +1,9 @@
 // @ts-check
 // Templates and styles shared by the app's screens, written once: a sheet from the bottom (dialog.drawer: Flore's
-// filters, « Ajouter à… », the map's panel, the harvest warning), a modal question (dialog.ask; gf-ask.js asks any), « Recommencer : tout
-// effacer ? » (the list of Découvrir, gf-launcher.js, and an activity's box, gf-miniapp.js, ask it the same way) and a plant's
-// verdict as a chip (core/danger.js: the sheet, the cards of the games, the harvest warning, the confusions).
+// filters, « Ajouter à… », the map's panel, the harvest warning, « Noter ici »), a modal question (dialog.ask; gf-ask.js
+// asks any), « Recommencer : tout effacer ? » (the list of Découvrir, gf-launcher.js, and an activity's box,
+// gf-miniapp.js, ask it the same way), a plant's verdict as a chip (core/danger.js: the sheet, the cards of the games, the
+// harvest warning, the confusions) and the GPS dot of a position (« Noter ici », a lieu's editor).
 
 import { css, html, nothing } from 'lit';
 import { fr } from '../core/fr.js';
@@ -80,6 +81,22 @@ export const severityStyles = css`
   .sev-chip.warn, .sev-line.warn { background: var(--gf-warn-bg); color: color-mix(in srgb, var(--gf-warn) 78%, var(--gf-text)); }
   .sev-chip.danger, .sev-line.danger { background: var(--gf-danger-bg); color: var(--gf-danger); }
   .sev-chip.deadly, .sev-line.deadly { background: var(--gf-deadly); color: var(--gf-deadly-contrast); }
+`;
+
+/**
+ * The GPS dot before the words of a position (« Noter ici », a lieu's editor — the words are theirs): `good` green,
+ * within config.goodAccuracy (or a point placed by hand); `weak` amber, beyond it; `none` red, no position (its error
+ * said); grey while it is searched. Its green and amber are the same in both themes, like the maps' marks.
+ * @param {'good' | 'weak' | 'none' | ''} level
+ */
+export const gpsDot = level => html`<span class="gps-dot ${level}"></span>`;
+
+/** The GPS dot's look (gpsDot), in the shadow root of what shows it. */
+export const gpsStyles = css`
+  .gps-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--gf-text-muted); flex: none; }
+  .gps-dot.good { background: #16a34a; }
+  .gps-dot.weak { background: #f59e0b; }
+  .gps-dot.none { background: var(--gf-danger); }
 `;
 
 /**

@@ -18,6 +18,7 @@ import { addressAt, altitudeAt, formatCoordinates } from '../core/geoservices.js
 import { BP } from '../core/media.js';
 import { PaneSizer, splitStyles } from '../core/panes.js';
 import { ui } from '../styles/ui.js';
+import { gpsDot, gpsStyles } from './ui-kit.js';
 import './gf-lookalikes.js';
 import './gf-map.js';
 import './gf-status.js';
@@ -89,7 +90,7 @@ export class GfSpotEditor extends LitElement {
     _w: { state: true }
   };
 
-  static styles = [ui, splitStyles, css`
+  static styles = [ui, splitStyles, gpsStyles, css`
     details.insights { margin: 16px 0 4px; padding: 10px 12px; border: 1px solid var(--gf-border); border-radius: var(--gf-radius); background: var(--gf-surface); }
     details.insights summary { cursor: pointer; font-weight: 600; font-size: 0.9rem; display: flex; gap: 6px; align-items: center; }
     details.insights[open] summary { margin-bottom: 10px; }
@@ -133,10 +134,6 @@ export class GfSpotEditor extends LitElement {
       font-size: 0.875rem;
       padding: 8px 12px;
     }
-    .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--gf-text-muted); flex: none; }
-    .dot.good { background: #16a34a; }
-    .dot.weak { background: #f59e0b; }
-    .dot.none { background: var(--gf-danger); }
     .gps .hint { color: var(--gf-text-muted); flex-basis: 100%; font-size: 0.8rem; }
     .gps .hint-once { flex-basis: 100%; box-shadow: none; background: var(--gf-surface-2); }
     .gps .hint-once button { margin-left: 0; }
@@ -912,7 +909,7 @@ export class GfSpotEditor extends LitElement {
   #gpsStatus() {
     const { fix, error } = this.#geo.state;
     if (this._manual) {
-      return html`<div class="gps card"><span class="dot good"></span> Point du lieu ${this.#isNew ? 'placé à la main' : 'enregistré'}
+      return html`<div class="gps card">${gpsDot('good')} Point du lieu ${this.#isNew ? 'placé à la main' : 'enregistré'}
         ${fix && this.#editing ? html`<button type="button" @click=${this.#useGps}>Utiliser le GPS</button>` : nothing}
         ${this.#whereLine()}
         ${this.#gesture(this.#editing
@@ -920,13 +917,13 @@ export class GfSpotEditor extends LitElement {
           : html`Le carré vert est le point du lieu, les ronds sont les plantes. ${icon('pencil')} sur la carte pour les déplacer.`)}</div>`;
     }
     if (!fix) {
-      return html`<div class="gps card"><span class="dot ${error ? 'none' : ''}"></span>
+      return html`<div class="gps card">${gpsDot(error ? 'none' : '')}
         ${error || 'Recherche de la position GPS…'}
         ${this.#gesture('Appui long sur la carte, puis « Confirmer », pour placer le lieu à la main.')}</div>`;
     }
     const good = fix.accuracy <= config.goodAccuracy;
     return html`<div class="gps card" aria-live="polite">
-      <span class="dot ${good ? 'good' : 'weak'}"></span>
+      ${gpsDot(good ? 'good' : 'weak')}
       Position GPS <strong>± ${Math.round(fix.accuracy)} m</strong>
       <span class="hint">${good ? 'Précision suffisante.' : 'Précision faible : patientez à découvert, ou ajustez le repère.'}</span>
       ${this.#isNew && moduleOn('ignGeo') ? html`<span class="hint">Le point est envoyé à l’IGN pour son adresse et son altitude ; le lieu reste sur cet appareil.</span>` : nothing}

@@ -20,6 +20,7 @@ import { LitElement, html, css, nothing, repeat } from 'lit';
 import { icon } from '../../core/icons.js';
 import { observationsAround } from '../../core/nearby.js';
 import { StoreController } from '../../core/store.js';
+import { photoOf } from '../../core/thumb.js';
 import { PHONE_QUERY } from '../../core/media.js';
 import { ui } from '../../styles/ui.js';
 import { distanceAt, distanceEvents, distMood } from './cards.js';
@@ -129,6 +130,8 @@ export class MaDistance extends LitElement {
 
   constructor() {
     super();
+    // Drawn again when the app's state changes (Réglages, another tab).
+    new StoreController(this);
     /** @type {import('../runtime.js').MiniApp | null} */
     this.app = null;
     /** @type {Record<string, any> | null} */
@@ -141,8 +144,6 @@ export class MaDistance extends LitElement {
     this._hl = null;
     this._folded = false;
   }
-
-  #store = new StoreController(this);
 
   #onChange = () => this.requestUpdate();
   /** @type {import('./session.js').AroundSession | null} */ #session = null;
@@ -234,7 +235,7 @@ export class MaDistance extends LitElement {
     if (key === this.#hlFor) return;
     this.#hlFor = key;
     if (!key || !card || !c) { this._hl = null; return; }
-    const photo = card.photo && this.#store.state.modules.photos ? card.photo.replace('/medium.', '/small.') : null;
+    const photo = photoOf(card.photo)?.replace('/medium.', '/small.') ?? null;
     const pts = await observationsAround(/** @type {number} */ (card.taxonId), c.point, c.radius).catch(() => []);
     if (this.#hlFor !== key) return;
     const title = nameOf(card.plant);

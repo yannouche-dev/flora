@@ -26,6 +26,7 @@ import { hideImg, showImg } from '../../core/img.js';
 import { creditText } from '../../core/credit.js';
 import { moduleEvents } from '../../core/modules.js';
 import { StoreController } from '../../core/store.js';
+import { photoOf } from '../../core/thumb.js';
 import { modalOpen } from '../../core/history.js';
 import { floweringMonths, nameOf } from '../../core/plants.js';
 import { ui } from '../../styles/ui.js';
@@ -164,10 +165,10 @@ export class MaDeck extends LitElement {
     @media (prefers-reduced-motion: reduce) { .swipe-card, .swipe-card.fly, .swipe-card.under { transition: none; animation: none; } .burst { transition: none; animation: none; } }
   `];
 
-  #store = new StoreController(this);
-
   constructor() {
     super();
+    // Drawn again when the app's state changes: a module switched on or off (Réglages, another tab), its photos follow (photoOf).
+    new StoreController(this);
     /** @type {DeckHost | null} */
     this.session = null;
     /** @type {Card[]} */
@@ -220,9 +221,6 @@ export class MaDeck extends LitElement {
     el?.focus();
     return Boolean(el);
   }
-
-  /** A plant's photo, unless the « Photos en ligne » module is off (a leaf shows instead). @param {string | null | undefined} url */
-  #photo(url) { return url && this.#store.state.modules.photos ? url : null; }
 
   /** On the screen: not under something hidden (a cell folded to its head, a tab not shown — display: none). */
   #shown() { return this.checkVisibility?.() !== false; }
@@ -428,7 +426,7 @@ export class MaDeck extends LitElement {
   #card(c, top) {
     const s = /** @type {DeckHost} */ (this.session);
     const p = c.plant, name = nameOf(p);
-    const photo = this.#photo(c.photo);
+    const photo = photoOf(c.photo);
     const ethno = s.ethnoOf(c);
     // Cueillette prudente's toxic look-alike: swiped right, recognised — its stamp and its tag say so.
     const avoid = s.avoids(c);

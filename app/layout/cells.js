@@ -45,7 +45,7 @@ import { href } from '../core/router.js';
 import { getPlant, nameOf } from '../core/plants.js';
 import { counted } from '../core/fr.js';
 import { verdictOf } from '../core/alerts.js';
-import { cachedThumb, thumbUrl } from '../core/thumb.js';
+import { cachedThumb, photoOf, thumbUrl } from '../core/thumb.js';
 import { hintView, takeHint } from '../core/hints.js';
 import { addFavorite, forgetFavoriteEntry, isFavorite } from '../core/collections.js';
 import { ui } from '../styles/ui.js';
@@ -502,7 +502,7 @@ export class DlMap extends LitElement {
     const key = obs.key + ':' + info.name + ':' + P.when + ':' + P.src.join('+');
     if (this.#hlMemo?.key === key && this.#hlMemo.obs === obs) return this.#hlMemo.value;
     const sp = s.species?.byPlant.get(info.id);
-    const photo = sp?.photo && moduleOn('photos') ? sp.photo.replace(/\/square\./, '/small.') : null;
+    const photo = photoOf(sp?.photo)?.replace(/\/square\./, '/small.') ?? null;
     const points = obs.points.filter(p => P.src.includes(p.kind) && inWhen(p.date, P.when));
     const value = !points.length ? null : { key: obs.key + ':' + P.when + ':' + P.src.join('+'), photo, credit: photo ? sp?.credit ?? null : null, common: info.name, sci: info.sci, taxonId: sp?.taxonId ?? null,
       points: points.map(p => ({ coordinates: p.coordinates, title: info.name, url: p.url, date: p.date, taxonId: sp?.taxonId ?? null, sci: info.sci, plantId: info.id })) };
