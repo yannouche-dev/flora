@@ -9,7 +9,7 @@
 // shown), when it has the focus, or when nothing has and it is the only deck shown with cards (never a match by
 // mistake from a tab, a slider, the map or another deck), and only while `active` (no plant open, no match on screen).
 // Cueillette prudente's toxic look-alikes (kit/session.js#avoids) are never a match: their right says « Je la
-// reconnais : à ne pas cueillir » (stamp À ÉVITER, ⛔ for ♥, a tag on the card).
+// reconnais : à ne pas cueillir » (stamp À ÉVITER, ⛔ for ♥, a tag on the card: a chip of its verdict, ui-kit.js).
 // The first time, the top card leans right then left: it can be swiped — once per app open (and again after
 // « Recommencer »: kit/session.js#forgetGame). No more cards: the matches counted, in its host's words (`end.kept`:
 // « à retrouver dans « Matchs » » only where there is such a tab), further (« Chercher jusqu’à … »), or the ones passed
@@ -30,6 +30,7 @@ import { photoOf } from '../../core/thumb.js';
 import { modalOpen } from '../../core/history.js';
 import { floweringMonths, nameOf } from '../../core/plants.js';
 import { ui } from '../../styles/ui.js';
+import { severityChip, severityStyles } from '../../components/ui-kit.js';
 import { bio, nextDistance } from './cards.js';
 import { radiusLabel } from '../../core/distance.js';
 
@@ -89,7 +90,7 @@ export class MaDeck extends LitElement {
     end: { attribute: false }
   };
 
-  static styles = [ui, css`
+  static styles = [ui, severityStyles, css`
     :host { display: block; }
     /* The deck: one card, the next under it; dragged, it leans and shows its stamp. */
     .deck-wrap { display: grid; justify-items: center; gap: 14px; }
@@ -126,14 +127,15 @@ export class MaDeck extends LitElement {
     .stamp.nope { right: 18px; color: #f87171; transform: rotate(14deg); opacity: var(--nope, 0); }
     /* Cueillette prudente, a toxic look-alike: recognised, to avoid — never a match. */
     .stamp.like.avoid { color: #fbbf24; font-size: 1.5rem; }
-    .avoid-tag { display: flex; align-items: center; gap: 5px; width: fit-content; margin: 0 0 6px; padding: 2px 10px; border-radius: var(--gf-radius-pill);
-      background: #b91c1c; color: #fff; font-size: 0.8rem; font-weight: 700; }
+    /* Its tag: a chip of its verdict (ui-kit.js severityChip), a danger — deadly when it is. */
+    .avoid-tag { margin: 0 0 6px; }
+    .avoid-tag .sev-chip { font-size: 0.8rem; }
     .actions { display: flex; gap: 22px; align-items: center; }
     .round { width: 62px; height: 62px; border-radius: 50%; border: 0; display: grid; place-items: center; font-size: 1.6rem; cursor: pointer; background: var(--gf-surface);
       box-shadow: 0 6px 16px rgb(0 0 0 / 18%); transition: transform 0.12s; }
     .round:active { transform: scale(0.92); }
     .round.pass { color: #ef4444; } .round.like { color: var(--gf-kin); } .round.info { width: 46px; height: 46px; font-size: 1.1rem; color: var(--gf-text-muted); }
-    .round.like.avoid { color: #b91c1c; }
+    .round.like.avoid { color: var(--gf-danger); }
     .round:focus-visible { outline: none; box-shadow: var(--gf-focus); }
     .round.undo { width: 46px; height: 46px; font-size: 1.05rem; color: #d4a017; }
     .round:disabled { opacity: 0.35; cursor: default; }
@@ -439,7 +441,7 @@ export class MaDeck extends LitElement {
       <span class="stamp like ${avoid ? 'avoid' : ''}" aria-hidden="true">${avoid ? 'À ÉVITER' : 'MATCH'}</span><span class="stamp nope" aria-hidden="true">BOF</span>
       ${photo && c.credit ? html`<p class="credit">Photo : ${creditText(c.credit)}</p>` : nothing}
       <div class="about">
-        ${avoid ? html`<p class="avoid-tag">${icon('exclamation-octagon-fill')} À ne pas cueillir</p>` : nothing}
+        ${avoid ? html`<p class="avoid-tag">${severityChip({ level: c.verdict?.level === 'deadly' ? 'deadly' : 'danger', word: 'À ne pas cueillir' })}</p>` : nothing}
         <h2>${name}<small>${p.scientificName}</small></h2>
         ${ethno ? html`<p class="ethno"><b>On dit de moi</b> <small class="wsrc">(Wikipédia, CC BY-SA)</small> : ${ethno}</p>` : nothing}
         <ul class="bio">${bio(c, floweringMonths(p.flowering)).slice(0, ethno ? 3 : 4).map(line => html`<li>${line}</li>`)}</ul>

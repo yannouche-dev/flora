@@ -18,7 +18,7 @@ import { icon } from '../../core/icons.js';
 import { hideImg, showImg } from '../../core/img.js';
 import { UNREAD_LOOKALIKES } from '../../core/lookalikes.js';
 import { confusionChip } from '../../core/danger.js';
-import { severityChip, severityStyles } from '../../components/ui-kit.js';
+import { severityChip, severityGlyph, severityStyles } from '../../components/ui-kit.js';
 import { whenReady } from '../../core/store.js';
 import { knownCredit, knownThumb } from '../../core/thumb.js';
 import { emergency } from '../../core/poison.js';
@@ -313,7 +313,7 @@ export class MaFauxAmis extends LitElement {
     return html`<figure class="${done ? p.side : ''} ${card.answer === p.taxon ? 'chosen' : ''}">
       ${card.clue && !done ? html`<button class="pick" type="button" @click=${() => this.#choose(at, p.taxon)}>${body}</button>` : html`<div class="pick">${body}</div>`}
       ${done ? (p.side === 'toxic'
-        ? html`<span class="tag sev-chip ${chip.level}">${icon(chip.level === 'warn' ? 'exclamation-triangle-fill' : 'exclamation-octagon-fill')} Faux ami · ${chip.word}</span>`
+        ? html`<span class="tag sev-chip ${chip.level}">${severityGlyph(chip.level)} Faux ami · ${chip.word}</span>`
         : html`<span class="tag">Plante cherchée</span>`) : nothing}
       ${card.answer === p.taxon ? html`<span class="yours">Votre choix</span>` : nothing}
       ${credit ? html`<figcaption class="credit">Photo : ${creditText(credit)}</figcaption>` : nothing}

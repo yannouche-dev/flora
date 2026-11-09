@@ -105,6 +105,8 @@ test('Cueillette prudente : la colchique vue une fois, derrière plus de 120 pla
   await expect(top.locator('.bio li').first()).toHaveText('☠️ Je suis le sosie mortel de Ail des ours, Poireau sauvage.');
   // Its right: recognised, to avoid — never « J’aime », never a heart.
   await expect(top.locator('.avoid-tag')).toHaveText('À ne pas cueillir');
+  // A chip of its verdict: deadly, the colchique.
+  await expect(top.locator('.avoid-tag .sev-chip')).toHaveClass(/\bdeadly\b/);
   await expect(top.locator('.stamp.like')).toHaveText('À ÉVITER');
   const right = deck.getByRole('button', { name: 'Je reconnais Colchique d\'automne : à ne pas cueillir' });
   await expect(right).toHaveAttribute('title', 'Je la reconnais : à ne pas cueillir (→)');
@@ -112,6 +114,7 @@ test('Cueillette prudente : la colchique vue une fois, derrière plus de 120 pla
   await expect(deck.locator('.deck')).toHaveAttribute('aria-label', /Flèche droite : je la reconnais, à ne pas cueillir/);
   await right.click();
   await expect(top).toHaveAttribute('data-id', String(cigue));
+  await expect(top.locator('.avoid-tag .sev-chip')).toHaveClass(/\bdanger\b/);
   await expect(list.getByRole('status')).toHaveText('Reconnue, à ne pas cueillir : Colchique d\'automne. Carte suivante : Ciguë maculée.');
   await expect.poll(() => kept(page, 'cueillette')).toMatchObject({ matches: [], passed: [], avoided: [colchique] });
   // ↺: back on top, no longer recognised.
