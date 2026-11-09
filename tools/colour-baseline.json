@@ -1,9 +1,9 @@
 {
-  "total": 493,
+  "total": 492,
   "files": {
     "app/components/gf-app.js": 1,
     "app/components/gf-calendar.js": 3,
-    "app/components/gf-capture.js": 3,
+    "app/components/gf-capture.js": 2,
     "app/components/gf-ign-layers.js": 1,
     "app/components/gf-lookalikes.js": 7,
     "app/components/gf-map-obs3d.js": 15,

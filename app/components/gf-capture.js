@@ -17,7 +17,7 @@ import { harvestStop } from '../core/danger.js';
 import { statusWarning } from './gf-status.js';
 import { emergency } from '../core/poison.js';
 import { ui } from '../styles/ui.js';
-import { severityGlyph, severityStyles } from './ui-kit.js';
+import { severityGlyph, severityStyles, sheetStyles } from './ui-kit.js';
 import './gf-thumb.js';
 import './gf-voice-button.js';
 import { icon } from '../core/icons.js';
@@ -61,23 +61,9 @@ export class GfCapture extends LitElement {
     _toast: { state: true }
   };
 
-  static styles = [ui, severityStyles, css`
-    dialog {
-      position: fixed;
-      inset: auto 0 0 0;
-      width: 100%;
-      max-width: 560px;
-      max-height: 86dvh;
-      margin: 0 auto;
-      padding: 0;
-      border: 0;
-      border-radius: var(--gf-radius-lg) var(--gf-radius-lg) 0 0;
-      background: var(--gf-surface);
-      color: var(--gf-text);
-      flex-direction: column;
-    }
-    dialog[open] { display: flex; }
-    dialog::backdrop { background: rgb(0 0 0 / 40%); }
+  static styles = [ui, sheetStyles, severityStyles, css`
+    /* The app's sheet from the bottom (ui-kit.js sheetStyles: the harvest warning's width). */
+    dialog.drawer { --drawer-w: 560px; }
     header { padding: 14px 16px 10px; border-bottom: 1px solid var(--gf-border); display: grid; gap: 6px; }
     .ask { position: relative; display: grid; }
     /* Right of the field: [✕ effacer] [micro], side by side; the input leaves them room (padding set in render). */
@@ -491,7 +477,7 @@ export class GfCapture extends LitElement {
     const harvestMode = this.#store.state.harvestMode;
     const t = this._toast;
     return html`
-      <dialog aria-label="Noter une plante ici" @close=${this.#onClosed} @keydown=${this.#keepKeys}
+      <dialog class="drawer" aria-label="Noter une plante ici" @close=${this.#onClosed} @keydown=${this.#keepKeys}
         @click=${e => { if (e.target === e.currentTarget) this.#close(); }}>
         <header>
           <h2>Noter ici</h2>
