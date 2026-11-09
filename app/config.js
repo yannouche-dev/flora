@@ -170,6 +170,25 @@ export const STATUS_SHORT = {
   J: 'Envahissant'
 };
 
+/** @typedef {{ level: 'danger' | 'warn', word: string, reasons: { text: string }[] }} LegalChip */
+
+/**
+ * Flore's « Protection » column (a plant's `legal` facet values: workers/search-core.js legalValues), in the words and
+ * colours of the verdict with no place known (core/danger.js dangerLevel): protected in France, « Protégée » (danger);
+ * in a region or department only, « Protégée selon le lieu » (a warning); a picking rule, « Réglementée » (a warning).
+ * Each a chip (components/ui-kit.js severityChip), what it means on hover. « Menacée » stays the column's own tag.
+ * @param {string[]} legal @returns {LegalChip[]}
+ */
+export function legalChips(legal) {
+  /** @type {LegalChip[]} */
+  const chips = [];
+  const chip = (/** @type {LegalChip['level']} */ level, /** @type {string} */ word, /** @type {string} */ text) => chips.push({ level, word, reasons: [{ text }] });
+  if (legal.includes('nationale')) chip('danger', 'Protégée', 'Protégée en France (protection nationale)');
+  else if (legal.includes('protegee')) chip('warn', 'Protégée selon le lieu', 'Protégée dans une région ou un département');
+  if (legal.includes('reglementee')) chip('warn', 'Réglementée', 'Cueillette réglementée quelque part');
+  return chips;
+}
+
 export const SORTS = [
   { value: 'relevance', label: 'Pertinence' },
   // A free layout's zone only (its plants' observations counted: workers/search-core.js `observed`).

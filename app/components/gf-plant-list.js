@@ -29,7 +29,9 @@ export const COLUMNS = [
   // Its epithet, as shown (« × oblongata » at « oblongata »: workers/search-core.js), then its genus.
   { key: 'species', label: 'Espèce', sort: 'species', width: 'minmax(80px, 1fr)' },
   { key: 'status', label: 'Statut', sort: 'status', facet: 'status', width: 'minmax(80px, 0.8fr)' },
-  { key: 'legal', label: 'Protection', sort: 'legal', facet: 'legal', width: 'minmax(96px, 1.1fr)' },
+  // Its longest line whole, with room for a wider font: « Protégée selon le lieu », or « Réglementée » and « Menacée »
+  // (gf-plant-card: two lines at most).
+  { key: 'legal', label: 'Protection', sort: 'legal', facet: 'legal', width: 'minmax(12rem, 1.1fr)' },
   // A free layout's zone only (its plants' observations given: `obs`), before ♥ and 📍 (the row's link spans those before).
   { key: 'obs', label: 'Observations', sort: 'obs', desc: true, width: 'minmax(84px, 0.7fr)' },
   { key: 'fav', label: '', width: '36px' },
