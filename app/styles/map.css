@@ -81,7 +81,7 @@ gf-map .gf-map-busy::before {
   left: 0;
   width: 35%;
   border-radius: 2px;
-  background: linear-gradient(90deg, transparent, var(--gf-accent, #2f6b3a), transparent);
+  background: linear-gradient(90deg, transparent, var(--gf-accent), transparent);
   animation: gf-map-busy 1.3s ease-in-out infinite;
 }
 @keyframes gf-map-busy { from { translate: -100% 0; } to { translate: 290% 0; } }
@@ -243,7 +243,7 @@ gf-map .leaflet-control-attribution {
 /* A plant selected: larger (its marker is), bouncing in, ringed in green, a halo breathing around it. */
 .gf-plant.photo.selected .ring {
   border-width: 3.5px;
-  box-shadow: 0 0 0 2.5px #fff, 0 0 0 5px var(--gf-accent, #16a34a), 0 6px 16px rgb(0 0 0 / 50%);
+  box-shadow: 0 0 0 2.5px #fff, 0 0 0 5px var(--gf-accent), 0 6px 16px rgb(0 0 0 / 50%);
   animation: gf-chosen-in 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) backwards;
 }
 /* Its halo: three ripples, then still (a halo never loops on many markers: a plant's occurrences lit together). */
@@ -252,7 +252,7 @@ gf-map .leaflet-control-attribution {
   position: absolute;
   inset: -6px;
   border-radius: 50%;
-  border: 3px solid var(--gf-accent, #16a34a);
+  border: 3px solid var(--gf-accent);
   pointer-events: none;
   opacity: 0;
   animation: gf-halo 1.6s ease-out 0.5s 3;
@@ -657,7 +657,7 @@ gf-map:has(.gf-point-card) .leaflet-bottom {
 .gf-occ-group-hl.photo .ph { position: relative; display: grid; place-items: center; color: #fff; font-size: 18px; width: 100%; height: 100%; border-radius: 50%; overflow: hidden;
   background: radial-gradient(circle at 35% 30%, #ff6f9c, var(--gf-kin) 75%); box-shadow: 0 0 0 3px var(--gf-highlight), 0 0 0 4.5px rgb(255 255 255 / 85%), 0 4px 12px rgb(0 0 0 / 45%); }
 .gf-occ-group-hl.photo .ph img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
-.gf-occ-group-hl.photo .n { position: absolute; right: -2px; bottom: -2px; min-width: 20px; height: 20px; padding: 0 5px; box-sizing: border-box; border-radius: 10px;
+.gf-occ-group-hl.photo .n { position: absolute; right: -2px; bottom: -2px; min-width: 20px; height: 20px; padding: 0 5px; box-sizing: border-box; border-radius: var(--gf-radius-pill);
   display: grid; place-items: center; background: var(--gf-kin); color: #fff; font: 800 11px/1 system-ui, sans-serif; box-shadow: 0 0 0 2px var(--gf-highlight), 0 2px 5px rgb(0 0 0 / 40%); }
 .gf-occ-group-hl.photo:hover .g { scale: 1.1; }
 .gf-occ-group-hl.photo:is(.gf-kin, .gf-lit) .g { scale: 1.12; }
@@ -698,21 +698,21 @@ gf-map.glow .gf-obs-leaf.hl.chosen .pop { scale: 1.3; box-shadow: 0 0 0 3px var(
   .gf-area-loading .gf-ring .gf-area { animation: none; stroke-opacity: 0.6; stroke-dasharray: 6 6; }
   .gf-obs-leaf .pop, .gf-obs-leaf.gf-leave .pop { transition: none; }
 }
-.leaflet-tooltip.gf-obs-tip { padding: 0; border: 0; border-radius: 12px; overflow: hidden; background: var(--gf-surface, #fff); box-shadow: 0 8px 24px rgb(0 0 0 / 30%); white-space: normal; }
+.leaflet-tooltip.gf-obs-tip { padding: 0; border: 0; border-radius: 12px; overflow: hidden; background: var(--gf-surface); box-shadow: 0 8px 24px rgb(0 0 0 / 30%); white-space: normal; }
 .leaflet-tooltip.gf-obs-tip::before { display: none; }
-.gf-obs-card { width: 180px; display: grid; font: 13px/1.3 system-ui, sans-serif; color: var(--gf-text, #1f2a1f); }
+.gf-obs-card { width: 180px; display: grid; font: 13px/1.3 system-ui, sans-serif; color: var(--gf-text); }
 .gf-obs-card img { width: 180px; height: 120px; object-fit: cover; display: block; background: #dfe9d8; }
 .gf-obs-card .t { display: grid; gap: 1px; padding: 7px 10px 8px; }
 .gf-obs-card b { font-size: 0.95rem; }
-.gf-obs-card i { color: var(--gf-text-muted, #5b6b5b); font-size: 0.8rem; }
-.gf-obs-card small { color: var(--gf-text-muted, #5b6b5b); font-size: 0.72rem; margin-top: 2px; }
+.gf-obs-card i { color: var(--gf-text-muted); font-size: 0.8rem; }
+.gf-obs-card small { color: var(--gf-text-muted); font-size: 0.72rem; margin-top: 2px; }
 .leaflet-popup.gf-obs-tip .leaflet-popup-content-wrapper { padding: 0; border-radius: 12px; overflow: hidden; }
 .leaflet-popup.gf-obs-tip .leaflet-popup-content { margin: 0; width: auto !important; }
 /* The points' little cards: floating above everything (the top layer), never under a button or a panel. */
-gf-map .gf-float-tip { position: fixed; inset: auto; left: 0; top: 0; z-index: 6000; margin: 0; padding: 4px 9px; border-radius: 8px; overflow: hidden;
+gf-map .gf-float-tip { position: fixed; inset: auto; left: 0; top: 0; z-index: 6000; margin: 0; padding: 4px 9px; border-radius: var(--gf-radius-sm); overflow: hidden;
   /* A light, thin, see-through border: the map shows through its edge. */
   border: 1px solid rgb(255 255 255 / 55%); background-clip: padding-box;
-  background-color: var(--gf-surface, #fff); color: var(--gf-text, #1f2a1f); box-shadow: 0 6px 20px rgb(0 0 0 / 28%); font: 12.5px/1.3 system-ui, sans-serif;
+  background-color: var(--gf-surface); color: var(--gf-text); box-shadow: 0 6px 20px rgb(0 0 0 / 28%); font: 12.5px/1.3 system-ui, sans-serif;
   white-space: nowrap; pointer-events: none; display: none; }
 gf-map .gf-float-tip.on { display: block; }
 gf-map .gf-float-tip.card { padding: 0; border-radius: 12px; white-space: normal; box-shadow: 0 8px 24px rgb(0 0 0 / 30%); animation: gf-tip-in 0.18s ease-out; }
@@ -722,7 +722,7 @@ gf-map .gf-float-tip.card { padding: 0; border-radius: 12px; white-space: normal
 gf-map .gf-float-tip::backdrop { display: none; }
 gf-map .gf-float-tip .gf-obs-card img { width: 180px; height: 120px; }
 /* On a touch screen: a second touch opens the observation. */
-gf-map .gf-float-tip .again:not(.gf-map-sr) { display: block; color: var(--gf-accent, #16a34a); font-size: 0.72rem; font-weight: 600; }
+gf-map .gf-float-tip .again:not(.gf-map-sr) { display: block; color: var(--gf-accent); font-size: 0.72rem; font-weight: 600; }
 /* A group touched: its points spread around it, each on a thread. */
 .gf-spread-thread { stroke: #3d4a3d; stroke-width: 1.2; stroke-opacity: 0.55; fill: none; }
 .gf-spread-center { stroke: #fff; stroke-width: 2; fill: #3d4a3d; fill-opacity: 0.8; }
@@ -845,8 +845,8 @@ dialog.gf-map3d::backdrop { background: rgb(0 0 0 / 50%); }
 .gf-radius-handle { position: absolute; inset: 0; display: grid; place-items: center; border-radius: 50%; cursor: ew-resize; touch-action: none; outline: none; }
 .gf-radius-handle .knob { width: 18px; height: 18px; border-radius: 50%; background: #fff; border: 3px solid #3f7d20; box-shadow: 0 1px 4px rgb(0 0 0 / 45%); transition: transform 0.12s; }
 .gf-radius-handle:hover .knob, .gf-radius-handle.held .knob { transform: scale(1.25); }
-.gf-radius-handle:focus-visible .knob { box-shadow: var(--gf-focus, 0 0 0 3px #2f6b3a); }
+.gf-radius-handle:focus-visible .knob { box-shadow: var(--gf-focus); }
 .gf-radius-handle .bubble { position: absolute; bottom: calc(100% + 2px); left: 50%; transform: translateX(-50%); white-space: nowrap; padding: 2px 8px; border-radius: var(--gf-radius-pill);
-  background: var(--gf-surface, #fff); color: var(--gf-text, #1d2419); font: 600 0.8rem/1.4 system-ui, sans-serif; box-shadow: 0 1px 4px rgb(0 0 0 / 30%); pointer-events: none; }
+  background: var(--gf-surface); color: var(--gf-text); font: 600 0.8rem/1.4 system-ui, sans-serif; box-shadow: 0 1px 4px rgb(0 0 0 / 30%); pointer-events: none; }
 .gf-radius-handle .bubble[hidden] { display: none; }
 .gf-gl-mk:has(.gf-radius-handle) { display: none; }

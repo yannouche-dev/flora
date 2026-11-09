@@ -32,14 +32,20 @@ const ID_START = /[A-Za-z_$\u0080-￿]/, ID_PART = /[\w$\u0080-￿]/;
  * Tokens of a module: names, strings (their text), numbers, single-character punctuators; comments left out,
  * regular expressions and template literals as one token each. Tokens inside a template's ${…} carry its depth
  * (tpl > 0): code, but never module syntax.
- * @param {string} src @returns {Token[]}
+ * @param {string} src
+ * @param {(text: string, line: number, tag: string) => void} [onText] given the text of each string and of each
+ *   piece of a template literal (up to its end or its next ${), with the line it starts on and the template's tag
+ *   (`css` for css`…`; '' for a string): what tools/colour-ratchet.mjs reads.
+ * @returns {Token[]}
  */
-export function tokenize(src) {
+export function tokenize(src, onText) {
   /** @type {Token[]} */
   const tokens = [];
   /** Open ${ of template literals, each with the count of « { » opened inside it. @type {number[]} */
   const open = [];
-  let i = 0, line = 1, nl = false;
+  /** The tag of each template literal open, innermost last (css`…`: 'css'); tokens before the last ${. */
+  const tags = /** @type {string[]} */ ([]);
+  let i = 0, line = 1, nl = false, opened = 0;
   const push = (/** @type {Token['t']} */ t, /** @type {string} */ v, at = line) => { tokens.push({ t, v, line: at, nl, tpl: open.length }); nl = false; };
   const regexAllowed = () => {
     const p = tokens[tokens.length - 1];
@@ -50,12 +56,13 @@ export function tokenize(src) {
   };
   /** Text of a template literal from i (after « ` » or « } »), up to its end or its next ${. */
   const templateText = () => {
+    const from = i, at = line;
     while (i < src.length) {
       const c = src[i];
       if (c === '\\') { if (src[i + 1] === '\n') line++; i += 2; continue; }
       if (c === '\n') line++;
-      if (c === '`') { i++; push('tpl', '`'); return; }
-      if (c === '$' && src[i + 1] === '{') { i += 2; open.push(0); return; }
+      if (c === '`') { onText?.(src.slice(from, i), at, tags.pop() || ''); i++; push('tpl', '`'); return; }
+      if (c === '$' && src[i + 1] === '{') { onText?.(src.slice(from, i), at, tags.at(-1) || ''); i += 2; open.push(0); opened = tokens.length; return; }
       i++;
     }
   };
@@ -79,9 +86,17 @@ export function tokenize(src) {
       // A quote left open (the lexer took a regex for a division) ends at the line break, still counted.
       i = src[j] === c ? j + 1 : j;
       push('str', text, at);
+      onText?.(text, at, '');
       continue;
     }
-    if (c === '`') { i++; templateText(); continue; }
+    if (c === '`') {
+      // Its tag: the name just before it (none right after a ${: that name is the outer template's).
+      const tag = tokens.length > opened ? tokens[tokens.length - 1] : null;
+      tags.push(tag?.t === 'id' ? tag.v : '');
+      i++;
+      templateText();
+      continue;
+    }
     if (c === '}' && open.length && open[open.length - 1] === 0) { open.pop(); i++; templateText(); continue; }
     if (c === '/' && regexAllowed()) {
       let j = i + 1, inClass = false;

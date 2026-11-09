@@ -48,7 +48,7 @@ export class MaWalk extends LitElement {
   };
 
   static styles = [ui, css`
-    :host { display: block; position: relative; height: 100%; background: var(--gf-bg, var(--gf-surface-2)); container-type: inline-size; }
+    :host { display: block; position: relative; height: 100%; background: var(--gf-bg); container-type: inline-size; }
     /*
      * Walking. A phone: the walk's card, the map (always in sight), the plants noted, and the search at the bottom,
      * under the thumb — its suggestions open above it. Wider: the same column on the left, the map on the right.
@@ -58,7 +58,7 @@ export class MaWalk extends LitElement {
     .side { display: contents; }
     .head { grid-area: head; padding: 10px 12px 8px; min-height: 0; overflow: hidden; }
     .mapcol { grid-area: map; position: relative; min-height: 0; overflow: hidden; }
-    .list { grid-area: list; min-height: 0; max-height: 30dvh; overflow-y: auto; padding: 8px 12px 4px; box-sizing: border-box; border-top: 1px solid var(--gf-border); background: var(--gf-bg, var(--gf-surface-2)); }
+    .list { grid-area: list; min-height: 0; max-height: 30dvh; overflow-y: auto; padding: 8px 12px 4px; box-sizing: border-box; border-top: 1px solid var(--gf-border); background: var(--gf-bg); }
     .head, .mapcol, .list { transition: opacity 0.2s ease; }
     .seeking .head, .seeking .mapcol, .seeking .list { opacity: 0; }
     /* The separator between the walk and the map (wide screens). */

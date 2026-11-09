@@ -66,7 +66,7 @@ export class GfPlantCard extends LitElement {
     .thumb {
       width: 60px;
       height: 60px;
-      border-radius: 8px;
+      border-radius: var(--gf-radius-sm);
       background: var(--gf-surface-2);
       object-fit: cover;
       display: grid;

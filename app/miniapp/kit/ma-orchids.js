@@ -74,7 +74,7 @@ export class MaOrchids extends LitElement {
 
   static styles = [ui, css`
     /* A grid cell gives it its height; the panel and the map share it. */
-    :host { display: block; position: relative; height: 100%; min-height: 0; background: var(--gf-bg, var(--gf-surface-2)); container-type: inline-size; }
+    :host { display: block; position: relative; height: 100%; min-height: 0; background: var(--gf-bg); container-type: inline-size; }
     /* A plant's sheet beside the map (a wide screen): the map keeps clear of it. */
     @media (min-width: 900px) { :host([sheet]) { padding-right: var(--ma-sheet-w, min(560px, 48vw)); box-sizing: border-box; } }
     .wrap { height: 100%; display: grid; grid-template-columns: minmax(280px, 360px) minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); }
@@ -105,7 +105,7 @@ export class MaOrchids extends LitElement {
     .radius input { flex: 1; min-width: 0; margin: 0; accent-color: var(--gf-accent); }
     .radius b { flex: none; min-width: 52px; text-align: right; font-variant-numeric: tabular-nums; color: var(--gf-accent); }
     .count { font-weight: 600; }
-    .alert { display: grid; gap: 8px; justify-items: start; padding: 10px 12px; border-radius: 10px; color: var(--gf-danger); background: var(--gf-danger-bg); }
+    .alert { display: grid; gap: 8px; justify-items: start; padding: 10px 12px; border-radius: var(--gf-radius); color: var(--gf-danger); background: var(--gf-danger-bg); }
     .search { position: relative; display: block; }
     .search .bi { position: absolute; left: 12px; top: 50%; translate: 0 -50%; color: var(--gf-text-muted); pointer-events: none; }
     .search input { padding-left: 36px; }

@@ -50,7 +50,7 @@ export class GfResultsBar extends LitElement {
        does not say it twice: its count is kept for screen readers only (still announced as it changes), and the sort
        menu takes its place, at the start of the row — whole at a column's usual width (where beside the count it was
        cut: « Nom scientifiqu »), giving way as on a phone in the narrowest cells rather than taking a line of its own. */
-    :host([count-above]) .count { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+    :host([count-above]) .count { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
     :host([count-above]) .row select { margin-right: auto; }
     /* Too narrow for the count, the sort menu and the tools on one line (the menu would shrink past its words): the
        count and the tools on the first, the menu on its own below, whole. A phone keeps one line (wider than this).

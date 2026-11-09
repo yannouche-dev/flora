@@ -69,7 +69,7 @@ export class MaFauxAmis extends LitElement {
   static styles = [ui, severityStyles, css`
     /* It scrolls itself (a grid cell gives it its height), its background all the way down — what is out of the flow too
        (the visually hidden words: positioned, it is their box). */
-    :host { display: block; position: relative; height: 100%; min-height: 0; overflow-y: auto; overscroll-behavior: contain; background: var(--gf-bg, var(--gf-surface-2));
+    :host { display: block; position: relative; height: 100%; min-height: 0; overflow-y: auto; overscroll-behavior: contain; background: var(--gf-bg);
       container-type: inline-size; }
     /* A plant's sheet beside the recap (a wide screen): the recap keeps clear of it. */
     @media (min-width: 900px) { :host([sheet]) { padding-right: var(--ma-sheet-w, min(560px, 48vw)); box-sizing: border-box; } }
@@ -98,11 +98,11 @@ export class MaFauxAmis extends LitElement {
     figure { display: grid; gap: 6px; align-content: start; margin: 0; min-width: 0; }
     /* A grid of one column the width of the card (a button centres its content: not here). */
     .pick { display: grid; grid-template-columns: minmax(0, 1fr); justify-content: stretch; align-content: start; justify-items: start; gap: 4px; width: 100%;
-      min-height: 0; padding: 8px 8px 10px; box-sizing: border-box; border-radius: 16px; border: 2px solid var(--gf-border); background: var(--gf-surface);
+      min-height: 0; padding: 8px 8px 10px; box-sizing: border-box; border-radius: var(--gf-radius-lg); border: 2px solid var(--gf-border); background: var(--gf-surface);
       color: var(--gf-text); text-align: left; font-weight: 400; }
     button.pick { cursor: pointer; }
     button.pick:hover { border-color: var(--gf-accent); background: var(--gf-surface); }
-    .photo { position: relative; display: block; width: 100%; aspect-ratio: 4 / 3; max-height: min(30dvh, 230px); border-radius: 10px; overflow: hidden; background: var(--gf-surface-2); }
+    .photo { position: relative; display: block; width: 100%; aspect-ratio: 4 / 3; max-height: min(30dvh, 230px); border-radius: var(--gf-radius); overflow: hidden; background: var(--gf-surface-2); }
     .photo img { position: absolute; inset: 0; z-index: 1; width: 100%; height: 100%; object-fit: cover; }
     .photo .ph { position: absolute; inset: 0; display: grid; place-items: center; font-size: 2rem; color: var(--gf-text-muted); }
     .name { font-size: 1.0625rem; font-weight: 700; line-height: 1.25; overflow-wrap: anywhere; }

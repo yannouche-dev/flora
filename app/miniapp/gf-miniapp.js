@@ -65,7 +65,7 @@ export class GfMiniapp extends LitElement {
   };
 
   static styles = [ui, startStyles, askStyles, css`
-    :host { display: grid; grid-template-rows: auto minmax(0, 1fr); min-height: 0; background: var(--gf-bg, var(--gf-surface-2)); }
+    :host { display: grid; grid-template-rows: auto minmax(0, 1fr); min-height: 0; background: var(--gf-bg); }
     /* A plant's sheet over the whole box (a phone: kit/ma-plant-sheet, sheet-cover): the rest hidden — out of reach of the
        keyboard and of screen readers, as under Flore's sheet; the sheet shows itself again (visibility, unlike inert, can
        be undone below). */

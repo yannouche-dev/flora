@@ -27,7 +27,7 @@ export class MaWalkCard extends LitElement {
     .card { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 0 8px; align-items: center; padding: 6px 6px 6px 10px; border-radius: 14px; background: var(--gf-surface); box-shadow: var(--gf-shadow); }
     .card .pin { grid-row: 1 / 3; width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; background: var(--gf-accent); color: #fff; font-size: 0.85rem; }
     /* The name, whole (the card's width, on two lines at most); a touch on it or on the pencil edits it, in the field laid over it. */
-    .card .title { grid-column: 2; grid-row: 1; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 3px; min-width: 0; border-radius: 8px; padding: 2px 3px 2px 6px; margin-left: -6px; cursor: text; }
+    .card .title { grid-column: 2; grid-row: 1; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 3px; min-width: 0; border-radius: var(--gf-radius-sm); padding: 2px 3px 2px 6px; margin-left: -6px; cursor: text; }
     .card .title:hover, .card .title:focus-within { background: var(--gf-surface-2); }
     .card .title:focus-within { box-shadow: inset 0 -2px 0 var(--gf-accent); }
     .card .shown, .card .name { grid-area: 1 / 1; font: inherit; font-weight: 700; font-size: 0.98rem; line-height: 1.25; color: var(--gf-text); }

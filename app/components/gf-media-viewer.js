@@ -180,7 +180,7 @@ export class GfMediaViewer extends LitElement {
     /* Its height chosen with the grip: a proportion of its width (it follows the width), kept everywhere. */
     :host([compact][sized]) .stage { aspect-ratio: var(--stage-ratio); }
     .grip { flex: none; height: 12px; display: grid; place-items: center; cursor: row-resize; touch-action: none; background: var(--gf-surface-2); border-top: 1px solid var(--gf-border); }
-    .grip::before { content: ''; width: 44px; height: 4px; border-radius: 2px; background: var(--gf-border-strong, #b8bfb8); }
+    .grip::before { content: ''; width: 44px; height: 4px; border-radius: 2px; background: #b8bfb8; }
     .grip:hover::before, .grip:focus-visible::before { background: var(--gf-accent); }
     .grip:focus-visible { outline: none; }
     .stage.zoomed { cursor: grab; }

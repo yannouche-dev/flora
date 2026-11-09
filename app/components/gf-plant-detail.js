@@ -420,7 +420,7 @@ export class GfPlantDetail extends SheetBase {
     const ctx = this._context(plant);
     // What a move did (King: « Déplacer vers… », a drag, « Par défaut »), said — in the panes alone too (Découvrir). The
     // region is there before its first message (one born with its text is seldom read out).
-    const said = html`<p class="said" aria-live="polite">${this._said}</p>`;
+    const said = html`<p class="said visually-hidden" aria-live="polite">${this._said}</p>`;
     if (this.panesOnly) return html`${this.#panesOnlyView(ctx)}${said}`;
     return html`${baseOf(this._view) === 'epure' ? this.#epure(ctx) : this.#full(ctx)}${said}${this._paneDialogView(plant)}`;
   }

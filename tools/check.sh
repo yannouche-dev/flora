@@ -16,6 +16,8 @@
 #  - against an assembled site: the flora packed for the first launch is the one of its plants.json, as its meta.json
 #    describes it (tools/pack-flora.mjs), and index.html preloads the modules of the start (tools/preload-modules.mjs);
 #  - the modules of the app's start are those of tools/start-baseline.json, a ratchet (tools/preload-modules.mjs);
+#  - the colours written as literals in app/, file by file, are those of tools/colour-baseline.json, a ratchet too
+#    (tools/colour-ratchet.mjs: a colour is a token of app/styles/tokens.css);
 #  - the safety data: look-alike pairs, toxicity sources, protection statuses (scripts/check-data.mjs);
 #  - the licence rules of the images and their credits, as a table (tests/licenses.mjs);
 #  - the CSP of index.html allows its inline scripts by hash (tools/csp-hash.mjs, when present).
@@ -127,6 +129,10 @@ fi
 
 step "Start of the app (tools/preload-modules.mjs: tools/start-baseline.json${SITE:+, and the preloads of $SITE})"
 node tools/preload-modules.mjs "${SITE:-.}" --check || failed=1
+
+step 'Literal colours (tools/colour-ratchet.mjs: tools/colour-baseline.json)'
+# The repository's app/, which an assembled site copies as it is.
+node tools/colour-ratchet.mjs || failed=1
 
 step 'Safety data (scripts/check-data.mjs)'
 node scripts/check-data.mjs || failed=1

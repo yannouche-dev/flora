@@ -308,7 +308,7 @@ export class DlMap extends LitElement {
       background: color-mix(in srgb, var(--gf-surface) 85%, transparent); box-shadow: 0 1px 3px rgb(0 0 0 / 14%); }
     .round[aria-pressed='true'] { background: var(--gf-accent); color: var(--gf-accent-contrast); }
     /* The other background's thumbnail: its look drawn (no tile asked), its name under it. */
-    .base { width: 48px; height: 48px; padding: 0; border-radius: 10px; overflow: hidden; display: grid; align-items: end; border: 2px solid #fff;
+    .base { width: 48px; height: 48px; padding: 0; border-radius: var(--gf-radius); overflow: hidden; display: grid; align-items: end; border: 2px solid #fff;
       box-shadow: 0 1px 4px rgb(0 0 0 / 30%); font-size: 0.68rem; font-weight: 700; color: #fff; text-shadow: 0 1px 2px rgb(0 0 0 / 70%); }
     .base.photo { background: radial-gradient(circle at 30% 30%, #7f9b55 0 18%, transparent 19%), radial-gradient(circle at 70% 65%, #4f6d33 0 22%, transparent 23%),
       linear-gradient(135deg, #5d7a3e, #8a8f5a 55%, #3e5a2c); }
@@ -320,7 +320,7 @@ export class DlMap extends LitElement {
     .base.plan span { background: rgb(255 255 255 / 70%); }
     :host([ctl-compact]) .round { width: 28px; height: 28px; }
     :host([ctl-compact]) .base { width: 36px; height: 36px; }
-    :host([ctl-compact]) .base span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+    :host([ctl-compact]) .base span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
     /* The current plant: its photo, its name (its sheet ↗), « Seule », ✕. */
     .chip { display: flex; align-items: center; gap: 2px; max-width: 100%; padding: 3px; border-radius: var(--gf-radius-pill); background: color-mix(in srgb, var(--gf-surface) 96%, transparent);
       box-shadow: var(--gf-shadow); font-size: 0.82rem; }
@@ -333,7 +333,7 @@ export class DlMap extends LitElement {
     :host([ctl-compact]) .chip .name { max-width: 9em; }
     /* The current plant no longer found by the search (state.js outside): still chosen, said above its chip. */
     .outside { max-width: 100%; box-sizing: border-box; padding: 3px 10px; border-radius: var(--gf-radius-pill); font-size: 0.78rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-      background: color-mix(in srgb, var(--gf-warn-bg, var(--gf-surface)) 96%, transparent); box-shadow: 0 1px 3px rgb(0 0 0 / 14%); }
+      background: color-mix(in srgb, var(--gf-warn-bg) 96%, transparent); box-shadow: 0 1px 3px rgb(0 0 0 / 14%); }
     /* Its pin (an axis of its group it is detached from: its sources): what it shows, what it leaves out, the way back. */
     .pin { display: grid; gap: 2px; max-width: 100%; box-sizing: border-box; padding: 4px 10px; border-radius: 12px; font-size: 0.78rem;
       background: color-mix(in srgb, var(--gf-surface) 96%, transparent); box-shadow: 0 1px 3px rgb(0 0 0 / 14%); }
@@ -1538,7 +1538,7 @@ export class DlDeck extends LitElement {
     :host { display: block; overflow-y: auto; padding: 12px 8px; container-type: size; --deck-max: calc(100cqh - 150px); --deck-min: 220px; }
     .empty { display: grid; gap: 10px; justify-items: center; padding: 24px 12px; text-align: center; color: var(--gf-text-muted); }
     .empty .big { font-size: 2rem; color: var(--gf-accent); margin: 0; }
-    .empty .big.warn { color: var(--gf-warn, #b45309); }
+    .empty .big.warn { color: var(--gf-warn); }
     /* A new answer of the zone coming (state.js updating): its cards dimmed until they are replaced (after a moment: a
        quick one never flashes) — never what it says (« Les cartes arrivent… »). */
     ma-deck { transition: opacity 0.2s; }

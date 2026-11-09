@@ -218,7 +218,7 @@ export class GfLayout extends LitElement {
     .more-menu summary:hover { background: var(--gf-surface-2); color: var(--gf-text); }
     .more-menu .menu { position: absolute; right: 0; top: calc(100% + 4px); z-index: 30; display: grid; min-width: 240px; padding: 6px; border-radius: 12px;
       background: var(--gf-surface); border: 1px solid var(--gf-border); box-shadow: var(--gf-shadow-float); }
-    .more-menu .menu > a, .more-menu .menu > button { justify-content: flex-start; gap: 10px; min-height: 40px; padding: 4px 12px; border: 0; border-radius: 8px; background: none; box-shadow: none;
+    .more-menu .menu > a, .more-menu .menu > button { justify-content: flex-start; gap: 10px; min-height: 40px; padding: 4px 12px; border: 0; border-radius: var(--gf-radius-sm); background: none; box-shadow: none;
       font-size: 0.9rem; font-weight: 500; text-align: left; color: var(--gf-text); text-decoration: none; display: flex; align-items: center; }
     .more-menu .menu > a:hover, .more-menu .menu > button:hover { background: var(--gf-surface-2); }
     .more-menu .menu > button[aria-pressed='true'] { color: var(--gf-accent); }
@@ -231,18 +231,18 @@ export class GfLayout extends LitElement {
     .meta input { flex: 1; min-width: 0; min-height: 36px; padding: 6px 10px; font-size: 0.9rem; }
     .segmented button { display: inline-flex; align-items: center; gap: 6px; }
     .hint { margin: 0; font-size: 0.85rem; color: var(--gf-text-muted); display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
-    .problems { margin: 0; padding: 8px 12px; font-size: 0.85rem; color: var(--gf-danger); border-radius: 10px; background: color-mix(in srgb, var(--gf-danger) 8%, var(--gf-surface)); }
+    .problems { margin: 0; padding: 8px 12px; font-size: 0.85rem; color: var(--gf-danger); border-radius: var(--gf-radius); background: color-mix(in srgb, var(--gf-danger) 8%, var(--gf-surface)); }
     ul.problems { padding-left: 30px; }
     .problems code { color: var(--gf-text); }
     /* The groups' settings (two cells that disagree, the address against a cell): said, never an error. */
-    .notes { margin: 0; padding: 8px 12px 8px 30px; font-size: 0.85rem; border-radius: 10px; background: var(--gf-warn-bg); }
+    .notes { margin: 0; padding: 8px 12px 8px 30px; font-size: 0.85rem; border-radius: var(--gf-radius); background: var(--gf-warn-bg); }
     .notes li + li { margin-top: 4px; }
     /* A finger: « Prendre celui de la case » a 44 px target (32 px drawn). */
     @media (pointer: coarse) {
       .notes button.link { position: relative; min-height: 32px; padding: 0 6px; }
       .notes button.link::before { content: ''; position: absolute; inset: -6px 0; }
     }
-    .advanced { display: grid; gap: 8px; padding: 10px 12px; border: 1px solid var(--gf-border); border-radius: 10px; background: var(--gf-surface); }
+    .advanced { display: grid; gap: 8px; padding: 10px 12px; border: 1px solid var(--gf-border); border-radius: var(--gf-radius); background: var(--gf-surface); }
     .advanced .head { display: flex; align-items: center; gap: 8px; }
     .advanced h2 { flex: 1; margin: 0; font-size: 0.95rem; }
     .advanced .icon-btn { width: 32px; height: 32px; font-size: 0.95rem; }
@@ -317,7 +317,7 @@ export class GfLayout extends LitElement {
       .cell-head .pin-chip::before { content: ''; position: absolute; inset: -5px; }
     }
     /* A results cell's list / grid switch (view=). */
-    .cell-head .cell-views { flex: none; display: inline-flex; gap: 2px; padding: 2px; border-radius: 8px; background: var(--gf-surface-2, var(--gf-bg)); }
+    .cell-head .cell-views { flex: none; display: inline-flex; gap: 2px; padding: 2px; border-radius: var(--gf-radius-sm); background: var(--gf-surface-2); }
     .cell-head .cell-views .icon-btn { width: 28px; height: 26px; min-height: 0; padding: 0; font-size: 0.85rem; border-radius: 6px; }
     .cell-head .cell-views .icon-btn[aria-pressed='true'] { background: var(--gf-surface); color: var(--gf-accent); box-shadow: 0 1px 2px rgb(0 0 0 / 15%); }
     .cell-head .pin { color: var(--gf-accent); }
@@ -341,7 +341,7 @@ export class GfLayout extends LitElement {
     .cell-body .scroll { overflow-y: auto; }
     .cell-body .pad { padding: 0 12px; }
     .placeholder { display: grid; align-content: center; justify-items: center; gap: 6px; padding: 16px; text-align: center; font-size: 0.9rem; overflow-y: auto; }
-    .placeholder > .bi { font-size: 1.6rem; color: var(--gf-warn, #b45309); }
+    .placeholder > .bi { font-size: 1.6rem; color: var(--gf-warn); }
     .placeholder.quiet { color: var(--gf-text-muted); }
     .placeholder.quiet .bi { color: var(--gf-accent); }
     .placeholder p { margin: 0; max-width: 34em; }
@@ -408,12 +408,12 @@ export class GfLayout extends LitElement {
     .cell-head .build { flex: none; width: 30px; height: 30px; min-height: 0; padding: 0; font-size: 0.9rem; }
     .cell-head .build[aria-expanded='true'] { color: var(--gf-accent); background: var(--gf-accent-soft); }
     .cross { position: absolute; inset: 6px; z-index: 6; display: grid; grid-template: 1fr 1.3fr 1fr / 1fr 1.3fr 1fr; gap: 6px; container-type: size; }
-    .cross button { min-width: 0; min-height: 0; padding: 2px; font-size: 0.85rem; border-radius: 10px; display: flex; align-items: center; justify-content: center; gap: 6px; }
+    .cross button { min-width: 0; min-height: 0; padding: 2px; font-size: 0.85rem; border-radius: var(--gf-radius); display: flex; align-items: center; justify-content: center; gap: 6px; }
     .cross .arm { background: color-mix(in srgb, var(--gf-accent) 14%, var(--gf-surface)); border: 2px dashed var(--gf-accent); color: var(--gf-text); }
     .cross .arm:hover:not(:disabled), .cross .arm:focus-visible { background: color-mix(in srgb, var(--gf-accent) 30%, var(--gf-surface)); border-style: solid; }
     .cross .arm:disabled { opacity: .45; cursor: not-allowed; }
     .cross .top { grid-area: 1 / 2; } .cross .bottom { grid-area: 3 / 2; } .cross .left { grid-area: 2 / 1; } .cross .right { grid-area: 2 / 3; }
-    .cross .mid { grid-area: 2 / 2; display: flex; align-items: center; justify-content: center; gap: 4px; flex-wrap: wrap; padding: 2px; border-radius: 10px; background: var(--gf-surface); border: 2px solid var(--gf-accent); }
+    .cross .mid { grid-area: 2 / 2; display: flex; align-items: center; justify-content: center; gap: 4px; flex-wrap: wrap; padding: 2px; border-radius: var(--gf-radius); background: var(--gf-surface); border: 2px solid var(--gf-accent); }
     .cross .mid button { width: 32px; height: 32px; padding: 0; font-size: 0.95rem; }
     .cross .mid .del { color: var(--gf-danger); }
     @container (max-width: 300px) { .cross .lbl { display: none; } }

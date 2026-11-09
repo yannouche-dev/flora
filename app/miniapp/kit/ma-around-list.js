@@ -82,7 +82,7 @@ export class MaAroundList extends LitElement {
   static styles = [ui, splitStyles, severityStyles, css`
     /* Its column's size known (cqh): « Rencontres » fits it, the deck shrinking on a short window, never a scrollbar;
        the grids scroll, a thin bar against the column's edge (never a second divider beside the separator). */
-    :host { display: block; position: relative; min-height: 0; overflow-y: auto; background: var(--gf-bg, var(--gf-surface-2)); container-type: size;
+    :host { display: block; position: relative; min-height: 0; overflow-y: auto; background: var(--gf-bg); container-type: size;
       scrollbar-width: thin; scrollbar-color: color-mix(in srgb, var(--gf-text-muted) 45%, transparent) transparent; }
     /* « Rencontres » in a column (a wide screen): the list as tall as it, the deck taking the room left (its actions
        under it), the card shrinking to fit — no scrolling. A phone: the page scrolls, the card its full size. */
@@ -134,7 +134,7 @@ export class MaAroundList extends LitElement {
     /* Mosaïque. */
     .bloom-only { display: flex; gap: 6px; align-items: center; justify-content: center; margin: 0 0 10px; font-size: 0.9rem; }
     .grid.mosaic { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); grid-auto-flow: dense; gap: 6px; }
-    .grid.mosaic .card { border-radius: 10px; }
+    .grid.mosaic .card { border-radius: var(--gf-radius); }
     .grid.mosaic .card:nth-child(5n + 1) { grid-column: span 2; grid-row: span 2; }
     .grid.mosaic .card .ph { aspect-ratio: 1; height: 100%; }
     .grid.mosaic .card .txt { position: absolute; left: 0; right: 0; bottom: 0; padding: 18px 8px 6px; background: linear-gradient(transparent, rgb(0 0 0 / 70%)); color: #fff; }

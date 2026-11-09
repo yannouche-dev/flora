@@ -51,7 +51,7 @@ export class MaDistance extends LitElement {
   };
 
   static styles = [ui, css`
-    :host { display: block; position: relative; min-height: 0; overflow-y: auto; overflow-x: hidden; background: var(--gf-bg, var(--gf-surface-2)); container-type: inline-size; }
+    :host { display: block; position: relative; min-height: 0; overflow-y: auto; overflow-x: hidden; background: var(--gf-bg); container-type: inline-size; }
     .welcome { max-width: 560px; margin: 0 auto; padding: 28px 20px 32px; display: grid; gap: 18px; text-align: center; box-sizing: border-box; }
     .welcome .leaf { font-size: 3rem; color: var(--gf-accent); }
     .welcome h1 { margin: 0; font-size: 1.7rem; line-height: 1.2; }

@@ -140,9 +140,9 @@ export class MaGuided extends LitElement {
   };
 
   static styles = [ui, css`
-    :host { display: block; position: relative; min-height: 0; overflow-y: auto; background: var(--gf-bg, var(--gf-surface-2)); container-type: inline-size; }
+    :host { display: block; position: relative; min-height: 0; overflow-y: auto; background: var(--gf-bg); container-type: inline-size; }
     /* Discovering: blocks side by side — the map, the cards, then the panes the steps add. */
-    .guided { position: absolute; inset: 0; display: flex; flex-direction: column; background: var(--gf-bg, var(--gf-surface-2)); }
+    .guided { position: absolute; inset: 0; display: flex; flex-direction: column; background: var(--gf-bg); }
     .g-scroll { position: relative; flex: 1; min-height: 0; display: flex; }
     /* The steps: a bar above the blocks, always in sight — done, the one shown, to come; back and next. */
     .g-steps { flex: none; display: flex; align-items: center; gap: 10px; padding: 6px 10px; background: var(--gf-surface); border-bottom: 1px solid var(--gf-border); z-index: 2; }
@@ -159,7 +159,7 @@ export class MaGuided extends LitElement {
     .g-steps li button:not(:disabled):hover { background: var(--gf-accent-soft); color: var(--gf-text); }
     .g-steps li button:disabled { cursor: default; opacity: 1; }
     .g-steps li:not(.done):not(.on) button:disabled { opacity: 0.6; }
-    .g-steps li.on .n { background: var(--gf-accent); border-color: var(--gf-accent); color: var(--gf-accent-contrast, #fff); }
+    .g-steps li.on .n { background: var(--gf-accent); border-color: var(--gf-accent); color: var(--gf-accent-contrast); }
     .g-steps .hint { margin: 0; font-size: 0.78rem; color: var(--gf-text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .g-steps .prev { flex: none; display: inline-flex; align-items: center; gap: 2px; min-height: 34px; padding: 0 10px 0 6px; border: 1px solid var(--gf-border); border-radius: var(--gf-radius-pill);
       background: var(--gf-surface); color: var(--gf-text); font: inherit; font-size: 0.85rem; cursor: pointer; }

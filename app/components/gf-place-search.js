@@ -31,7 +31,7 @@ export class GfPlaceSearch extends LitElement {
     input[type='search'] { min-height: 44px; padding: 8px 16px; font-size: 1rem; border-radius: var(--gf-radius-pill); background: var(--gf-surface); }
     @media (pointer: fine) { input[type='search'] { min-height: 40px; font-size: 0.9375rem; } }
     ul { position: absolute; z-index: 5; left: 0; right: 0; top: calc(100% + 4px); box-sizing: border-box; list-style: none; margin: 0; padding: 4px; max-height: 260px; overflow-y: auto;
-      border: 1px solid var(--gf-border); border-radius: var(--gf-radius); background: var(--gf-surface); box-shadow: var(--gf-shadow-float, var(--gf-shadow)); }
+      border: 1px solid var(--gf-border); border-radius: var(--gf-radius); background: var(--gf-surface); box-shadow: var(--gf-shadow-float); }
     ul.up { top: auto; bottom: calc(100% + 4px); }
     li button { width: 100%; min-height: 44px; justify-content: flex-start; text-align: left; gap: 8px; border: 0; border-radius: var(--gf-radius-sm); background: none;
       padding: 8px 10px; font-size: 0.95rem; font-weight: 400; }
