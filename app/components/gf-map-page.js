@@ -29,6 +29,7 @@ import { PaneSizer, paneStyles } from '../core/panes.js';
 import { config } from '../config.js';
 import { hideImg, showImg } from '../core/img.js';
 import { creditText, thumbCredit } from '../core/credit.js';
+import { photoOf } from '../core/thumb.js';
 import { hintView, takeHint } from '../core/hints.js';
 
 const shortDate = (/** @type {string} */ iso) =>
@@ -381,7 +382,7 @@ export class GfMapPage extends LitElement {
     if (!a) return null;
     // The species picked: its photo on each of its observations (when photos are on) — iNaturalist's, else the flora's.
     const own = a.species?.photo || a.thumb?.url || null;
-    const photo = own && this.#store.state.modules.photos ? own : null;
+    const photo = photoOf(own);
     const m = this.#areaMemo;
     if (m && m.center === a.center && m.radius === a.radius && m.obs === a.obs && m.species === a.species && m.photo === photo) return m.value;
     const name = a.species ? a.species.common || a.species.name : '';
@@ -441,9 +442,9 @@ export class GfMapPage extends LitElement {
         <button class="close icon-btn" type="button" aria-label="Fermer" @click=${() => this.#toggleAround()}>${icon('x-lg')}</button>
         <button type="button" class="link back" @click=${() => this.#pickSpecies(null)}>${icon('arrow-left')} Toutes les espèces</button>
         <div class="species-head">
-          ${s.plantId ? html`<gf-thumb plant-id=${s.plantId} size="56"></gf-thumb>` : s.photo && this.#store.state.modules.photos ? html`<img class="ph" src=${s.photo} alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer" @error=${hideImg} @load=${showImg} />` : nothing}
+          ${s.plantId ? html`<gf-thumb plant-id=${s.plantId} size="56"></gf-thumb>` : photoOf(s.photo) ? html`<img class="ph" src=${s.photo} alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer" @error=${hideImg} @load=${showImg} />` : nothing}
           <div><h2>${s.common || s.name}</h2>${s.common ? html`<span class="sci">${s.name}</span>` : nothing}
-            ${!s.plantId && s.photo && s.credit && this.#store.state.modules.photos ? html`<small class="credit">Photo : ${creditText(s.credit)}</small>` : nothing}</div>
+            ${!s.plantId && photoOf(s.photo) && s.credit ? html`<small class="credit">Photo : ${creditText(s.credit)}</small>` : nothing}</div>
         </div>
         <div class="meta" aria-busy=${a.obs === null ? 'true' : 'false'}><span>${s.count} observation${s.count > 1 ? 's' : ''} dans le cercle</span></div>
         <div class="actions">
@@ -509,7 +510,7 @@ export class GfMapPage extends LitElement {
         ${shown.length ? html`<ul class="plants species">
           ${shown.map(sp => html`<li><button type="button" class="pick" @click=${() => this.#pickSpecies(sp)}>
             ${sp.plantId ? html`<gf-thumb plant-id=${sp.plantId} size="38"></gf-thumb>`
-              : sp.photo && this.#store.state.modules.photos ? html`<img class="ph" src=${sp.photo} alt="" title=${creditText(sp.credit)} loading="lazy" decoding="async" referrerpolicy="no-referrer" @error=${hideImg} @load=${showImg} />` : html`<gf-thumb size="38"></gf-thumb>`}
+              : photoOf(sp.photo) ? html`<img class="ph" src=${sp.photo} alt="" title=${creditText(sp.credit)} loading="lazy" decoding="async" referrerpolicy="no-referrer" @error=${hideImg} @load=${showImg} />` : html`<gf-thumb size="38"></gf-thumb>`}
             <span class="who"><span class="nm">${sp.common || sp.name}</span>
               <span class="sub">${sp.common ? html`<i>${sp.name}</i>` : nothing}${sp.common && sp.family ? ' · ' : ''}${sp.family || ''}</span></span>
             <span class="n">${sp.count}</span>

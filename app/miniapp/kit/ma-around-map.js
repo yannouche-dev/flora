@@ -21,6 +21,7 @@ import { discoverState } from '../../core/discover.js';
 import { hideImg, showImg } from '../../core/img.js';
 import { creditText } from '../../core/credit.js';
 import { StoreController } from '../../core/store.js';
+import { photoOf } from '../../core/thumb.js';
 import { ui } from '../../styles/ui.js';
 import { distanceAt, distanceEvents, distMood } from './cards.js';
 import { STOPS, radiusLabel } from '../../core/distance.js';
@@ -151,10 +152,10 @@ export class MaAroundMap extends LitElement {
     @media (prefers-reduced-motion: reduce) { .around, .g-where { transition: none; animation: none; } }
   `];
 
-  #store = new StoreController(this);
-
   constructor() {
     super();
+    // Drawn again when the app's state changes: a module switched on or off (Réglages, another tab), its photos follow (photoOf).
+    new StoreController(this);
     /** @type {import('../runtime.js').MiniApp | null} */
     this.app = null;
     /** @type {Record<string, any> | null} */
@@ -231,9 +232,6 @@ export class MaAroundMap extends LitElement {
     this.#loadHighlight(key, card, scope);
   }
   #hlFor = '';
-
-  /** A plant's photo, unless the « Photos en ligne » module is off (a leaf shows instead). @param {string | null | undefined} url */
-  #photo(url) { return url && this.#store.state.modules.photos ? url : null; }
 
   /** The zone chosen, in sight in its row (scrolled sideways on a touch screen): a row drawn again starts at its left. */
   #showScope() {
@@ -321,7 +319,7 @@ export class MaAroundMap extends LitElement {
   async #loadHighlight(key, card, scope) {
     const c = /** @type {Record<string, any>} */ (this.c);
     const title = nameOf(card.plant);
-    const photo = this.#photo(card.photo) ? /** @type {string} */ (card.photo).replace('/medium.', '/small.') : null;
+    const photo = photoOf(card.photo)?.replace('/medium.', '/small.') ?? null;
     const who = { plantId: card.plant.id, photo, credit: photo ? card.credit : null, common: commonOf(card.plant), sci: card.plant.scientificName, taxonId: card.taxonId ?? null };
     const pointsOf = (/** @type {{ coordinates: [number, number], date: string | null, url: string }[]} */ pts) => pts.map(p => ({ coordinates: p.coordinates, title, url: p.url, date: p.date }));
     if (scope === 'around') {
@@ -510,7 +508,7 @@ export class MaAroundMap extends LitElement {
     /** @type {Map<string, import('./session.js').AroundPoint>} */
     const species = new Map();
     for (const o of s.obs) if (o.sci && !species.has(o.sci)) species.set(o.sci, o);
-    const faces = [...species.values()].filter(o => this.#photo(o.photo)).slice(0, 6);
+    const faces = [...species.values()].filter(o => photoOf(o.photo)).slice(0, 6);
     return html`<section class="g-launch" aria-label="Jusqu’où chercher">
       <h2>${icon('binoculars')} Jusqu’où part l’expédition ?</h2>
       <p class="where">Autour ${c.place ? 'de ' + c.place : 'de vous'} · <button class="link" type="button" @click=${() => this.app?.go('start')}>changer de lieu</button></p>
@@ -530,7 +528,7 @@ export class MaAroundMap extends LitElement {
     return html`<aside class="around" aria-label="Les plantes autour">
       <h2>Les voisines <small class="muted">${cards.length}</small></h2>
       <ul>${repeat(cards, c => c.plant.id, c => html`<li><button type="button" aria-current=${String(c.plant.id === this.focusId)} @click=${() => this.#pick(c.plant.id)}>
-        <span class="th">${this.#photo(c.photo) ? html`<img src=${/** @type {string} */ (c.photo).replace('/medium.', '/square.')} alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer" @error=${hideImg} @load=${showImg} />` : nothing}</span>
+        <span class="th">${photoOf(c.photo) ? html`<img src=${/** @type {string} */ (c.photo).replace('/medium.', '/square.')} alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer" @error=${hideImg} @load=${showImg} />` : nothing}</span>
         <span class="t"><b>${nameOf(c.plant)}</b><small>${c.blooming ? 'En fleur · ' : ''}${c.count} obs.${matches.includes(c.plant.id) ? ' · ♥' : ''}</small></span>
       </button></li>`)}</ul>
     </aside>`;
