@@ -6,9 +6,8 @@ import { icon } from '../core/icons.js';
 import { openModal } from '../core/history.js';
 import { safeUrl } from '../core/safe-url.js';
 import { sayIn } from '../core/toast.js';
+import { PIN_COLORS } from '../core/map-colours.js';
 import './gf-map-options.js';
-
-const PIN_COLORS = { rare: '#fb7185', moyen: '#fbbf24', abondant: '#38bdf8' };
 
 /**
  * The panel ▦ « Carte » of every map (gf-map: its round button, or the end of its search pill), in one bottom sheet:

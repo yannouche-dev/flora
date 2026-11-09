@@ -236,6 +236,7 @@ app/
     backgrounds.js       les fonds (pur, sans import) : plan, photos les plus récentes, d'une année, d'une période, historiques, SPOT d'une année
     map-layers.js        les couches par-dessus le fond (pur, sans import) : surcouches de l'app, noms et réseaux (limites, bâtiments, voies ferrées, routes, cours d'eau, noms de lieux), couches des thèmes du panneau ▦
     map-settings.js      l'allure des cartes : 2D / 3D et options de la 3D, fond, noms et réseaux, couches et opacités communs (MapLook)
+    map-colours.js       les couleurs des marques des cartes, écrites une fois : l'anneau d'une plante et le carré d'un lieu, par abondance (`PIN_COLORS` : la carte, la légende du panneau ▦, la liste des lieux de la Carte) — hors du démarrage
     ign.js               ces couches en tuiles Leaflet
     walk.js              un parcours comme une marche : ses étapes, son trait (récapitulatif, Vue 3D)
     trail-store.js       le Parcours sur l'appareil : le parcours en cours, celui terminé ; ses plantes regroupées (lu aussi par le contexte, Découvrir, Mes plantes)

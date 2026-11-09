@@ -224,6 +224,7 @@ const SHELL = [
   'app/components/gf-filter-panel.js',
   'app/components/gf-map.js',
   'app/components/map-style.js',
+  'app/core/map-colours.js',
   'app/components/gf-map-gl.js',
   'app/core/orbit.js',
   'app/components/gf-map-obs3d.js',

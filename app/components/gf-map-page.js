@@ -10,6 +10,7 @@ import { findEntry,
 import { exploreUrl, observationsAround, saveRadius, savedRadius, speciesAround } from '../core/nearby.js';
 import { AROUND_STOPS, formatDistance, metres, radiusLabel } from '../core/distance.js';
 import { StoreController, whenReady } from '../core/store.js';
+import { PIN_COLORS } from '../core/map-colours.js';
 import { ui } from '../styles/ui.js';
 import './gf-facet.js';
 import './gf-map.js';
@@ -32,8 +33,6 @@ import { hintView, takeHint } from '../core/hints.js';
 
 const shortDate = (/** @type {string} */ iso) =>
   new Date(iso + 'T12:00:00').toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' });
-
-const PIN_COLORS = { rare: '#fb7185', moyen: '#fbbf24', abondant: '#38bdf8' };
 
 /** The Carte's « Mes lieux » shown (« Sur cette carte » of its panel ▦): kept only when hidden. */
 const placesPref = definePref({ key: config.storageKeys.mapPlaces, clean: v => v !== false, store: v => v ? null : false });
