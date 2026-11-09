@@ -26,15 +26,15 @@ const carte = page => page.locator('gf-map-page gf-map');
 
 /**
  * A place of the user's in the circle (one plant in it): the Carte has something to show (no « Aucun lieu » over it).
- * @param {import('@playwright/test').Page} page
+ * @param {import('@playwright/test').Page} page @param {number} [id] its plant (1: none of the flora's)
  */
-function seedPlace(page) {
-  return page.evaluate(async () => {
+function seedPlace(page, id = 1) {
+  return page.evaluate(async id => {
     const col = await import('/app/core/collections.js');
     let p = col.newPlace([3.0890, 45.7790], { name: 'Jardin Lecoq' });
-    p = col.withPlant(p, { id: 1, scientificName: 'Urtica dioica' }, { coordinates: [3.0892, 45.7791], accuracy: 5 });
+    p = col.withPlant(p, { id, scientificName: 'Urtica dioica' }, { coordinates: [3.0892, 45.7791], accuracy: 5 });
     await col.savePlace(p);
-  });
+  }, id);
 }
 
 /**
@@ -201,7 +201,9 @@ test('en 3D, ce que la carte a gardé revient à l’ouverture ; hors ligne, les
   await answerObservations(page, { seen: asked, inat: 20, gbif: 10 });
   const problems = await open3d(page, { on: true, radius: 1000, gbif: false });
   await app.open('#/collections');
-  await seedPlace(page);
+  // The user's plant one of the flora's, its photo at hand (as once its list has shown it): on its point, with its credit.
+  await seedPlace(page, 128268);
+  await page.evaluate(() => import('/app/core/thumb.js').then(t => t.thumbUrl(128268)));
   await app.go('#/map');
   const map = carte(page);
   await expect(map).toHaveAttribute('data-renderer', '3d', { timeout: 30_000 });
@@ -210,6 +212,8 @@ test('en 3D, ce que la carte a gardé revient à l’ouverture ; hors ligne, les
   const st = await obs(map);
   expect(st.radius).toBe(1000);
   expect(st.sources).toEqual({ inat: true, gbif: false });
+  expect(st.photos.mine).toBe(1);
+  expect(st.credited.mine, 'the photo of one of my plants, with its credit').toBe(1);
   expect(asked.some(u => u.includes('api.gbif.org'))).toBe(false);
   expect(asked.some(u => /radius=1\.00/.test(u))).toBe(true);
 
