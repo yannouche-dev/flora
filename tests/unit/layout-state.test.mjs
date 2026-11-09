@@ -238,7 +238,7 @@ test('une source coupée dans Réglages › Modules : laissée des sources par d
   const ready = async s => { for (let i = 0; i < 100 && s.speciesState !== 'ready'; i++) await tick(); assert.equal(s.speciesState, 'ready'); };
   setModule('gbif', false);
   const s = new LayoutState({ radius: 1000, channel });
-  // GBIF off: iNaturalist alone by default — GBIF never asked, nothing said missing (cells.js: the map's « État »).
+  // GBIF off: iNaturalist alone by default — GBIF never asked, nothing said missing (map-cell.js: the map's « État »).
   assert.deepEqual(s.filters.sources, ['inat']);
   s.set({ at: AT }, 'none');
   await ready(s);
@@ -541,7 +541,7 @@ test('une plante hors de la zone, iNaturalist ôté des sources du groupe (GBIF 
   s.set({ at: AT, filtres: { sources: ['gbif'] } }, 'none');
   await zoneReady(s);
   assert.deepEqual(s.species?.list.map(x => x.plantId), [AIL.id]);
-  // The nettle, not among the zone's: none of iNaturalist's asked — none, said so on the map (cells.js).
+  // The nettle, not among the zone's: none of iNaturalist's asked — none, said so on the map (map-cell.js).
   s.pick(ORTIE.id, { how: 'none' });
   for (let i = 0; i < 5; i++) await tick();
   assert.deepEqual([s.plantObs?.points, s.plantObs?.outside], [[], true]);

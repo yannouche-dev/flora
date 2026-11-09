@@ -22,7 +22,7 @@
 //                                      the zone's observations: their sources and the filters every source applies
 //                                      (core/observations.js); not said, the defaults — both sources (but one switched
 //                                      off in Réglages › Modules: defaultSources; a map's src= is its own, never the
-//                                      group's: cells.js), every observation (every quality, every dataset);
+//                                      group's: map-cell.js), every observation (every quality, every dataset);
 //   &q=…&family=…&sort=…               the search itself: the screen's own (core/query.js — the same words as #/?q=…),
 //                                      never Flore's.
 // A layout's other groups (a cell's groupe=b: its own zone, plant, period and search, apart from the others) have
@@ -265,7 +265,7 @@ export class LayoutState extends EventTarget {
     /**
      * What a map shows of the zone (moved by hand: its box [west, south, east, north], the sources of its points, the
      * map), the list kept to it; null: the whole zone (a map that shows all of the circle too). In the address as the
-     * leading map's vue= (cells.js; replaced, never a new entry).
+     * leading map's vue= (map-cell.js; replaced, never a new entry).
      * @type {{ box: number[], kinds: string[] | null, by: object | null } | null}
      */
     this.view = null;
@@ -407,7 +407,7 @@ export class LayoutState extends EventTarget {
 
   /**
    * A map moved by hand in use takes the lead of the list (`lead`, detail: { by }): its view is the one the address
-   * keeps (its vue=, cells.js) — the group's other maps that lead it let theirs go. One author.
+   * keeps (its vue=, map-cell.js) — the group's other maps that lead it let theirs go. One author.
    * @param {object} by
    */
   lead(by) { this.dispatchEvent(new CustomEvent('lead', { detail: { by } })); }

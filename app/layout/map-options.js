@@ -2,7 +2,7 @@
 // The map cell's settings (« Écran sur mesure », registry.js `map`) that need words of their own: its IGN layers by
 // short names (layers=znieff+n2000), its « Noms et réseaux » (noms=lieux+routes), its intents (one word, a bundle of
 // settings: map(terrain)), the dates its points keep (when=mois), its controls by the cell's width (ui=auto), its pin
-// (its sources against its group's: mapPin). Pure (no DOM, no Leaflet), tested under Node; the rendering is cells.js'
+// (its sources against its group's: mapPin). Pure (no DOM, no Leaflet), tested under Node; the rendering is map-cell.js'
 // (dl-map).
 
 import { CATALOG_ROWS, LANDMARKS, LANDMARKS_LISTED, LANDMARK_DEFAULTS } from '../core/map-layers.js';
@@ -190,7 +190,7 @@ export function wideWords({ many = 0, listed = 0, missing = 0, gbif = 0 }) {
  */
 
 /**
- * A map's pin (cells.js DlMap: an axis of its group it is detached from, said on the map itself, in use too): its own
+ * A map's pin (map-cell.js DlMap: an axis of its group it is detached from, said on the map itself, in use too): its own
  * sources (`src`, its src=; null: none said) fewer than its group's (`group`, its filters' sources) — « iNaturalist
  * seul », the others ticked not on this map, « Afficher » —, or only sources its group has unticked — nothing to show,
  * « Cocher » ticks them for the group; a map of France or of the world, iNaturalist's tiles alone while its group has

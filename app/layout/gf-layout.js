@@ -1014,7 +1014,7 @@ export class GfLayout extends LitElement {
    * zone cell (r=), the period of a map (when=: this year, this month), the place it starts on (a map's lieu=, autour) —
    * the first in reading order, where two disagree (said in the edit strip: #notes). Its sources are no cell's: both,
    * but one whose module is off (core/observations.js defaultSources: never said missing on every map) — a map's src= is
-   * its own (cells.js). Returns whether the radius, the period or the sources changed. @param {Shown} l
+   * its own (map-cell.js). Returns whether the radius, the period or the sources changed. @param {Shown} l
    */
   #defaults(l) {
     let changed = false;

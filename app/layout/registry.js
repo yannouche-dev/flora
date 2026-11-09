@@ -135,7 +135,7 @@ const MAP_PARAMS = {
   lieu: { kind: 'text', label: 'Lieu de départ', def: null, group: 'Où', shared: true, words: ['place', 'commune', 'ville', 'adresse'] },
   autour: { kind: 'bool', label: 'Autour de moi au départ', def: false, group: 'Où', shared: true, words: ['around', 'moi', 'gps', 'position'] },
   // The view it starts on (its centre, its zoom; in 3D its tilt and turn), the map moved while the screen is
-  // modified — in use, the one that leads the list (cells.js): else framed on the zone.
+  // modified — in use, the one that leads the list (map-cell.js): else framed on the zone.
   vue: { kind: 'text', label: 'Cadrage de départ', def: null, group: 'Où', own: true, named: true, max: 60, read: readView, words: ['view', 'cadrage', 'camera'] },
   // Fond: the maps' common look (core/map-settings.js) unless it says one (its own then, kept by the cell: base=, and
   // annee= its photos' year or period, SPOT's year — core/backgrounds.js; without it the most recent; noms= « Noms et
@@ -179,7 +179,7 @@ const MAP_PARAMS = {
   opac: { kind: 'text', label: 'Opacité des couches', def: null, group: 'Couches', own: true, named: true, max: 400, read: readOpacities, words: ['opacite', 'opacity', 'transparence'] },
   // Points.
   // The sources this map draws among its group's (core/observations.js: the zone's observations, merged); none said:
-  // all of them. Its own, never its group's (which asks sources=, else both): fewer, a pin on the map says so (cells.js).
+  // all of them. Its own, never its group's (which asks sources=, else both): fewer, a pin on the map says so (map-cell.js).
   src: { kind: 'list', label: 'Sources des points', def: null, unset: 'toutes celles du groupe', group: 'Points', mark: 'So', values: { inat: 'iNaturalist', gbif: 'GBIF' }, aliases: { inaturalist: 'inat' },
     words: ['sources', 'source', 'donnees'] },
   when: { kind: 'enum', label: 'Période', def: 'toujours', group: 'Points', shared: true, values: { toujours: 'Toujours', annee: 'Cette année', mois: 'Ce mois-ci' }, aliases: { tout: 'toujours', always: 'toujours', year: 'annee', an: 'annee', cetteannee: 'annee', month: 'mois', cemois: 'mois' }, words: ['quand', 'periode', 'date', 'dates'] },
@@ -307,7 +307,7 @@ export const COMPONENTS = [
     id: 'map', title: 'Carte', icon: 'map', aliases: ['carte'],
     about: 'La zone (cercle autour d’un lieu), les observations des plantes trouvées, celles de la plante courante en grand. Toucher un point : sa plante devient la plante courante ; appui long : la zone s’y centre.',
     params: MAP_PARAMS,
-    // (Its observations written too: « Cocher » on its pin ticks for its group a source it shows — cells.js.)
+    // (Its observations written too: « Cocher » on its pin ticks for its group a source it shows — map-cell.js.)
     main: 'r', reads: ['zone', 'periode', 'observations', 'recherche', 'plante', 'regard'], writes: ['zone', 'periode', 'observations', 'regard', 'plante'], min: { w: 240, h: 180 }
   },
   {
@@ -799,7 +799,7 @@ export function menuLooks(columns) {
  * @typedef {{ link: LinkKey, on: boolean, why: string, toggle: Record<string, unknown> | null, said?: boolean }} Link
  *   `on`: the cell follows (and changes) that shared state; `toggle`: its settings detached or attached again (null:
  *   always so — said, never a switch); `why`: what it does, in French; `said`: detached, the cell says it itself in use
- *   (a map's sources: its pin on the map, cells.js; a fixed plant: « Plante fixée » in its head) — no pin in its head then
+ *   (a map's sources: its pin on the map, map-cell.js; a fixed plant: « Plante fixée » in its head) — no pin in its head then
  */
 
 /** In a link's toggle: the current plant's number, put there by the layout (a plant cell fixed on it). */
@@ -832,7 +832,7 @@ export function linksOf(r) {
     add('recherche', p.suit !== false, p.suit !== false ? 'Ses points : les plantes que garde la recherche' : 'Ses points : toutes les plantes de la zone', { suit: p.suit === false ? null : false });
     add('periode', true, 'Ses points : ceux de la période de toutes les cases');
     // Its observations: its group's, every source of it — or some only (src=: its own choice, whatever its group's —
-    // said on the map in use, against its group's: its pin, cells.js), let go. A map of France or of the world:
+    // said on the map in use, against its group's: its pin, map-cell.js), let go. A map of France or of the world:
     // iNaturalist's tiles, as its group's filters say (GBIF has none), whatever src= says.
     const src = zone && Array.isArray(p.src) ? /** @type {string[]} */ (p.src) : null;
     const all = Object.keys(MAP_PARAMS.src.values ?? {});
