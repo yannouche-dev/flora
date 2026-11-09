@@ -48,17 +48,18 @@ test('TEST-6 / GAP3-10 : un volet de trop est refusé et annoncé, la mise en pa
     return docked;
   });
   expect(built).toEqual([true, true, true, true, true, true]);
-  const before = await page.evaluate(async () => (await import('/app/core/sheet-blocks.js')).exportLayout());
+  const before = await page.evaluate(async () => (await import('/app/core/sheet-layout.js')).exportLayout());
   await moveTo(page, 'Classification', 'Nouveau panneau à droite');
   await expect(page.locator('gf-plant-detail .said')).toHaveText('« Classification » : pas déplacé, trop de panneaux imbriqués');
   expect(await where(page, 'taxonomy')).toBe(false);
   // Exported, everything reset, imported back: the same panes (the file the user keeps is never refused).
   const after = await page.evaluate(async () => {
     const sb = await import('/app/core/sheet-blocks.js');
-    const text = sb.exportLayout();
+    const sl = await import('/app/core/sheet-layout.js');
+    const text = sl.exportLayout();
     sb.resetAll();
-    sb.importLayout(text);
-    const again = sb.exportLayout();
+    sl.importLayout(text);
+    const again = sl.exportLayout();
     // Answered once the sheet has redrawn, as above.
     await new Promise(resolve => setTimeout(resolve));
     return { text, again };

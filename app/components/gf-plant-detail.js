@@ -15,10 +15,11 @@ import { lookFor } from '../core/map-settings.js';
 import { icon, modeIcon } from '../core/icons.js';
 import './gf-mode-switch.js';
 import {
-  STYLES, SUBS, canBeEmpty, hidesEmpty, setHidesEmpty, isMap, isAddedMap, mapConfig, setMapConfig, createMap, deleteMap, blockModuleName, blockOrder, blockStyle, blockTitle, isTitleShown, setBlockStyle, setTitleShown, createNote, deleteNote, isHidden, isNote, isSubHidden, renameBlock,
+  STYLES, SUBS, canBeEmpty, hidesEmpty, setHidesEmpty, isMap, isAddedMap, createMap, deleteMap, blockModuleName, blockOrder, blockStyle, blockTitle, isTitleShown, setBlockStyle, setTitleShown, createNote, deleteNote, isHidden, isNote, isSubHidden, renameBlock,
   foldedByHand, serviceOff, serviceOffNote, setBlockOrder, setHidden, setSubHidden, setSubOrder, subOrder, subTitle,
   isOnEdge, placeOf, orderByCategory, treeOf, paneOf, dockBlock, toSheet, setPaneSizes, setStackState, isCustom, isLocked, isSubLocked, resetBlocks
 } from '../core/sheet-blocks.js';
+import { mapConfig, setMapConfig } from '../core/sheet-layout.js';
 import { leaves as paneLeaves, stackOf, setSizes as treeSizes, patchStack, dock, undock } from '../core/pane-tree.js';
 import { pressDock } from '../core/dock-drag.js';
 import { shareGrip } from '../core/split-grip.js';

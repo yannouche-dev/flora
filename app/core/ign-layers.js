@@ -1,6 +1,6 @@
 // @ts-check
-// The IGN Géoplateforme layers of the maps, without Leaflet (the start of the app needs them for the maps' look,
-// core/map-settings.js; the tiles themselves are core/ign.js's): the overlays — the app's own (core/map-layers.js, pure,
+// The IGN Géoplateforme layers of the maps, without Leaflet (the maps' look needs them, core/map-settings.js, even
+// where no map is drawn; the tiles themselves are core/ign.js's): the overlays — the app's own (core/map-layers.js, pure,
 // with « Noms et réseaux » and the panel's themes) and the catalogue's layers added (read again when another tab adds
 // one) —, the tile address of any layer. The backgrounds — the plan, the photos of each year, SPOT's — are
 // core/backgrounds.js's. Which of them a map shows, and how opaque: the maps' look (core/map-settings.js).

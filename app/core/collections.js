@@ -10,7 +10,6 @@ import * as db from './db.js';
 import { FAVORITES_ID, countOf, joinEntry, locationLoss, madeBy, mergeCollections, newEntryId, normalizeEntry, normalizeCollection, plantIdsOf, plantKey, promoted, promotedEntry, promoteTouched, rebase, roundCoordinates, sameContent, userChange, withoutMadeBy } from './place-model.js';
 import { store } from './store.js';
 import { FORMAT_VERSION, toPortable } from './portable.js';
-import { encodeCollection, encodePortable, share } from './share.js';
 import { href } from './router.js';
 import { publish, subscribe } from './sync.js';
 import { exportNotes, importNotes } from './sheet-blocks.js';
@@ -629,14 +628,16 @@ export function positionQuestion(c) {
  * « Partager » a list, a lieu, a parcours or the favourites (the lieu's editor, Mes plantes, the Parcours): a link that
  * carries it (share.js encodeCollection: its plants, a lieu's positions — never notes nor harvest logs), by the system's
  * share sheet or copied. A position is asked first (`ask`: gf-ask.js confirmAsk, given by the screen — this module
- * starts with the app, the dialog does not): refused, nothing goes. Shared, copied, or shown to copy by hand: the
- * user's own from then on (promotePlace: « Recommencer » keeps it); cancelled or refused, nothing changes.
+ * starts with the app, the dialog does not; nor does share.js, imported then): refused, nothing goes. Shared, copied,
+ * or shown to copy by hand: the user's own from then on (promotePlace: « Recommencer » keeps it); cancelled or
+ * refused, nothing changes.
  * @param {Collection} c @param {(q: { title: string, text: string, yes: string }) => Promise<boolean>} ask
  * @returns {Promise<'shared' | 'copied' | 'cancelled' | 'failed' | 'refused'>}
  */
 export async function shareCollection(c, ask) {
   const q = positionQuestion(c);
   if (q && !await ask(q)) return 'refused';
+  const { encodeCollection, share } = await import('./share.js');
   const title = placeTitle(c);
   const result = await share({ title: title + ' — GeoFlora', text: `${title} · ${countOf(c)}`, url: href.shared(await encodeCollection(c)) });
   if (result !== 'cancelled') await promotePlace(c.id);
@@ -1225,6 +1226,8 @@ export async function importPortable(featureCollection) {
  */
 export async function transferLink({ personal }) {
   const all = (await listCollections()).filter(c => c.properties.plants.length || c.properties.kind !== 'favorites');
+  // share.js: not with the start of the app (Réglages, which asks for this link, has it already).
+  const { encodePortable } = await import('./share.js');
   const data = await encodePortable(toPortable(all, { personal, sheetNotes: personal ? exportNotes() : undefined }));
   return { url: '#/shared?d=' + data, count: all.length, kept: keptContents(all) };
 }

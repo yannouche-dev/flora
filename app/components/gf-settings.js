@@ -14,7 +14,8 @@ import { exportGeoJSON, importGeoJSON, keptContents, lastExportDate, listCollect
 import { share } from '../core/share.js';
 import { myRegion, setMyRegion, territories, territoryAt } from '../core/territory.js';
 import { geoProblem, oneFix } from '../core/geo.js';
-import { exportLayout, importLayout, resetAll } from '../core/sheet-blocks.js';
+import { resetAll } from '../core/sheet-blocks.js';
+import { exportLayout, importLayout } from '../core/sheet-layout.js';
 import { ui } from '../styles/ui.js';
 import { discoverEvents, discovering, finishDiscover, restartDiscover, tabShown } from '../core/discover.js';
 import { forgetHints } from '../core/hints.js';

@@ -668,6 +668,7 @@ test('Réglages : la mise en page et vos modes font l’aller-retour par un fich
   await app.open('#/');
   const { note, mode, before } = await page.evaluate(async ortie => {
     const sb = await import('/app/core/sheet-blocks.js');
+    const { exportLayout } = await import('/app/core/sheet-layout.js');
     const { createMode } = await import('/app/core/mode-admin.js');
     sb.dockBlock('standard', 'calendar', 'sheet', 'right');
     sb.setHidden('standard', 'taxonomy', true);
@@ -676,7 +677,7 @@ test('Réglages : la mise en page et vos modes font l’aller-retour par un fich
     sb.setHidden(made, 'wikipedia', true);
     const key = sb.createNote('Récolte');
     await sb.setNoteText(key, ortie, 'Feuilles jeunes, en avril');
-    return { note: key, mode: made, before: JSON.parse(sb.exportLayout()) };
+    return { note: key, mode: made, before: JSON.parse(exportLayout()) };
   }, ORTIE);
 
   // Exported from Réglages: the layout and the modes, nothing else — the Note block by its name, never its text.
@@ -698,7 +699,8 @@ test('Réglages : la mise en page et vos modes font l’aller-retour par un fich
   await expect(card(page).locator('p[role=status]')).toHaveText('Mise en page importée.');
   expect(await page.evaluate(async ([key, ortie, made]) => {
     const sb = await import('/app/core/sheet-blocks.js');
-    return { file: JSON.parse(sb.exportLayout()), text: sb.noteText(/** @type {string} */ (key), /** @type {number} */ (ortie)), docked: sb.isOnEdge('standard', 'calendar'),
+    const { exportLayout } = await import('/app/core/sheet-layout.js');
+    return { file: JSON.parse(exportLayout()), text: sb.noteText(/** @type {string} */ (key), /** @type {number} */ (ortie)), docked: sb.isOnEdge('standard', 'calendar'),
       title: sb.blockTitle('names'), hidden: sb.isHidden(/** @type {any} */ (made), 'wikipedia') };
   }, [note, ORTIE, mode])).toEqual({ file: before, text: 'Feuilles jeunes, en avril', docked: true, title: 'Tous les noms', hidden: true });
 
@@ -736,7 +738,7 @@ test('Réglages › « Tout rétablir » : tout revient par défaut, dans tous l
     await new Promise(resolve => setTimeout(resolve));
     return { note: key, mode: made };
   }, ORTIE);
-  const layout = () => page.evaluate(async () => (await import('/app/core/sheet-blocks.js')).exportLayout());
+  const layout = () => page.evaluate(async () => (await import('/app/core/sheet-layout.js')).exportLayout());
   const saved = await layout();
 
   // Not confirmed: nothing changes.
