@@ -1,10 +1,10 @@
 {
-  "total": 484,
+  "total": 476,
   "files": {
     "app/components/gf-app.js": 1,
     "app/components/gf-calendar.js": 3,
     "app/components/gf-ign-layers.js": 1,
-    "app/components/gf-lookalikes.js": 7,
+    "app/components/gf-lookalikes.js": 3,
     "app/components/gf-map-obs3d.js": 15,
     "app/components/gf-map-page.js": 3,
     "app/components/gf-map-panel.js": 7,
@@ -18,7 +18,6 @@
     "app/components/gf-scenarios.js": 1,
     "app/components/gf-settings.js": 1,
     "app/components/gf-sheet-map.js": 8,
-    "app/components/gf-status.js": 4,
     "app/components/gf-tabbar.js": 1,
     "app/components/gf-voice-button.js": 6,
     "app/components/gf-web-pane.js": 1,

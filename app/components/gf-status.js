@@ -4,6 +4,7 @@ import { getPlant } from '../core/plants.js';
 import { myRegion, sortStatuses, territoryAt, territoryFor } from '../core/territory.js';
 import { harvestRules, tradeRules } from '../core/regulation.js';
 import { ui } from '../styles/ui.js';
+import { severityStyles } from './ui-kit.js';
 
 /** @typedef {import('../core/territory.js').Status} Status */
 
@@ -37,7 +38,8 @@ export async function statusWarning(plant, point) {
 
 /**
  * Protection / picking regulation / Red List of a plant, for the territory where it is (a place's point,
- * else "Ma région"). Source: INPN, Base de connaissance Statuts. Renders nothing for plants without status.
+ * else "Ma région"). Source: INPN, Base de connaissance Statuts. Renders nothing for plants without status. A
+ * protection here is in the danger box, a picking rule in the warning's (ui-kit.js .sev-box), as the verdict says them.
  */
 export class GfStatus extends LitElement {
   static properties = {
@@ -57,19 +59,11 @@ export class GfStatus extends LitElement {
     this.toggleAttribute('loading', this._territory === undefined);
   }
 
-  static styles = [ui, css`
+  static styles = [ui, severityStyles, css`
     :host { display: block; }
     .box { display: grid; gap: 6px; }
-    .alert {
-      border-radius: var(--gf-radius);
-      padding: 8px 12px;
-      font-size: 0.9rem;
-      line-height: 1.35;
-      border: 1px solid;
-    }
+    .alert { font-size: 0.9rem; line-height: 1.35; }
     .alert strong { display: block; }
-    .protected { background: color-mix(in srgb, #dc2626 12%, var(--gf-surface)); border-color: #dc2626; }
-    .regulated { background: color-mix(in srgb, #f59e0b 16%, var(--gf-surface)); border-color: #d97706; }
     .info { font-size: 0.85rem; color: var(--gf-text); }
     .muted { color: var(--gf-text-muted); font-size: 0.8rem; }
     ul { margin: 4px 0 0; padding-left: 18px; }
@@ -148,18 +142,18 @@ export class GfStatus extends LitElement {
     return html`
       <div class="box">
         ${protections.length ? html`
-          <div class="alert protected" role="alert">
+          <div class="alert sev-box danger" role="alert">
             <strong>Espèce protégée${place ? ' ici' : ''}</strong>
             ${protections.map(s => html`<div>${LEVEL[s.type]} (${this.#where(s)})${s.label && s.label !== LEVEL[s.type] ? html`<small> — ${s.label}</small>` : nothing}</div>`)}
             <div class="muted">Ne la cueillez pas sans avoir vérifié ce que permet le texte officiel.</div>
           </div>` : nothing}
         ${rules.length ? html`
-          <div class="alert regulated" role="alert">
+          <div class="alert sev-box warn" role="alert">
             <strong>Cueillette réglementée${place ? ' ici' : ''}</strong>
             ${rules.map(s => html`<div>${s.area} — ${s.label}</div>`)}
           </div>` : nothing}
         ${nationalRules.length ? html`
-          <div class="alert regulated">
+          <div class="alert sev-box warn">
             <strong>${nationalRules.some(s => s.code !== 'PV1') ? 'Cueillette réglementée en France métropolitaine' : 'Cueillette pouvant être réglementée par arrêté préfectoral'}</strong>
             ${nationalRules.map(s => html`<div>${s.area} — ${s.label}</div>`)}
             ${nationalRules.every(s => s.code === 'PV1') ? html`<div class="muted">Un arrêté du préfet peut en limiter ou en interdire la cueillette dans un département : renseignez-vous avant de cueillir.</div>` : nothing}
