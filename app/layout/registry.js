@@ -277,7 +277,7 @@ export const FRAME_OF = {
  * What touching a plant does in a cell that honours toucher (a result, a card, a link in a sheet): it becomes the
  * current plant (`plante`), its sheet opens (`fiche`: the layout left, as a link would), or nothing; a cell that does
  * not change the current plant (ecrit=0) opens the sheet instead of choosing. A deck's card under `plante` excepted:
- * the deck chooses by its swipes, a touch (↑, « ⋯ ») does nothing there (cells.js DlDeck#touch). null: the cell has no
+ * the deck chooses by its swipes, a touch (↑, « ⋯ ») does nothing there (deck-cell.js DlDeck#touch). null: the cell has no
  * say (the map has its own). @param {Resolved} r @returns {'plante' | 'fiche' | 'rien' | null}
  */
 export function touchOf(r) {

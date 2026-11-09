@@ -246,8 +246,10 @@ app/
     router.js            routes par hash : #/, #/plant/:id, #/map, #/collection/:id, #/collection/new, #/settings, #/app/:id/:étape?p=&v=&m=&fiche=, #/layout/<disposition>[?…&edit=1]
     split-grip.js        poignée entre deux parts d'un partage (arbre des panneaux de la fiche, écrans sur mesure)
   layout/                « Écran sur mesure » : grammar.js (la grammaire), registry.js (les composants), state.js (l'état partagé),
-                         cells.js (chaque composant branché), gf-layout.js (l'écran, son accueil, sa modification), sizes.js,
-                         models.js (grilles et modèles), screens.js et screen-list.js (Mes écrans)
+                         cells.js (chaque composant branché ; la carte et le paquet à part : map-cell.js, deck-cell.js ; ce
+                         qu'ils partagent — l'état suivi, la zone en mots, sa ligne, son curseur : cell-kit.js), gf-layout.js
+                         (l'écran, son accueil, sa modification), sizes.js, models.js (grilles et modèles), screens.js et
+                         screen-list.js (Mes écrans)
   workers/
     search.worker.js     recherche, filtres à facettes, tri, abréviations, fautes de frappe ; téléchargement, vérification et
                          enregistrement de la flore (hors du fil de la page)

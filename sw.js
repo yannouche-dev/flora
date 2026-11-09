@@ -74,6 +74,7 @@ const SHELL = [
   'app/layout/cells.js',
   'app/layout/cell-kit.js',
   'app/layout/map-cell.js',
+  'app/layout/deck-cell.js',
   'app/layout/obs-filters.js',
   'app/layout/sizes.js',
   'app/layout/models.js',

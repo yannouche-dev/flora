@@ -1,5 +1,5 @@
 // The swipe core (app/miniapp/kit/swipes.js), the same for the activities' decks (kit/session.js) and a screen's
-// (layout/cells.js): one write per swipe; the toxic side never a match nor a favourite, nothing of its host merged
+// (layout/deck-cell.js): one write per swipe; the toxic side never a match nor a favourite, nothing of its host merged
 // into it; a card decided once; each ↺ taking back its own heart's favourite, one plant's favourite operations in
 // their order (↺ then ♥ before the write, or while the forget is on its way: added again, after it); « Retirer »;
 // « Revoir les plantes passées »; the heart flying off; the hint once; the current plant on top; one `change` per

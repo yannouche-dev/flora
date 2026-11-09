@@ -1,6 +1,6 @@
 // @ts-check
 // The swipe core of a deck of cards (kit/ma-deck.js), one for every deck that keeps its swipes: the activities around
-// a place (kit/session.js: Rencontres, Cueillette prudente, Mosaïque) and a screen's `deck` cell (layout/cells.js) —
+// a place (kit/session.js: Rencontres, Cueillette prudente, Mosaïque) and a screen's `deck` cell (layout/deck-cell.js) —
 // not Flore's swipe deck (gf-flora.js: no match, no ↺) nor Faux amis (its own answers and score). What it keeps: the
 // cards passed and matched (Cueillette prudente: its toxic look-alikes recognised, to avoid — never a match nor a
 // favourite), each swipe one write to its host's store; ↺, the last swipes, each taking back its own heart's favourite
