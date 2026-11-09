@@ -1,5 +1,5 @@
 {
-  "total": 476,
+  "total": 470,
   "files": {
     "app/components/gf-app.js": 1,
     "app/components/gf-calendar.js": 3,
@@ -21,7 +21,7 @@
     "app/components/gf-tabbar.js": 1,
     "app/components/gf-voice-button.js": 6,
     "app/components/gf-web-pane.js": 1,
-    "app/components/sheet-styles.js": 28,
+    "app/components/sheet-styles.js": 22,
     "app/components/ui-kit.js": 4,
     "app/core/charts.js": 34,
     "app/core/dock-drag.js": 2,
