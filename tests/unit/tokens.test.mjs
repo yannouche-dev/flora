@@ -82,7 +82,7 @@ test('le pouce d’un curseur : son anneau de focus (--gf-focus) sous Chrome com
   for (const [file, text] of await sources()) {
     const css = text.replace(/\/\*[\s\S]*?\*\//g, '');
     // One rule each: a selector list naming a pseudo-element the browser does not know is dropped whole.
-    for (const m of css.matchAll(/([^{}]+?):focus-visible::-webkit-slider-thumb\s*\{/g)) {
+    for (const m of css.matchAll(/([^{};`]+?):focus-visible::-webkit-slider-thumb\s*\{/g)) {
       const twin = `${m[1].trim()}:focus-visible::-moz-range-thumb`;
       sliders.push(`${file} ${m[1].trim()}`);
       if (!css.includes(twin)) missing.push(`${file}: ${twin}`);

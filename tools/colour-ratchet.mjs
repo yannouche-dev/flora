@@ -47,11 +47,12 @@ const NAMED = ('aliceblue antiquewhite aqua aquamarine azure beige bisque black 
   + 'rosybrown royalblue saddlebrown salmon sandybrown seagreen seashell sienna silver skyblue slateblue slategray slategrey snow '
   + 'springgreen steelblue tan teal thistle tomato turquoise violet wheat white whitesmoke yellow yellowgreen').split(' ');
 
-const HEX = String.raw`(?<![\w&#.-])#(?:[\da-f]{8}|[\da-f]{6}|[\da-f]{3,4})(?![\w-])`;
+// Word boundaries of any script (\p{L}: « Orchidées », « redémarrer », « #café » are words, not colours).
+const HEX = String.raw`(?<![\p{L}\p{N}_&#.-])#(?:[\da-f]{8}|[\da-f]{6}|[\da-f]{3,4})(?![\p{L}\p{N}_-])`;
 const FUNCTION = String.raw`(?<![\w-])(?:rgba?|hsla?|hwb|lab|lch|oklab|oklch|color)\(`;
-const NAME = String.raw`(?<![\w.#-])(?:${NAMED.join('|')})(?![\w(-])`;
-const IN_CODE = new RegExp(`${HEX}|${FUNCTION}`, 'gi');
-const IN_CSS = new RegExp(`${HEX}|${FUNCTION}|${NAME}`, 'gi');
+const NAME = String.raw`(?<![\p{L}\p{N}_.#-])(?:${NAMED.join('|')})(?![\p{L}\p{N}_(-])`;
+const IN_CODE = new RegExp(`${HEX}|${FUNCTION}`, 'giu');
+const IN_CSS = new RegExp(`${HEX}|${FUNCTION}|${NAME}`, 'giu');
 
 /** A colour function's whole text, from its name to its closing parenthesis (for the report). */
 function whole(/** @type {string} */ text, /** @type {number} */ at, /** @type {string} */ match) {
@@ -97,7 +98,14 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   const now = appColours();
   /** @type {{ total: number, files: Record<string, number> } | null} */
   let baseline = null;
-  try { baseline = JSON.parse(readFileSync(BASELINE, 'utf8')); } catch { /* none yet */ }
+  try { baseline = JSON.parse(readFileSync(BASELINE, 'utf8')); } catch (error) {
+    // None yet: --update writes it. Unreadable (a merge's conflict markers): never taken for none, which --update would
+    // rewrite with no ceiling.
+    if (/** @type {NodeJS.ErrnoException} */ (error).code !== 'ENOENT') {
+      console.log(`::error file=tools/colour-baseline.json::not valid JSON (${/** @type {Error} */ (error).message}): resolve it by hand`);
+      process.exit(1);
+    }
+  }
   const allowed = (/** @type {string} */ file) => baseline?.files?.[file] ?? 0;
   const count = (/** @type {string} */ file) => now.get(file)?.length ?? 0;
   const colours = (/** @type {number} */ n) => `${n} literal colour${n === 1 ? '' : 's'}`;
@@ -115,6 +123,12 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   }
   if (!baseline) {
     console.log('::error::no tools/colour-baseline.json: write it with node tools/colour-ratchet.mjs --update');
+    process.exit(1);
+  }
+  // Its total, the sum of its files (one raised by hand raises it too).
+  const sum = Object.values(baseline.files || {}).reduce((a, n) => a + n, 0);
+  if (baseline.total !== sum) {
+    console.log(`::error file=tools/colour-baseline.json::its total says ${baseline.total}, its files add up to ${sum}: write ${sum}`);
     process.exit(1);
   }
   for (const f of over) {

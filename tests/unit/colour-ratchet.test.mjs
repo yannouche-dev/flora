@@ -22,6 +22,6 @@ test('cliquet des couleurs : une couleur écrite en dur, dans les chaînes et le
 });
 
 test('cliquet des couleurs : un fichier .css sans ses commentaires, ses couleurs nommées comprises', () => {
-  const css = '/* #fff, red */\na { color: #FFF; fill: Red; }\n.orchid, .tan { rotate: tan(1deg); background: hsl(120 50% 50%); }';
+  const css = '/* #fff, red */\na { color: #FFF; fill: Red; }\n.orchid, .tan { rotate: tan(1deg); background: hsl(120 50% 50%); }\n.x::after { content: "Orchidées · redémarrer · #café"; }';
   assert.deepEqual(found(css, 'app/x.css'), ['2 #FFF', '2 Red', '3 hsl(120 50% 50%)']);
 });
