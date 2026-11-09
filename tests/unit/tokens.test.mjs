@@ -6,7 +6,9 @@
 //    properties inherit), so a fallback `var(--gf-x, #2e7d32)` is never used — a second colour, kept in step for
 //    nothing; every --gf- name read is defined somewhere (tokens.css, or set by the code: --gf-tilt, --gf-credits…);
 //  - a corner rounded like a token is written with it (--gf-radius-sm 8px, --gf-radius 10px, --gf-radius-lg 16px,
-//    --gf-radius-pill).
+//    --gf-radius-pill);
+//  - a slider's thumb shows the focus ring in Chrome and in Firefox alike; a text for screen readers only
+//    (clip-path: inset(50%)) stays on one line.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile, readdir } from 'node:fs/promises';
@@ -73,4 +75,32 @@ test('un rayon égal à un jeton s’écrit par le jeton (--gf-radius-sm, --gf-r
     }
   }
   assert.deepEqual(found, []);
+});
+
+test('le pouce d’un curseur : son anneau de focus (--gf-focus) sous Chrome comme sous Firefox', async () => {
+  const sliders = [], missing = [];
+  for (const [file, text] of await sources()) {
+    const css = text.replace(/\/\*[\s\S]*?\*\//g, '');
+    // One rule each: a selector list naming a pseudo-element the browser does not know is dropped whole.
+    for (const m of css.matchAll(/([^{}]+?):focus-visible::-webkit-slider-thumb\s*\{/g)) {
+      const twin = `${m[1].trim()}:focus-visible::-moz-range-thumb`;
+      sliders.push(`${file} ${m[1].trim()}`);
+      if (!css.includes(twin)) missing.push(`${file}: ${twin}`);
+    }
+  }
+  assert.ok(sliders.length >= 2, sliders.join(', '));
+  assert.deepEqual(missing, []);
+});
+
+test('un texte pour les lecteurs d’écran seulement (clip-path: inset(50%)) tient sur une ligne : white-space: nowrap', async () => {
+  const recipes = [], wrapping = [];
+  for (const [file, text] of await sources()) {
+    // A rule's declarations, or a style string (core/toast.js): what holds clip-path: inset(50%).
+    for (const m of text.matchAll(/[{'"`][^{}'"`]*clip-path:\s*inset\(50%\)[^{}'"`]*/g)) {
+      recipes.push(file);
+      if (!/white-space:\s*nowrap/.test(m[0])) wrapping.push(`${file}:${lineOf(text, m.index)}`);
+    }
+  }
+  assert.ok(recipes.length >= 7, recipes.join(', '));
+  assert.deepEqual(wrapping, []);
 });

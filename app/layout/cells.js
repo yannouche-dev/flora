@@ -320,7 +320,7 @@ export class DlMap extends LitElement {
     .base.plan span { background: rgb(255 255 255 / 70%); }
     :host([ctl-compact]) .round { width: 28px; height: 28px; }
     :host([ctl-compact]) .base { width: 36px; height: 36px; }
-    :host([ctl-compact]) .base span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+    :host([ctl-compact]) .base span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
     /* The current plant: its photo, its name (its sheet ↗), « Seule », ✕. */
     .chip { display: flex; align-items: center; gap: 2px; max-width: 100%; padding: 3px; border-radius: var(--gf-radius-pill); background: color-mix(in srgb, var(--gf-surface) 96%, transparent);
       box-shadow: var(--gf-shadow); font-size: 0.82rem; }

@@ -827,7 +827,6 @@ export const sheetStyles = [ui, severityStyles, css`
       color: var(--gf-text); font: inherit; font-size: 0.85rem; text-align: left; cursor: pointer; }
     .move-menu button:hover:not(:disabled), .move-menu button:focus-visible { background: var(--gf-accent-soft); outline: none; }
     .move-menu button:disabled { opacity: 0.45; cursor: default; }
-    .said { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
     /* King: the blocks to add, as chips to drag. */
     .palette { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 0 0 10px; padding: 8px 10px; border: 1px dashed var(--gf-border); border-radius: var(--gf-radius); }
     .palette .pal-title { font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--gf-text-muted); display: inline-flex; gap: 4px; align-items: center; }
