@@ -4,7 +4,9 @@
 //  - a token of tokens.css read without a fallback: it is defined on :root, for both themes (the dark one only
 //    changes values), in the app's one page (index.html links tokens.css first) and in every shadow root (custom
 //    properties inherit), so a fallback `var(--gf-x, #2e7d32)` is never used — a second colour, kept in step for
-//    nothing; every --gf- name read is defined somewhere (tokens.css, or set by the code: --gf-tilt, --gf-credits…).
+//    nothing; every --gf- name read is defined somewhere (tokens.css, or set by the code: --gf-tilt, --gf-credits…);
+//  - a corner rounded like a token is written with it (--gf-radius-sm 8px, --gf-radius 10px, --gf-radius-lg 16px,
+//    --gf-radius-pill).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile, readdir } from 'node:fs/promises';
@@ -57,4 +59,18 @@ test('un jeton de tokens.css se lit sans repli (toujours défini) ; un nom --gf-
   }
   assert.deepEqual(fallbacks, []);
   assert.deepEqual([...undefinedNames], []);
+});
+
+test('un rayon égal à un jeton s’écrit par le jeton (--gf-radius-sm, --gf-radius, --gf-radius-lg, --gf-radius-pill)', async () => {
+  const { light } = await tokens();
+  const radii = new Map([...light].filter(([name]) => name.startsWith('--gf-radius')).map(([name, value]) => [value, name]));
+  assert.deepEqual([...radii.keys()].sort(), ['10px', '16px', '8px', '999px']);
+  const found = [];
+  for (const [file, text] of await sources()) {
+    for (const m of text.matchAll(/border(?:-(?:top|bottom)-(?:left|right))?-radius\s*:\s*([^;{}'"`]+)/g)) {
+      const literal = m[1].split(/\s+/).find(v => radii.has(v));
+      if (literal) found.push(`${file}:${lineOf(text, m.index)} ${literal} → var(${radii.get(literal)})`);
+    }
+  }
+  assert.deepEqual(found, []);
 });

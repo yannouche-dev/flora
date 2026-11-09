@@ -55,7 +55,7 @@ export class MaWalkSearch extends LitElement {
      * bottom, and stays so when it grows or shrinks (the keyboard).
      */
     .sheet { grid-area: 1 / 1 / 4 / 2; z-index: 4; min-height: 0; overflow-y: auto; overscroll-behavior: contain; display: flex; flex-direction: column; gap: 6px;
-      padding: 10px 12px 12px; background: var(--gf-bg); border-radius: 16px 16px 0 0; box-shadow: 0 -10px 28px rgb(0 0 0 / 16%);
+      padding: 10px 12px 12px; background: var(--gf-bg); border-radius: var(--gf-radius-lg) var(--gf-radius-lg) 0 0; box-shadow: 0 -10px 28px rgb(0 0 0 / 16%);
       transform: translateY(calc(100% + 24px)); visibility: hidden; transition: transform 0.26s cubic-bezier(0.3, 0.7, 0.4, 1), visibility 0s linear 0.26s; }
     .sheet.open { transform: none; visibility: visible; transition: transform 0.26s cubic-bezier(0.2, 0.8, 0.3, 1), visibility 0s; }
     .sheet > :first-child { margin-top: auto; }
@@ -81,7 +81,7 @@ export class MaWalkSearch extends LitElement {
     .search .tools { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); display: flex; gap: 2px; align-items: center; }
     .hits { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
     .hit { display: grid; grid-template-columns: 52px minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 6px; border-radius: 14px; background: var(--gf-surface); box-shadow: var(--gf-shadow); }
-    .th { width: 52px; height: 52px; border-radius: 10px; overflow: hidden; background: var(--gf-surface-2); display: grid; place-items: center; color: var(--gf-text-muted); }
+    .th { width: 52px; height: 52px; border-radius: var(--gf-radius); overflow: hidden; background: var(--gf-surface-2); display: grid; place-items: center; color: var(--gf-text-muted); }
     .th img { width: 100%; height: 100%; object-fit: cover; display: block; }
     .hit .t { display: grid; min-width: 0; line-height: 1.25; }
     .hit .t b { font-size: 1rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

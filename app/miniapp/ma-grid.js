@@ -51,7 +51,7 @@ export class MaGrid extends LitElement {
     .cell.sheet { position: absolute; inset: 0; z-index: 20; grid-area: auto; }
     .sheet-bar { flex: none; display: flex; align-items: center; min-height: 44px; padding: 0 8px; border-bottom: 1px solid var(--gf-border); }
     .strip { align-self: start; z-index: 2; display: flex; gap: 2px; height: 40px; padding: 4px 6px 0; border-bottom: 1px solid var(--gf-border); background: var(--gf-surface); overflow-x: auto; }
-    .strip button { min-height: 0; padding: 4px 12px; border: 0; border-radius: 8px 8px 0 0; background: none; box-shadow: none; font-size: 0.85rem; }
+    .strip button { min-height: 0; padding: 4px 12px; border: 0; border-radius: var(--gf-radius-sm) var(--gf-radius-sm) 0 0; background: none; box-shadow: none; font-size: 0.85rem; }
     .strip button[aria-selected='true'] { background: var(--gf-accent-soft); color: var(--gf-accent); font-weight: 700; }
     .fresh { display: inline-block; width: 7px; height: 7px; margin-left: 6px; border-radius: 50%; background: var(--gf-accent); }
     .grid { position: relative; }

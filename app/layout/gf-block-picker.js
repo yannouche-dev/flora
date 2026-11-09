@@ -86,7 +86,7 @@ export class GfBlockPicker extends LitElement {
       box-shadow: var(--gf-shadow-float); }
     @media (max-width: 699px) {
       :host { top: auto; left: 0; width: auto; max-height: min(85vh, 100vh - var(--picker-top, 0px) - var(--picker-bottom, 0px)); }
-      .panel { border-left: 0; border-top: 1px solid var(--gf-border); border-radius: 16px 16px 0 0; }
+      .panel { border-left: 0; border-top: 1px solid var(--gf-border); border-radius: var(--gf-radius-lg) var(--gf-radius-lg) 0 0; }
       .panel::before { content: ''; align-self: center; width: 40px; height: 4px; margin-top: 6px; border-radius: 2px; background: var(--gf-border); }
     }
     header { flex: none; display: flex; align-items: center; gap: 4px; padding: 6px 6px 0; min-width: 0; }

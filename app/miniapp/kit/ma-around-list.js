@@ -134,7 +134,7 @@ export class MaAroundList extends LitElement {
     /* Mosaïque. */
     .bloom-only { display: flex; gap: 6px; align-items: center; justify-content: center; margin: 0 0 10px; font-size: 0.9rem; }
     .grid.mosaic { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); grid-auto-flow: dense; gap: 6px; }
-    .grid.mosaic .card { border-radius: 10px; }
+    .grid.mosaic .card { border-radius: var(--gf-radius); }
     .grid.mosaic .card:nth-child(5n + 1) { grid-column: span 2; grid-row: span 2; }
     .grid.mosaic .card .ph { aspect-ratio: 1; height: 100%; }
     .grid.mosaic .card .txt { position: absolute; left: 0; right: 0; bottom: 0; padding: 18px 8px 6px; background: linear-gradient(transparent, rgb(0 0 0 / 70%)); color: #fff; }

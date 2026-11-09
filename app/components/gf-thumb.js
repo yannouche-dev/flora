@@ -25,7 +25,7 @@ export class GfThumb extends LitElement {
       flex: none;
       width: var(--size);
       height: var(--size);
-      border-radius: 8px;
+      border-radius: var(--gf-radius-sm);
       overflow: hidden;
       background: var(--gf-surface-2);
       vertical-align: middle;

@@ -115,7 +115,7 @@ export class MaAroundMap extends LitElement {
     .g-launch .faces { display: flex; flex: none; }
     .g-launch .faces img { width: 32px; height: 32px; border-radius: 50%; object-fit: cover; border: 2px solid var(--gf-surface); margin-left: -8px; background: var(--gf-surface-2); }
     .g-launch .faces img:first-child { margin-left: 0; }
-    .g-launch .go { min-height: 54px; display: grid; justify-items: center; gap: 0; font-size: 1.08rem; padding: 8px 16px; border-radius: 16px; }
+    .g-launch .go { min-height: 54px; display: grid; justify-items: center; gap: 0; font-size: 1.08rem; padding: 8px 16px; border-radius: var(--gf-radius-lg); }
     .g-launch .go .bi { display: none; }
     .g-launch .go small { font-size: 0.75rem; font-weight: 400; opacity: 0.85; }
     /* After a match: where else it grows — the zones, the one shown in green (the colour of its outline on the map). */
@@ -135,7 +135,7 @@ export class MaAroundMap extends LitElement {
     .around li button { width: 100%; display: grid; grid-template-columns: 44px 1fr; gap: 8px; align-items: center; padding: 5px 6px; border: 0; border-radius: var(--gf-radius-sm); background: none; font: inherit; text-align: left; cursor: pointer; color: var(--gf-text); }
     .around li button:hover { background: var(--gf-surface-2); }
     .around li button[aria-current='true'] { background: var(--gf-accent-soft); }
-    .around .th { width: 44px; height: 44px; border-radius: 8px; overflow: hidden; background: var(--gf-surface-2); }
+    .around .th { width: 44px; height: 44px; border-radius: var(--gf-radius-sm); overflow: hidden; background: var(--gf-surface-2); }
     .around .th img { width: 100%; height: 100%; object-fit: cover; display: block; }
     .around .t { display: grid; min-width: 0; line-height: 1.2; }
     .around .t b { font-size: 0.86rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

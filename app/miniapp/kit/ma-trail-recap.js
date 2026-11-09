@@ -37,7 +37,7 @@ export class MaTrailRecap extends LitElement {
     .start .art > .recap { display: grid; gap: 10px; }
     .start .art:has(> .recap) { width: min(100%, 420px); }
     @media (max-height: 500px) and (min-aspect-ratio: 3/2) { .start .art > .recap .recap-map { height: 160px; } }
-    .recap-map { position: relative; height: clamp(140px, 26dvh, 240px); border-radius: 16px; overflow: hidden; box-shadow: var(--gf-shadow); }
+    .recap-map { position: relative; height: clamp(140px, 26dvh, 240px); border-radius: var(--gf-radius-lg); overflow: hidden; box-shadow: var(--gf-shadow); }
     .recap-map gf-map { position: absolute; inset: 0; display: block; }
     /* « Vue 3D », over the recap's map (above Leaflet's panes and controls). */
     .recap-map .map3d { position: absolute; top: 8px; left: 8px; z-index: 1000; min-height: 44px; padding: 0 14px; gap: 6px; border-radius: var(--gf-radius-pill);

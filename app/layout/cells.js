@@ -308,7 +308,7 @@ export class DlMap extends LitElement {
       background: color-mix(in srgb, var(--gf-surface) 85%, transparent); box-shadow: 0 1px 3px rgb(0 0 0 / 14%); }
     .round[aria-pressed='true'] { background: var(--gf-accent); color: var(--gf-accent-contrast); }
     /* The other background's thumbnail: its look drawn (no tile asked), its name under it. */
-    .base { width: 48px; height: 48px; padding: 0; border-radius: 10px; overflow: hidden; display: grid; align-items: end; border: 2px solid #fff;
+    .base { width: 48px; height: 48px; padding: 0; border-radius: var(--gf-radius); overflow: hidden; display: grid; align-items: end; border: 2px solid #fff;
       box-shadow: 0 1px 4px rgb(0 0 0 / 30%); font-size: 0.68rem; font-weight: 700; color: #fff; text-shadow: 0 1px 2px rgb(0 0 0 / 70%); }
     .base.photo { background: radial-gradient(circle at 30% 30%, #7f9b55 0 18%, transparent 19%), radial-gradient(circle at 70% 65%, #4f6d33 0 22%, transparent 23%),
       linear-gradient(135deg, #5d7a3e, #8a8f5a 55%, #3e5a2c); }

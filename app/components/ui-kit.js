@@ -27,7 +27,7 @@ export const sheetStyles = css`
 
 /** A modal question (<dialog class="ask">): its box, its title, its text, its row of buttons at the end. */
 export const askStyles = css`
-  dialog.ask { width: min(440px, calc(100vw - 24px)); padding: 20px; border: 0; border-radius: 16px; background: var(--gf-surface); color: var(--gf-text); box-shadow: var(--gf-shadow-float); }
+  dialog.ask { width: min(440px, calc(100vw - 24px)); padding: 20px; border: 0; border-radius: var(--gf-radius-lg); background: var(--gf-surface); color: var(--gf-text); box-shadow: var(--gf-shadow-float); }
   dialog.ask::backdrop { background: rgb(0 0 0 / 45%); }
   dialog.ask h2 { margin: 0 0 8px; font-size: 1.15rem; }
   dialog.ask p { margin: 0 0 16px; color: var(--gf-text-muted); }

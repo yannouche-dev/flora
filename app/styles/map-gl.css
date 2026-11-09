@@ -97,7 +97,7 @@ gf-map:not([data-renderer='3d']) .gf-map-buttons button.turn-ref { display: none
 .gf-o3-mk .gf-o3-stack .gf-o3-face.f1 { translate: calc(-50% - 7px) calc(-50% + 3px); rotate: -12deg; }
 .gf-o3-mk .gf-o3-stack .gf-o3-face.f2 { translate: calc(-50% + 7px) calc(-50% + 4px); rotate: 11deg; }
 .gf-o3-mk .gf-o3-stack .gf-o3-face.f1 .pop, .gf-o3-mk .gf-o3-stack .gf-o3-face.f2 .pop { filter: brightness(0.9); }
-.gf-o3-mk .gf-o3-stack .gf-o3-n { position: absolute; left: 6px; top: -22px; min-width: 20px; height: 20px; padding: 0 5px; box-sizing: border-box; border-radius: 10px;
+.gf-o3-mk .gf-o3-stack .gf-o3-n { position: absolute; left: 6px; top: -22px; min-width: 20px; height: 20px; padding: 0 5px; box-sizing: border-box; border-radius: var(--gf-radius-pill);
   background: #2f6b3a; color: #fff; font: 700 11px/20px system-ui, sans-serif; text-align: center; box-shadow: 0 0 0 2px #fff, 0 1px 3px rgb(0 0 0 / 40%); }
 .gf-map-gl.gf-o3-loading .gf-o3-mk .gf-o3-head { opacity: 0.55; filter: saturate(0.4); }
 
