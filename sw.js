@@ -242,6 +242,7 @@ const SHELL = [
   'app/components/gf-pager.js',
   'app/components/gf-place-insights.js',
   'app/components/sheet-base.js',
+  'app/components/sheet-styles.js',
   'app/components/gf-plant-detail.js',
   'app/components/gf-plant-list.js',
   'app/components/gf-plant-pick-list.js',

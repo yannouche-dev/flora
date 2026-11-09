@@ -254,7 +254,7 @@ app/
   components/            gf-app, gf-search-bar, gf-results-bar, gf-active-filters,
                          gf-filter-panel, gf-facet, gf-plant-list (virtualisée),
                          gf-plant-card, gf-plant-detail (la fiche ; sheet-base.js, ce qu'elle partage avec gf-sheet-block, un
-                         bloc seul), gf-attribution, gf-settings,
+                         bloc seul ; sheet-styles.js, leur allure), gf-attribution, gf-settings,
                          gf-map (Leaflet en 2D, MapLibre en 3D : gf-map-gl), gf-map-panel (le panneau ▦) et gf-map-options
                          (ses options, aussi dans Réglages › Cartes : gf-layer-stack, les couches affichées ; gf-ign-layers, le
                          catalogue de l'IGN), gf-map3d (dialogue Vue 3D), gf-map-page, gf-spot-editor, gf-plant-spots,

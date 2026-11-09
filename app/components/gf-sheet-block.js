@@ -23,7 +23,8 @@ import { html, css, nothing } from 'lit';
 import { href } from '../core/router.js';
 import { icon } from '../core/icons.js';
 import { aloneNote, blockStyle, blockTitle, hidesEmpty, isMap, isTitleShown } from '../core/sheet-blocks.js';
-import { SheetBase, sheetStyles } from './sheet-base.js';
+import { SheetBase } from './sheet-base.js';
+import { sheetStyles } from './sheet-styles.js';
 import { photosOffLine } from './ui-kit.js';
 
 export class GfSheetBlock extends SheetBase {
