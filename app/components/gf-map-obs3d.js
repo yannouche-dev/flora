@@ -48,7 +48,7 @@ import { around3dPrefs, cleanAround3d, fitZoom, hexBins, morePhotos, observation
 import { MAJOR_STOPS, STOPS, metres, nearestStop, radiusLabel, radiusWords } from '../core/distance.js';
 import { circlePolygon } from '../core/gl-style.js';
 import { mapSettings } from '../core/map-settings.js';
-import { cachedThumb } from '../core/thumb.js';
+import { cachedCredit, cachedThumb } from '../core/thumb.js';
 import { icon, iconMarkup } from '../core/icons.js';
 import { hintView, takeHint } from '../core/hints.js';
 import { PHONE_QUERY } from '../core/media.js';
@@ -515,7 +515,7 @@ export class Obs3dLayer {
         const [lon, lat] = pl.coordinates || [];
         if (typeof lon !== 'number' || metres(c, [lon, lat]) > r) continue;
         mine.push({ id: 'm' + pl.key, kind: 'mine', coordinates: [lon, lat], title: pl.label || pl.sci || 'Plante', common: pl.label || null, sci: pl.sci || '',
-          taxonId: null, photo: pl.plantId ? cachedThumb(pl.plantId) || null : null, credit: null, date: null, place: 'Vos lieux', url: null,
+          taxonId: null, photo: pl.plantId ? cachedThumb(pl.plantId) || null : null, credit: pl.plantId ? cachedCredit(pl.plantId) : null, date: null, place: 'Vos lieux', url: null,
           plant: { placeId: pl.placeId, entryId: pl.entryId, plantId: pl.plantId } });
       }
     }
@@ -942,6 +942,7 @@ export class Obs3dLayer {
   state() {
     const by = (/** @type {string} */ k) => this.#points.filter(p => p.kind === k).length, c = this.center;
     const pictured = (/** @type {string} */ k) => this.#points.filter(p => p.kind === k && p.photo).length;
+    const credited = (/** @type {string} */ k) => this.#points.filter(p => p.kind === k && p.photo && p.credit).length;
     return {
       on: this.prefs.on, scope: this.scope, center: this.center, why: this.why, radius: this.#radius, loading: this.#loading,
       // Its own ring on the ground (none around the page's area: the page's is there).
@@ -949,6 +950,7 @@ export class Obs3dLayer {
       sources: { inat: this.prefs.inat, gbif: this.prefs.gbif }, density: this.prefs.density, failed: this.#failed,
       points: this.#points.length, kinds: { inat: by('inat'), gbif: by('gbif'), mine: by('mine') }, totals: this.#totals,
       photos: { inat: pictured('inat'), gbif: pictured('gbif'), mine: pictured('mine') },
+      credited: { inat: credited('inat'), gbif: credited('gbif'), mine: credited('mine') },
       // Each plant's photo and name on its points, by source (one plant, one photo, whatever the source).
       plants: Object.fromEntries(['inat', 'gbif'].map(k => [k, Object.fromEntries(this.#points.filter(p => p.kind === k).map(p => [p.sci, { photo: p.photo, common: p.common }]))])),
       farthest: c ? Math.round(Math.max(0, ...this.#points.map(p => metres(c, p.coordinates)))) : null,
