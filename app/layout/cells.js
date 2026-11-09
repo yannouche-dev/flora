@@ -22,7 +22,7 @@
 //  - deck: Rencontres' cards (miniapp/kit/ma-deck.js) for the plants found in the scope, the one on top the current
 //    plant (one passed, then chosen elsewhere: back in the deck); a heart: a favourite; each choice said aloud, in the
 //    activities' words. On the swipe core (miniapp/kit/swipes.js), its swipes in memory, its favourites without
-//    origin, taken back as left (DeckSession).
+//    origin, taken back as left (deck-cell.js DeckSession).
 // What is done in a cell with its own controls is kept in the layout (`cell-param` {key: value…}, gf-layout.js: the
 // address is the app, sent as it is): a map's 3D, background, layers (their order, IGN's catalogue, their opacity),
 // period, « Seule », legend, binoculars (« Observations autour » in 3D), its points' sources and the current plant's
@@ -30,9 +30,9 @@
 // leading the list's); the search's filters opened; the results as a list or a grid.
 // A link to a plant's sheet anywhere in a cell (a result, a look-alike) makes it the current plant (gf-layout.js, core/embed-links.js).
 // The frame every cell shares (registry.js#FRAME: its head, its actions, its empty state) is gf-layout.js'; its links
-// are honoured here: a plant of its own (plante=: renderCell), the whole flora instead of the zone (results zone=0:
-// DlResults, state.js#wholeOf), a card touched and the swipes (toucher, ecrit=0: DlDeck); the deck tells the layout
-// when it has no cards (`cell-empty`), for a deck that hides meanwhile (vide=masque).
+// are honoured by the cells: a plant of its own (plante=: renderCell), the whole flora instead of the zone (results
+// zone=0: DlResults, state.js#wholeOf), a card touched and the swipes (toucher, ecrit=0: deck-cell.js DlDeck); the
+// deck tells the layout when it has no cards (`cell-empty`), for a deck that hides meanwhile (vide=masque).
 // The map cell (dl-map) is map-cell.js', the deck (dl-deck) deck-cell.js'; the others are here, with renderCell.
 // What the cells share (the state watched, the scope in words, its line and its slider): cell-kit.js.
 
