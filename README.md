@@ -213,6 +213,7 @@ app/
     plants.js            une plante de la flore : son nom (commun, sinon scientifique), sa lecture (null si absente ou illisible), ses mois de floraison
     sheet-blocks.js      la fiche personnalisée : ordre, présence, styles et panneaux de ses blocs, blocs Note (`saveLayout`) — au démarrage
     sheet-notes.js       textes des blocs Note (IndexedDB, déplacés une fois depuis le localStorage)
+    sheet-data.js        ce que les blocs de la fiche lisent des données chargées (pur, sans import) : ses photos, les descriptions, la répartition, les autres noms, les profils d'espèce et les synonymes de GBIF, Trefle ; des noms sans doublons (`dedupNames`) — hors du démarrage
     sheet-layout.js      la fiche personnalisée là où elle touche l'allure des cartes : réglages d'un bloc Carte (`mapConfig`), fichier de mise en page (`exportLayout`, `importLayout`) — hors du démarrage, où reste sheet-blocks.js (les blocs)
     sync.js              entre onglets : BroadcastChannel et événement storage
     prefs.js             le localStorage, lu et écrit ici seulement : clés de config.storageKeys, jamais d'exception, réglages suivis entre onglets (definePref)

@@ -134,6 +134,7 @@ const SHELL = [
   'app/core/sheet-blocks.js',
   'app/core/sheet-layout.js',
   'app/core/sheet-notes.js',
+  'app/core/sheet-data.js',
   'app/core/protected.js',
   'app/core/voice.js',
   'app/core/nearby.js',
