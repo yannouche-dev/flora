@@ -9,7 +9,7 @@
 // here (tiles.mjs), real WebGL for 3D.
 import { test, expect, answerAround } from './fixtures.mjs';
 import { answerTiles } from './tiles.mjs';
-import { layoutOf, screen } from './app.mjs';
+import { closeMapPanel, layoutOf, screen } from './app.mjs';
 
 /** @typedef {import('@playwright/test').Page} Page @typedef {import('@playwright/test').Locator} Locator */
 
@@ -37,15 +37,6 @@ const tileLayers = map => map.evaluate(m => [...m.querySelectorAll('.leaflet-til
   .map(e => ({ cls: e.className, filter: getComputedStyle(e).filter, tiles: e.querySelectorAll('img.leaflet-tile-loaded').length })));
 /** The filter of the most recent photos under a year's: greyed and pale (map.css). */
 const PALE = 'grayscale(1) contrast(0.36) brightness(1.25)';
-
-/**
- * A map's panel ▦ closed, and its step in history gone: closing a dialog goes back a step after a timer (core/history.js
- * openModal), which would undo an address set meanwhile. @param {Page} page @param {Locator} panel
- */
-async function closePanel(page, panel) {
-  await panel.getByRole('button', { name: 'Fermer' }).click();
-  await expect.poll(() => page.evaluate(() => history.state?.gfModal ?? null)).toBe(null);
-}
 
 /** A map's panel ▦, open. @param {Locator} map */
 async function openPanel(map) {
@@ -186,7 +177,7 @@ test('une case de disposition : base=spot,annee=2020 la sienne, gardée de son p
   await panel.getByRole('button', { name: 'Revenir aux réglages communs' }).click();
   await expect.poll(() => layoutOf(page)).toBe('[map(r=1km)]');
   await expect.poll(() => baseOf(map)).toBe('photo');
-  await closePanel(page, panel);
+  await closeMapPanel(panel);
 
   // annee= alone: the photos of that period; the thumbnail of the other background (the plan) writes base=plan, no year.
   seen.length = 0;

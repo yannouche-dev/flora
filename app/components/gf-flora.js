@@ -3,7 +3,7 @@ import { LitElement, html, css, nothing, repeat } from 'lit';
 import { config } from '../config.js';
 import { MediaController, PHONE_QUERY } from '../core/media.js';
 import { activeFilterCount, clearFilters, lastSearchHash } from '../core/query.js';
-import { href } from '../core/router.js';
+import { href, parse } from '../core/router.js';
 import { closeTo, depth, entryValue, modalOpen, openModal, openView, renewBehind, replaceHash, replaceView, sheetMark } from '../core/history.js';
 import { setContext } from '../core/context.js';
 import { StoreController, arrangedMode, closeKing, whenReady } from '../core/store.js';
@@ -577,10 +577,17 @@ export class GfFlora extends LitElement {
     openView(href.plantPane(id, key));
   };
 
-  /** The media viewer moved to another image: the address follows (no new step in history). @param {CustomEvent} e */
+  /**
+   * The media viewer moved to another image: the address follows (no new step in history) — while it is still this
+   * pane's. Gone elsewhere (a link, a tab, Back, ‹ ›), it changes at once and Flore follows it a moment later
+   * (hashchange): the viewer announcing its image meanwhile (a source answering, its settling) would write the pane's
+   * address over it, and that view would never come. @param {CustomEvent} e
+   */
   #mediaIndex = e => {
     const id = this.#plantId;
     if (id === null || !this.#paneInUrl || this.#pane !== 'media') return;
+    const now = parse(location.hash);
+    if (now.name !== 'plant' || now.id !== id || now.pane !== 'media') return;
     const url = href.plantPane(id, 'media', e.detail.index);
     if (location.hash !== url) replaceHash(url);
   };

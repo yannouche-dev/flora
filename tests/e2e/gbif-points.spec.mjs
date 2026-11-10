@@ -11,6 +11,7 @@
 import { test, expect, answerObservations, answerPlantNear, plantId } from './fixtures.mjs';
 import { answerTiles } from './tiles.mjs';
 import { mapSaid, openPanel } from './quiet.mjs';
+import { closeMapPanel } from './app.mjs';
 
 /** @typedef {import('@playwright/test').Page} Page @typedef {import('@playwright/test').Locator} Locator */
 
@@ -18,14 +19,13 @@ import { mapSaid, openPanel } from './quiet.mjs';
 test.use({ launchOptions: { args: ['--enable-unsafe-swiftshader'] } });
 
 /**
- * The map's legend, in its panel « Carte »: `check` runs on it (its lines), then the panel is closed.
+ * The map's legend, in its panel « Carte »: `check` runs on it (its lines), then the panel is closed for good.
  * @param {Locator} map @param {(legend: Locator) => Promise<void>} check
  */
 async function inLegend(map, check) {
   const panel = await openPanel(map);
   await check(panel.locator('.legend.page'));
-  await panel.getByRole('button', { name: 'Fermer', exact: true }).click();
-  await expect(panel).toBeHidden();
+  await closeMapPanel(panel);
 }
 
 /** No point drawn in a source's colour, nor as a coloured bubble, nor as a bare dot (fewer than 40 alone here). */

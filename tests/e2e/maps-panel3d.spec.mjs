@@ -8,6 +8,7 @@
 // (SwiftShader), every tile made here (tiles.mjs).
 import { test, expect, plantId, answerAround } from './fixtures.mjs';
 import { answerTiles } from './tiles.mjs';
+import { closeMapPanel } from './app.mjs';
 
 /** @typedef {import('@playwright/test').Page} Page @typedef {import('@playwright/test').Locator} Locator */
 
@@ -60,7 +61,7 @@ async function switchFromPanel(page, map) {
   await expect(map).toHaveAttribute('data-renderer', '2d');
   await expect(map.locator('canvas.maplibregl-canvas')).toHaveCount(0);
   expect(await stored(page)).toBe('2d');
-  await panel.getByRole('button', { name: 'Fermer' }).click();
+  await closeMapPanel(panel);
 }
 
 /** A place in Clermont-Ferrand with two plants. @param {Page} page @returns {Promise<string>} its id */
@@ -128,7 +129,7 @@ test('fiche plante : sa carte en 3D depuis son panneau ; une carte ajoutée rest
   await expect(choice(panel).getByRole('radio', { name: /^3D/ })).toBeDisabled();
   await expect(choice(panel).getByRole('radio', { name: /^2D/ })).toBeChecked();
   await expect(panel).toContainText('Une seule carte en 3D par fiche plante');
-  await panel.getByRole('button', { name: 'Fermer' }).click();
+  await closeMapPanel(panel);
 
   // The sheet personalised: the map block's form (⚙) keeps its subject, its layers, its framing, its height and its actions; its
   // background, IGN's layers and 2D / 3D are its panel ▦'s — said.

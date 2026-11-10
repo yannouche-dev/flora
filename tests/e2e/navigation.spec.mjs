@@ -1,7 +1,8 @@
 // Navigation: « Fermer la fiche » goes back to the view the sheet was opened from — Flore's list, Mes plantes' list or
 // place — past the plants gone through with ‹ ›, never adding an entry; opened from elsewhere (another tab, a link, the
 // start), the list takes its place. A block's pane closes the same way, onto the plant it was opened from
-// (core/history.js sheetMark, closeTo). On both widths the sheet's head has its × « Fermer la fiche », and Échap closes
+// (core/history.js sheetMark, closeTo); « Médias » left by the address is never written back by the image its viewer
+// announces meanwhile. On both widths the sheet's head has its × « Fermer la fiche », and Échap closes
 // it (Flore: its pane first). « Annuler » goes back, never a step more: a new place's, a dialog's; a share's « Ignorer »
 // too, and a share saved takes the preview's place. The Carte's plant filter is in its address (plants=). One h1 per
 // screen; on a phone, nothing reachable under a sheet.
@@ -146,6 +147,30 @@ test('Flore : un panneau, puis ‹ › ; un panneau après un rechargement', asy
   expect(await entries(page)).toBe(n);
   await page.goBack();
   await expect.poll(() => hash(page)).toBe('#/?family=Rosaceae');
+});
+
+test('Flore : le bloc Médias quitté par l’adresse, au bureau comme au téléphone — l’image qu’il annonce avant que Flore suive n’écrit plus son adresse à la place', async ({ app, page }) => {
+  const ortie = plantId('Urtica dioica');
+  await app.open(`#/plant/${ortie}?pane=media`);
+  const viewer = page.locator(app.phone ? 'gf-flora .sheet-pane gf-media-viewer' : 'gf-flora .block-pane gf-media-viewer');
+  await expect(viewer).toBeAttached();
+  const depth = await depthOf(page);
+  // The address changes at once (a link, a tab, `location.hash =`), Flore follows it a moment later (hashchange); the
+  // viewer announces its image (media-index: a source answering, its 0.9 s settling, a picture lost) whenever it comes —
+  // here in between, as in CI (5.5: Flore's « Médias » still on screen after the activity's address).
+  await viewer.evaluate((v, to) => {
+    location.hash = to;
+    v.dispatchEvent(new CustomEvent('media-index', { detail: { index: 0 }, bubbles: true, composed: true }));
+  }, `#/app/rencontres?p=${ortie}&fiche=1`);
+  // The activity, its own address, one step deeper; Flore gone.
+  await expect.poll(() => hash(page)).toMatch(/^#\/app\/rencontres\//);
+  await expect(page.locator('gf-miniapp')).toBeVisible();
+  await expect(page.locator('gf-flora')).toHaveCount(0);
+  expect(await depthOf(page)).toBe(depth + 1);
+  // Back: Flore's « Médias », as it was left.
+  await page.goBack();
+  await expect.poll(() => hash(page)).toMatch(new RegExp(`^#/plant/${ortie}\\?pane=media(&i=\\d+)?$`));
+  await expect(viewer).toBeAttached();
 });
 
 /** A place with three plants (Mes plantes). @param {Page} page @returns {Promise<string>} its id */
@@ -723,6 +748,9 @@ test('un h1 par écran, au bureau comme au téléphone : Mes plantes avec une fi
   if (app.phone) {
     await app.go(`#/plant/${ortie}?pane=media`);
     await expect.poll(() => h1s(page)).toEqual([expect.stringMatching(/^Médias/)]);
+    // Left by the address: the activity's sheet, its h1 alone — never « Médias » kept (CI, 5.5: gf-flora #mediaIndex).
+    await app.go(`#/app/rencontres?p=${ortie}&fiche=1`);
+    await expect.poll(() => h1s(page)).toEqual(['Ortie dioïque']);
   }
 });
 

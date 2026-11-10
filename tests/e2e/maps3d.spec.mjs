@@ -12,6 +12,7 @@ import { test, expect, plantId, answerAround, answerObservations } from './fixtu
 import { answerTiles } from './tiles.mjs';
 import { mapSaid, mapState } from './quiet.mjs';
 import { longPress } from './touch.mjs';
+import { closeMapPanel } from './app.mjs';
 
 test.use({ launchOptions: { args: ['--enable-unsafe-swiftshader'] } });
 // Software WebGL draws every pixel on the CPU: on the desktop, a smaller window keeps each frame (and the run) short.
@@ -211,7 +212,7 @@ test('en 3D, le panneau « Carte » : les mêmes couches qu’en 2D ; les option
   // The plan: its own names, none over it.
   await panel.getByRole('button', { name: /Plan IGN/ }).click();
   await expect.poll(async () => (await glState(map)).tiles.map((/** @type {any} */ t) => t.key), SLOW).toEqual(['plan', 'contours']);
-  await panel.getByRole('button', { name: 'Fermer' }).click();
+  await closeMapPanel(panel);
 
   // Réglages › Cartes (here as they store them; in another tab the same: core/sync.js): buildings off, sky off, the
   // globe on, the vector plan — each one at once on the map.

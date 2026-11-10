@@ -4,6 +4,8 @@
 // and the flora is the reduced one of tests/fixtures (300 plants), unless a spec asks for the real one.
 //   npm run test:e2e                      starts its own server (python3 -m http.server, 127.0.0.1, port E2E_PORT or 8907)
 //   E2E_BASE_URL=http://127.0.0.1:8000/ npm run test:e2e     against a server already running (an assembled _site)
+//   E2E_PART=webgl npm run test:e2e       the specs that draw in 3D alone (WEBGL below); E2E_PART=rest, all the others
+import { readdirSync, readFileSync } from 'node:fs';
 import { defineConfig } from '@playwright/test';
 
 const PORT = Number(process.env.E2E_PORT || 8907);
@@ -11,10 +13,21 @@ const BASE = process.env.E2E_BASE_URL || `http://127.0.0.1:${PORT}/`;
 const ROOT = new URL('../../', import.meta.url).pathname;
 // Matched against the project's name, the file and the titles: never « phone » (the project's own name).
 const PHONE = /téléphone|mobile|tactile|doigt|étroit|au toucher|touch\.spec/i;
+/**
+ * The specs that draw in 3D: those whose Chromium is launched with software WebGL (SwiftShader: test.use's launch
+ * option '--enable-unsafe-swiftshader'), by far the slowest. CI runs them on a runner of their own (E2E_PART=webgl) and
+ * the others in two halves (E2E_PART=rest, --shard): read here from the specs themselves, so every spec, a new one too,
+ * is in one part and one only.
+ */
+const WEBGL = readdirSync(new URL('.', import.meta.url)).filter(f => f.endsWith('.spec.mjs')
+  && readFileSync(new URL(f, import.meta.url), 'utf8').includes("'--enable-unsafe-swiftshader'"));
+const PART = process.env.E2E_PART;
+if (PART && PART !== 'webgl' && PART !== 'rest') throw new Error(`E2E_PART=${PART}: webgl or rest`);
 
 export default defineConfig({
   testDir: '.',
-  testMatch: '*.spec.mjs',
+  testMatch: PART === 'webgl' ? WEBGL : '*.spec.mjs',
+  testIgnore: PART === 'rest' ? WEBGL : undefined,
   outputDir: '../../test-results',
   timeout: 60_000,
   expect: { timeout: 10_000 },

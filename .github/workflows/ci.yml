@@ -8,7 +8,8 @@ name: CI
 #    load, or a screen left empty: what no build step and no parse check can see (a module that fails to link, a
 #    component that throws when it renders) shows here, not as a blank screen in production;
 #  - « tests »: the unit tests (node --test, tests/unit) and the end-to-end specs (@playwright/test, tests/e2e), these in
-#    two halves side by side (« e2e (1/2) », « e2e (2/2) »).
+#    three parts side by side: the specs that draw in 3D (software WebGL, the slowest) on their own (« e2e (webgl) »),
+#    the others in two halves (« e2e (1/2) », « e2e (2/2) »).
 #  - « a11y »: tools/axe.mjs runs axe-core (WCAG A/AA and best practices) on the main screens, phone and desktop, light
 #    and dark themes, and fails on more violations than tools/axe-baseline.json (light) or tools/axe-baseline-dark.json
 #    (dark) allows, rule by rule: a ratchet, the baselines only go down.
@@ -127,15 +128,21 @@ jobs:
     # The versioned tests (README, « Tests ») : unit tests (node:test, tests/unit) on the pure modules, then the
     # end-to-end specs (@playwright/test, tests/e2e) on a desktop (1280 px) — and on a phone (390 px) those about the
     # phone (tests/e2e/playwright.config.mjs) —, on the reduced flora of tests/fixtures, every outside service answered
-    # by the tests. In two halves on two runners (Playwright's --shard), side by side: « tests » waits for both.
-    name: e2e (${{ matrix.shard }}/2)
+    # by the tests. In three parts on three runners, side by side, of about the same length: the specs that draw in 3D
+    # (software WebGL: E2E_PART=webgl, the config finds them by their launch option), and the others in two halves
+    # (E2E_PART=rest, Playwright's --shard). « tests » waits for the three.
+    name: e2e (${{ matrix.part }})
     runs-on: ubuntu-24.04
-    # Above its end-to-end step's own 25 minutes (a half takes about 12 on a usual runner, the 3D ones the longest).
+    # Above its end-to-end step's own 25 minutes (a part takes 7 to 10 on a usual runner).
     timeout-minutes: 35
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2]
+        # `part` names the job, `specs` and `shard` choose its specs, `traces` names its artifact.
+        include:
+          - { part: webgl, specs: webgl, shard: '', traces: webgl }
+          - { part: 1/2, specs: rest, shard: 1/2, traces: '1' }
+          - { part: 2/2, specs: rest, shard: 2/2, traces: '2' }
 
     steps:
       - name: Checkout
@@ -153,7 +160,7 @@ jobs:
         run: npm ci --ignore-scripts
 
       - name: Unit tests (node --test)
-        if: ${{ matrix.shard == 1 }}
+        if: ${{ matrix.part == '1/2' }}
         run: npm run test:unit
 
       - name: Install Chromium
@@ -163,26 +170,28 @@ jobs:
       - name: End-to-end tests (desktop, and the phone's own)
         timeout-minutes: 25
         env:
+          E2E_PART: ${{ matrix.specs }}
           SHARD: ${{ matrix.shard }}
-        run: npm run test:e2e -- --shard="$SHARD/2"
+        run: |
+          if [ -n "$SHARD" ]; then npm run test:e2e -- --shard="$SHARD"; else npm run test:e2e; fi
 
       # The traces of the tests that failed (a timeline, the DOM and the network at each step).
       - name: Keep the traces of failed tests
         if: ${{ failure() }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: e2e-traces-${{ matrix.shard }}
+          name: e2e-traces-${{ matrix.traces }}
           path: test-results/
           retention-days: 7
 
   tests:
-    # The check a pull request shows (README, « Protéger main »): green only when both halves are.
+    # The check a pull request shows (README, « Protéger main »): green only when the three parts are.
     needs: e2e
     if: ${{ always() }}
     runs-on: ubuntu-24.04
     timeout-minutes: 2
     steps:
-      - name: Both halves green
+      - name: The three parts green
         env:
           RESULT: ${{ needs.e2e.result }}
         run: test "$RESULT" = success
