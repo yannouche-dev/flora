@@ -481,7 +481,8 @@ test('Un onglet touché quand on y est : rien ne change', async ({ app, page }) 
   const id = await seedPlace(page);
   const plant = plantId('Allium ursinum');
   /** @type {[string, string][]} */
-  const tabs = [['Flore', `#/plant/${plant}`], ['Mes plantes', `#/collections?c=${id}&plant=${plant}`], ['Carte', `#/map?spot=${id}`], ['Réglages', '#/settings']];
+  const tabs = [['Flore', `#/plant/${plant}`], ['Mes plantes', `#/collections?c=${id}&plant=${plant}`], ['Carte', `#/map?spot=${id}`], ['Réglages', '#/settings'],
+    ['Réglages', '#/settings?section=modules']];
   for (const [name, route] of tabs) {
     await app.go(route);
     await expect.poll(() => depthOf(page), name).toBe(1);
@@ -540,6 +541,27 @@ test('Un lien vers une section de Réglages y mène, son titre au focus : « Ré
     await expect(heading, id).toBeInViewport({ ratio: 1 });
     await expect(heading, id).toHaveId(id);
   }
+});
+
+test('Réglages › Modules du catalogue de l’IGN, venu par ?section=modules : y mène quand même, son titre au focus', async ({ app, page }) => {
+  test.skip(app.phone, 'the same page on a phone: one width is enough');
+  await app.open('#/settings?section=modules');
+  const settings = page.locator('gf-settings');
+  await expect.poll(() => settings.evaluate(s => s.shadowRoot?.activeElement?.id ?? null)).toBe('modules');
+  await settings.getByRole('checkbox', { name: 'Utilisé sur cet appareil : IGN – fonds de carte' }).uncheck();
+  // Up to Cartes, its IGN catalogue: « Réglages › Modules », the address shown.
+  await settings.evaluate(s => { s.scrollTop += /** @type {HTMLElement} */ (/** @type {ShadowRoot} */ (s.shadowRoot).getElementById('maps')).getBoundingClientRect().top - s.getBoundingClientRect().top; });
+  const browse = settings.locator('gf-ign-layers').getByRole('button', { name: /Parcourir les couches/ });
+  await browse.scrollIntoViewIfNeeded();
+  await browse.click();
+  const link = settings.locator('gf-ign-layers').getByRole('link', { name: 'Réglages › Modules' });
+  await expect(link).toHaveAttribute('href', '#/settings?section=modules');
+  const before = await entries(page);
+  await link.click();
+  // Modules reached, its heading focused near the top — no new entry (the same address).
+  await expect.poll(() => settings.evaluate(s => s.shadowRoot?.activeElement?.id ?? null)).toBe('modules');
+  await expect.poll(() => settings.evaluate(s => Math.round(/** @type {HTMLElement} */ (/** @type {ShadowRoot} */ (s.shadowRoot).getElementById('modules')).getBoundingClientRect().top - s.getBoundingClientRect().top))).toBeLessThan(40);
+  expect(await entries(page)).toBe(before);
 });
 
 test('Une seule recherche : une disposition libre ne change pas celle de Flore', async ({ app, page }) => {

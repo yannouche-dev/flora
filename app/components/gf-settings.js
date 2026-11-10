@@ -135,6 +135,7 @@ export class GfSettings extends LitElement {
     discoverEvents.addEventListener('change', this.#onDiscover);
     notesEvents.addEventListener('change', this.#onNotes);
     screenEvents.addEventListener('change', this.#onScreens);
+    this.addEventListener('click', this.#onClick);
     this.#countSpots();
   }
 
@@ -240,6 +241,22 @@ export class GfSettings extends LitElement {
   }
 
   /**
+   * A link in the page to the section the address already names (« Réglages › Modules » of the IGN catalogue under
+   * Cartes, come by ?section=modules): history.js follows no link to the address shown — reached here, all the same.
+   * @param {MouseEvent} e
+   */
+  #onClick = e => {
+    if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+    const a = /** @type {HTMLAnchorElement | undefined} */ (e.composedPath().find(n => n instanceof HTMLAnchorElement && n.hasAttribute('href')));
+    if (!a || a.target || a.href !== location.href) return;
+    const route = parse(a.hash);
+    if (route.name === 'settings' && route.section) {
+      e.preventDefault();
+      this.#reach(route.section);
+    }
+  };
+
+  /**
    * The section an address named, reached once drawn — « Réglages › Modules » from a sheet, « Réglages › Cartes » from
    * a map's panel ▦, « Réglages › Ma région » from a plant's statuses —: its heading near the top, at once (gliding
    * only when it is near: within the page's height, motion allowed), then focused, so that a screen reader says where
@@ -256,11 +273,14 @@ export class GfSettings extends LitElement {
     const d = heading.getBoundingClientRect().top - this.getBoundingClientRect().top - REACH_MARGIN;
     // A glide of ours still under way: this one glides too (an instant scroll over it would land off by what it had left).
     const glide = this.#gliding || (Math.abs(d) < this.clientHeight && 'onscrollend' in window && !matchMedia('(prefers-reduced-motion: reduce)').matches);
-    if (glide && !this.#gliding) {
+    // Where it can go (the last sections, past the page's end: as far as it scrolls); nothing to scroll, no glide begun.
+    const top = Math.max(0, Math.min(this.scrollTop + d, this.scrollHeight - this.clientHeight));
+    const move = Math.abs(top - this.scrollTop) > 1;
+    if (glide && move && !this.#gliding) {
       this.#gliding = true;
       this.addEventListener('scrollend', () => { this.#gliding = false; }, { once: true });
     }
-    if (Math.abs(d) > 1) this.scrollTo({ top: this.scrollTop + d, behavior: glide ? 'smooth' : 'auto' });
+    if (move) this.scrollTo({ top, behavior: glide ? 'smooth' : 'auto' });
     heading.focus({ preventScroll: true });
   }
 

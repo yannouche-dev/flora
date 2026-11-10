@@ -14,7 +14,9 @@ import { discoverEvents, tabShown } from '../core/discover.js';
 export class GfTabbar extends LitElement {
   static properties = {
     current: {},
-    lit: { attribute: false }
+    lit: { attribute: false },
+    /** Réglages' link (gf-app): on Réglages, the address shown, its section too — a tab touched where it is changes nothing. */
+    settingsHref: { attribute: false }
   };
 
   static styles = css`
@@ -62,6 +64,7 @@ export class GfTabbar extends LitElement {
     this.current = 'flore';
     /** The tabs announced now (gf-app), lit meanwhile. @type {string[]} */
     this.lit = [];
+    this.settingsHref = href.settings();
   }
 
   #onChange = () => this.requestUpdate();
@@ -89,7 +92,7 @@ export class GfTabbar extends LitElement {
         ${tab('flore', tabHref('flore'), 'leaf', 'leaf-fill', 'Flore')}
         ${tab('map', tabHref('map'), 'map', 'map-fill', 'Carte')}
         ${tab('mine', tabHref('mine'), 'collection', 'collection-fill', 'Mes plantes')}
-        ${tab('more', href.settings(), 'gear', 'gear-fill', 'Réglages')}
+        ${tab('more', this.settingsHref, 'gear', 'gear-fill', 'Réglages')}
       </nav>
     `;
   }
