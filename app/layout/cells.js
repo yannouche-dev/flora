@@ -251,13 +251,15 @@ export class DlSearch extends LitElement {
   render() {
     const open = this._filters ?? Boolean(this.params.filters);
     const list = this.params.list !== false;
-    // Its rows compact: its own (compact=, its bar's button), none without its list.
+    // Its rows compact: its own (compact=, its bar's button), none without its list, nor while it shows a grid (wide).
     const compact = Boolean(this.params.compact);
-    return html`<gf-results-bar .wide=${false} count-above .channel=${this.channel} .compact=${list ? compact : null}
+    const grid = Boolean(/** @type {any} */ (this.renderRoot?.querySelector('dl-results'))?.grid);
+    return html`<gf-results-bar .wide=${false} count-above .channel=${this.channel} .compact=${list && !grid ? compact : null}
         @open-filters=${(/** @type {Event} */ e) => { e.stopPropagation(); this._filters = !open; setCell(this, { filters: !open }); }}
         @compact-change=${(/** @type {CustomEvent} */ e) => setCell(this, { compact: e.detail.compact })}></gf-results-bar>
       ${open ? html`<div class="filters" role="region" aria-label="Filtres">${filterPanel(this.state, this.channel)}</div>` : nothing}
-      ${list ? html`<dl-results .state=${this.state} .params=${{ view: 'auto', compact }} .channel=${this.channel} aria-busy=${this.state?.updating ? 'true' : nothing}></dl-results>` : nothing}`;
+      ${list ? html`<dl-results .state=${this.state} .params=${{ view: 'auto', compact }} .channel=${this.channel} aria-busy=${this.state?.updating ? 'true' : nothing}
+        @results-shown=${() => this.requestUpdate()}></dl-results>` : nothing}`;
   }
 }
 customElements.define('dl-search', DlSearch);

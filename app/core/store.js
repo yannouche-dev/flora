@@ -4,7 +4,7 @@
 import { config, emptyFilters } from '../config.js';
 import { moduleEvents, modulesState } from './modules.js';
 import { baseOf, isMode, modeEvents, modeList } from './modes.js';
-import { definePref, readJSON } from './prefs.js';
+import { definePref, readJSON, readText } from './prefs.js';
 import { quotaEvents } from './quota.js';
 import { onStorage } from './sync.js';
 
@@ -158,12 +158,14 @@ harvestPref.events.addEventListener('change', () => { const on = harvestPref.get
 stepsPref.events.addEventListener('change', () => store.set({ showSteps: stepsPref.get() }));
 
 moduleEvents.addEventListener('change', () => store.set({ modules: modulesState() }));
-// A mode made or deleted: the switches list it; a deleted one in use gives way to its model.
+// A mode made or deleted: the switches list it; a deleted one in use gives way to its model — only when what is stored is
+// no mode either: a tab late to hear of it (frozen in the background) never writes over a choice made since in another,
+// whose own event brings it.
 modeEvents.addEventListener('change', () => {
   const { mode, gridView, king } = store.state;
   const fallback = (/** @type {Mode} */ m) => isMode(m) ? m : 'standard';
-  if (!isMode(mode)) setMode(fallback(baseOf(mode)));
-  if (gridView && !isMode(gridView)) setGridView(null);
+  if (!isMode(mode) && !isMode(readText(config.storageKeys.mode))) setMode(fallback(baseOf(mode)));
+  if (gridView && !isMode(gridView) && !isMode(readText(config.storageKeys.gridView))) setGridView(null);
   // The mode arranged on the sheet deleted: the sheet arranges the app's again.
   if (king?.mode && !isMode(king.mode)) store.set({ king: { ...king, mode: null } });
   store.set({ modes: modeList() });

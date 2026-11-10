@@ -144,3 +144,19 @@ test('Ma région et le jeton Trefle : gardés en texte comme avant ; changés da
   assert.deepEqual(heard, [['région', 'FR-BRE'], ['région', null], ['région', 'FR-OCC'], ['jeton', 'jeton-factice'], ['jeton', null],
     ['jeton', 'autre-jeton-factice'], ['jeton', null]]);
 });
+
+test('un mode supprimé dans un autre onglet, puis un autre choisi là-bas : cet onglet, en retard (en arrière-plan), n’écrit rien par-dessus', () => {
+  // A mode made elsewhere, heard of here, in use here.
+  fromAnotherTab(K.modes, JSON.stringify([{ key: 'messai', label: 'Essai', base: 'epure', icon: 'star' }]));
+  S.setMode(/** @type {any} */ ('messai'));
+  assert.equal(S.store.state.mode, 'messai');
+  // The other tab deletes it and picks Épuré; this one hears of « modes » first.
+  localStorage.setItem(K.mode, 'epure');
+  const { written } = fromAnotherTab(K.modes, null);
+  assert.equal(written, 0, 'rien d’écrit par-dessus le choix de l’autre onglet');
+  assert.equal(localStorage.getItem(K.mode), 'epure');
+  // Its own event brings the choice.
+  fromAnotherTab(K.mode, 'epure');
+  assert.equal(S.store.state.mode, 'epure');
+  S.setMode('standard');
+});

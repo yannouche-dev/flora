@@ -129,6 +129,8 @@ export class GfSettings extends LitElement {
   #onScreens = () => this.requestUpdate();
   /** Ma région, the Trefle token: changed here or in another tab. */
   #onSetting = () => this.requestUpdate();
+  /** Ma région changed, here or in another tab: the note of « Utiliser ma position » was about the one before. */
+  #onRegion = () => { this._regionNote = null; this.requestUpdate(); };
 
   connectedCallback() {
     super.connectedCallback();
@@ -136,7 +138,7 @@ export class GfSettings extends LitElement {
     discoverEvents.addEventListener('change', this.#onDiscover);
     notesEvents.addEventListener('change', this.#onNotes);
     screenEvents.addEventListener('change', this.#onScreens);
-    regionEvents.addEventListener('change', this.#onSetting);
+    regionEvents.addEventListener('change', this.#onRegion);
     trefleEvents.addEventListener('change', this.#onSetting);
     this.addEventListener('click', this.#onClick);
     this.#countSpots();
@@ -148,7 +150,7 @@ export class GfSettings extends LitElement {
     discoverEvents.removeEventListener('change', this.#onDiscover);
     notesEvents.removeEventListener('change', this.#onNotes);
     screenEvents.removeEventListener('change', this.#onScreens);
-    regionEvents.removeEventListener('change', this.#onSetting);
+    regionEvents.removeEventListener('change', this.#onRegion);
     trefleEvents.removeEventListener('change', this.#onSetting);
   }
 
