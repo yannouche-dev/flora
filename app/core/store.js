@@ -36,7 +36,7 @@ import { onStorage } from './sync.js';
  *   backup copy put back (done: what it held), or not (error: what the browser said; tried again at the next launch)
  * @property {Query} query
  * @property {Results} results
- * @property {boolean} compact
+ * @property {boolean} compact          Flore's rows without thumbnails, on the whole device (a screen's cells: their own, compact=)
  * @property {Set<number>} favorites    plant ids in the ♥ collection
  * @property {Map<number, { place: string, entry: string }>} placed  plant id → where it was noted first: one of my lieux and that noting (its entry id)
  * @property {Mode} mode                  display mode of the app: épuré (actions, big photos), standard, scientifique
@@ -216,7 +216,7 @@ export function followHarvests(hasHarvests) {
   if (hasHarvests && !harvestModeChosen() && !store.state.harvestMode) store.set({ harvestMode: true });
 }
 
-/** @param {boolean} compact */
+/** Flore's rows without thumbnails, on the whole device (a screen's cell has its own: layout/registry.js compact). @param {boolean} compact */
 export const setCompact = compact => { compactPref.set(compact); };
 
 /** App-wide mode: applies everywhere, so it clears the grid's override (first: the store never has the old one with the new mode). @param {Mode} mode */

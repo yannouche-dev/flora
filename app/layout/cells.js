@@ -27,7 +27,8 @@
 // address is the app, sent as it is): a map's 3D, background, layers (their order, IGN's catalogue, their opacity),
 // period, « Seule », legend, binoculars (« Observations autour » in 3D), its points' sources and the current plant's
 // (« Sur cette carte » of its panel ▦), and its view (vue=: while the screen is modified, any map's; in use, the one
-// leading the list's); the search's filters opened; the results as a list or a grid.
+// leading the list's); the search's filters opened; the results as a list or a grid; their rows compact (compact=, the
+// search's bar's button: the cell's own, never Flore's — the whole device's).
 // A link to a plant's sheet anywhere in a cell (a result, a look-alike) makes it the current plant (gf-layout.js, core/embed-links.js).
 // The frame every cell shares (registry.js#FRAME: its head, its actions, its empty state) is gf-layout.js'; its links
 // are honoured by the cells: a plant of its own (plante=: renderCell), the whole flora instead of the zone (results
@@ -166,7 +167,7 @@ export class DlResults extends LitElement {
     if (this.params.zone === false) {
       const whole = s.whole, answered = whole?.key === s.wholeFor;
       return html`${s.live.at ? html`<div class="scope" role="note">${icon('globe-europe-africa')}<span>Toute la France : cette case ne suit pas la zone.</span></div>` : nothing}
-        <gf-plant-list ?grid=${grid} .current=${s.live.plant} .items=${whole?.items ?? []} .answered=${answered} .channel=${this.channel}
+        <gf-plant-list ?grid=${grid} .compact=${Boolean(this.params.compact)} .current=${s.live.plant} .items=${whole?.items ?? []} .answered=${answered} .channel=${this.channel}
           .lit=${s.hover?.plant ?? null} @plant-hover=${(/** @type {CustomEvent} */ e) => this.#onHover(e)}></gf-plant-list>`;
     }
     const note = s.live.at ? scopeNote(s) : '';
@@ -180,7 +181,7 @@ export class DlResults extends LitElement {
         <button class="link" type="button" @click=${() => s.setScope(null)}>Toute la France</button></div>` : nothing}
       ${zoneOf !== null ? html`<div class="scope view" role="status">${icon('map')}<span>Dans la vue de la carte${pinned} : ${counted(results.total, 'plante')} sur ${zoneOf.toLocaleString('fr-FR')}</span>
         <button class="link" type="button" @click=${() => s.wholeZone()}>Toute la zone</button></div>` : nothing}
-      <gf-plant-list ?grid=${grid} .current=${s.live.plant} .channel=${this.channel} .obs=${this.#obs(s)}
+      <gf-plant-list ?grid=${grid} .compact=${Boolean(this.params.compact)} .current=${s.live.plant} .channel=${this.channel} .obs=${this.#obs(s)}
         .empty=${zoneOf !== null ? 'Rien d’observé dans ce que montre la carte : déplacez-la, ou voyez toute la zone.' : null}
         .lit=${s.hover?.plant ?? null} @plant-hover=${(/** @type {CustomEvent} */ e) => this.#onHover(e)}></gf-plant-list>`;
   }
@@ -250,9 +251,13 @@ export class DlSearch extends LitElement {
   render() {
     const open = this._filters ?? Boolean(this.params.filters);
     const list = this.params.list !== false;
-    return html`<gf-results-bar .wide=${false} count-above .channel=${this.channel} @open-filters=${(/** @type {Event} */ e) => { e.stopPropagation(); this._filters = !open; setCell(this, { filters: !open }); }}></gf-results-bar>
+    // Its rows compact: its own (compact=, its bar's button), none without its list.
+    const compact = Boolean(this.params.compact);
+    return html`<gf-results-bar .wide=${false} count-above .channel=${this.channel} .compact=${list ? compact : null}
+        @open-filters=${(/** @type {Event} */ e) => { e.stopPropagation(); this._filters = !open; setCell(this, { filters: !open }); }}
+        @compact-change=${(/** @type {CustomEvent} */ e) => setCell(this, { compact: e.detail.compact })}></gf-results-bar>
       ${open ? html`<div class="filters" role="region" aria-label="Filtres">${filterPanel(this.state, this.channel)}</div>` : nothing}
-      ${list ? html`<dl-results .state=${this.state} .params=${{ view: 'auto' }} .channel=${this.channel} aria-busy=${this.state?.updating ? 'true' : nothing}></dl-results>` : nothing}`;
+      ${list ? html`<dl-results .state=${this.state} .params=${{ view: 'auto', compact }} .channel=${this.channel} aria-busy=${this.state?.updating ? 'true' : nothing}></dl-results>` : nothing}`;
   }
 }
 customElements.define('dl-search', DlSearch);

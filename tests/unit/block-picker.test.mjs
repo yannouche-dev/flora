@@ -23,6 +23,7 @@ test('une case en quelques mots : son composant, son bloc, son intention, ses r�
   assert.deepEqual(chips('plant.wikipedia(titre=Article,vide=masque)'), ['Fiche', 'Wikipédia', '« Article »', 'Case masquée']);
   assert.deepEqual(chips('results(list,zone=0)'), ['Résultats', 'Liste', 'France']);
   assert.deepEqual(chips('search(filters=1,list=0)'), ['Recherche', 'Filtres ouverts', 'sans liste des résultats']);
+  assert.deepEqual(chips('results(list,compact)'), ['Résultats', 'Liste', 'Lignes compactes']);
   assert.deepEqual(chips('plant(plante=128268)'), ['Fiche', 'plante n° 128268']);
   assert.deepEqual(cellChips(resolve(/** @type {any} */ (cellOf('mpa')))), ['mpa', 'inconnu']);
   assert.equal(valueLabel(spec('map').params.r, null), null);
@@ -31,7 +32,7 @@ test('une case en quelques mots : son composant, son bloc, son intention, ses r�
 test('les groupes de réglages : ceux du composant, puis le cadre ; leur ligne ; le point des réglages changés', () => {
   assert.deepEqual(groupsOf(spec('map')).map(g => g.name), ['Où', 'Fond', 'Couches', 'Points', 'Liens', 'Interface', 'Cadre']);
   // No group of its own: « Réglages », then the frame's.
-  assert.deepEqual(groupsOf(spec('results')).map(g => [g.name, g.keys]), [['Réglages', ['view']], ['Cadre', ['tete', 'titre', 'actions', 'vide']], ['Liens', ['zone', 'toucher', 'ecrit', 'groupe']]]);
+  assert.deepEqual(groupsOf(spec('results')).map(g => [g.name, g.keys]), [['Réglages', ['view', 'compact']], ['Cadre', ['tete', 'titre', 'actions', 'vide']], ['Liens', ['zone', 'toucher', 'ecrit', 'groupe']]]);
   assert.deepEqual(groupsOf(spec('filters')).map(g => g.name), ['Cadre', 'Liens']);
   const r = known('map(floraison,base=plan,3d=0)');
   const line = (/** @type {string} */ name) => groupSummary(r, /** @type {any} */ (groupsOf(r.spec).find(g => g.name === name)).keys);
