@@ -699,7 +699,7 @@ export class GfMap extends LitElement {
   /** « IGN – fonds de carte » off: the backgrounds from the cache only — said in the panel, never over the map. @param {boolean} [birth] */
   #syncIgn(birth = false) {
     this.setStatus('ign', moduleOn('ignMaps') ? '' : 'Fonds IGN désactivés : seules les zones déjà vues s’affichent.',
-      { link: { href: href.settings(), label: 'Réglages › Modules' }, once: birth });
+      { link: { href: href.settings('modules'), label: 'Réglages › Modules' }, once: birth });
   }
 
   /** @type {ReturnType<typeof setTimeout> | undefined} */ #areasTimer;

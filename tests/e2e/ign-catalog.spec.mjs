@@ -117,6 +117,6 @@ test('module « IGN – fonds de carte » coupé : la liste livrée, rien demand
   const panel = await openCatalog(page);
   await expect(searchbox(panel)).toHaveAttribute('placeholder', /Chercher parmi \d{3} couches/);
   await expect(panel.locator('.catalog .state')).toContainText('Module « IGN – fonds de carte » désactivé : une couche ajoutée n’affichera que les zones déjà vues');
-  await expect(panel.locator('.catalog .state a')).toHaveAttribute('href', '#/settings');
+  await expect(panel.locator('.catalog .state a')).toHaveAttribute('href', '#/settings?section=modules');
   expect(asked).toEqual([]);
 });

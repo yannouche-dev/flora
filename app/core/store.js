@@ -46,7 +46,7 @@ import { onStorage } from './sync.js';
  * @property {Record<import('./modules.js').ModuleKey, boolean>} modules  online services used on this device (Réglages › Modules)
  * @property {import('./modes.js').ModeInfo[]} modes  the display modes: the app's three and the ones made from them
  * @property {KingState | null} king    « Personnaliser la fiche » (code name: King) open on one sheet, for the visit (see KingState)
- * @property {boolean} harvestMode      "Mode cueillette": harvest log, quality, seasons (look-alike warnings show without it)
+ * @property {boolean} harvestMode      « Carnet de récolte » (Réglages): harvest log, quality, seasons (look-alike warnings show without it)
  * @property {ShowSteps} showSteps       mini-apps: their steps bar shown until one is finished once (auto), always (on), never (off)
  * @property {import('./collections.js').CollectionSummary[]} collections
  */

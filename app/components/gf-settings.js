@@ -31,11 +31,15 @@ import './gf-map-options.js';
 /** French names of the icons a mode can have. */
 const ICON_NAMES = { image: 'Photo', 'list-ul': 'Liste', table: 'Tableau', images: 'Médias', map: 'Carte', leaf: 'Feuille', flower1: 'Fleur', 'diagram-3': 'Réseau', star: 'Étoile', layers: 'Couches', search: 'Loupe', crown: 'Couronne' };
 
+/** How far below the top of the page a section reached stays (px): its heading clear of the edge. */
+const REACH_MARGIN = 12;
+
 /** What « Revoir les premiers pas » does, said under it and in its question. */
 const FIRST_STEPS_AGAIN = 'les étapes et ce que gardent Rencontres, Cueillette prudente et Mosaïque (lieu, distance, cartes, matchs) sont oubliés. Vos favoris restent, et ceux venus de ces activités deviennent les vôtres.';
 
 export class GfSettings extends LitElement {
   static properties = {
+    section: { attribute: false },
     _saved: { state: true },
     _spotCount: { state: true },
     _kept: { state: true },
@@ -67,6 +71,8 @@ export class GfSettings extends LitElement {
     p.error { color: var(--gf-danger); font-size: 0.9rem; }
     h1 { font-size: 1.4rem; }
     h2 { font-size: 1rem; margin-top: 28px; }
+    /* A section reached (#/settings?section=…): its heading focused — the ring at the keyboard, as a link's. */
+    h2[tabindex]:focus-visible { outline: none; box-shadow: var(--gf-focus); border-radius: var(--gf-radius-sm); }
     dl { display: grid; grid-template-columns: max-content 1fr; gap: 4px 16px; }
     dt { color: var(--gf-text-muted); }
     dd { margin: 0; }
@@ -129,6 +135,7 @@ export class GfSettings extends LitElement {
     discoverEvents.addEventListener('change', this.#onDiscover);
     notesEvents.addEventListener('change', this.#onNotes);
     screenEvents.addEventListener('change', this.#onScreens);
+    this.addEventListener('click', this.#onClick);
     this.#countSpots();
   }
 
@@ -200,6 +207,11 @@ export class GfSettings extends LitElement {
 
   constructor() {
     super();
+    /**
+     * The section the address names (#/settings?section=…: gf-app, router.js SETTINGS_SECTIONS), reached and its
+     * heading focused; null: the page as it opens. @type {import('../core/router.js').SettingsSection | null}
+     */
+    this.section = null;
     this._saved = false;
     /** Why « Revoir les premiers pas » did nothing (said under its button). @type {string | null} */
     this._firstStepsError = null;
@@ -222,6 +234,58 @@ export class GfSettings extends LitElement {
     /** @type {string | null} */
     this._transfer = null;
   }
+
+  /** @param {Map<string, unknown>} changed */
+  updated(changed) {
+    if (changed.has('section') && this.section) this.#reach(this.section);
+  }
+
+  /**
+   * A link in the page to the section the address already names (« Réglages › Modules » of the IGN catalogue under
+   * Cartes, come by ?section=modules): history.js follows no link to the address shown — reached here, all the same.
+   * @param {MouseEvent} e
+   */
+  #onClick = e => {
+    if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+    const a = /** @type {HTMLAnchorElement | undefined} */ (e.composedPath().find(n => n instanceof HTMLAnchorElement && n.hasAttribute('href')));
+    if (!a || a.target || a.href !== location.href) return;
+    const route = parse(a.hash);
+    if (route.name === 'settings' && route.section) {
+      e.preventDefault();
+      this.#reach(route.section);
+    }
+  };
+
+  /**
+   * The section an address named, reached once drawn — « Réglages › Modules » from a sheet, « Réglages › Cartes » from
+   * a map's panel ▦, « Réglages › Ma région » from a plant's statuses —: its heading near the top, at once (gliding
+   * only when it is near: within the page's height, motion allowed), then focused, so that a screen reader says where
+   * it is. What still grows above it once drawn (the facts of the flora, the maps' options) leaves it in place: the
+   * browser keeps what is in sight (scroll anchoring). The address keeps the section: Back, Forward and a reload come
+   * to it again; another one named, the page goes on to it.
+   * @param {import('../core/router.js').SettingsSection} id
+   */
+  async #reach(id) {
+    // The maps' options and the mode switch drawn first: what is above the heading has its height.
+    await Promise.all([...this.renderRoot.querySelectorAll('gf-map-options, gf-mode-switch')].map(el => /** @type {any} */ (el).updateComplete));
+    const heading = /** @type {HTMLElement | null} */ (this.renderRoot.querySelector('#' + id));
+    if (!heading || this.section !== id || !this.isConnected) return;
+    const d = heading.getBoundingClientRect().top - this.getBoundingClientRect().top - REACH_MARGIN;
+    // A glide of ours still under way: this one glides too (an instant scroll over it would land off by what it had left).
+    const glide = this.#gliding || (Math.abs(d) < this.clientHeight && 'onscrollend' in window && !matchMedia('(prefers-reduced-motion: reduce)').matches);
+    // Where it can go (the last sections, past the page's end: as far as it scrolls); nothing to scroll, no glide begun.
+    const top = Math.max(0, Math.min(this.scrollTop + d, this.scrollHeight - this.clientHeight));
+    const move = Math.abs(top - this.scrollTop) > 1;
+    if (glide && move && !this.#gliding) {
+      this.#gliding = true;
+      this.addEventListener('scrollend', () => { this.#gliding = false; }, { once: true });
+    }
+    if (move) this.scrollTo({ top, behavior: glide ? 'smooth' : 'auto' });
+    heading.focus({ preventScroll: true });
+  }
+
+  /** A section being glided to (#reach), until its scroll ends. */
+  #gliding = false;
 
   /** @param {string | null} iso */
   #setRegion(iso) {
@@ -275,7 +339,7 @@ export class GfSettings extends LitElement {
     const on = this.#store.state.modules;
     const token = getTrefleToken();
     return html`
-      <h2 id="modules">Modules : services en ligne</h2>
+      <h2 id="modules" tabindex="-1">Modules : services en ligne</h2>
       <p class="muted">Tout fonctionne hors ligne avec la flore locale ; chaque module ajoute des données d’un service en ligne.
         Le choix vaut pour tout l’appareil, quel que soit le mode d’affichage : décoché, le service n’est jamais appelé et ses données
         ne s’affichent nulle part (fiche plante, grille, cartes, activités). Masquer un bloc de la fiche ne coupe pas son service.
@@ -336,7 +400,7 @@ export class GfSettings extends LitElement {
     return html`
       <section class="card king-card" aria-labelledby="sheet-layout">
         <div class="king-head">
-          <h2 id="sheet-layout">Mise en page de la fiche</h2>
+          <h2 id="sheet-layout" tabindex="-1">Mise en page de la fiche</h2>
           <button type="button" class="primary" ?disabled=${id === null} aria-describedby=${id === null ? 'customize-why' : nothing}
             @click=${() => { if (id !== null) this.#customize(id); }}>${icon('crown')} Personnaliser la fiche</button>
         </div>
@@ -439,7 +503,7 @@ export class GfSettings extends LitElement {
    * follows at once.
    */
   #maps() {
-    return html`<h2 id="cartes">Cartes</h2>
+    return html`<h2 id="maps" tabindex="-1">Cartes</h2>
       <div class="maps-card">
         <p class="muted">Réglages communs à toutes les cartes : la Carte, la carte de la fiche plante, Mes plantes, Parcours, Rencontres, le partage, les cartes des écrans sur mesure. Chaque carte les propose aussi dans son panneau ▦ (les mêmes réglages, changés pour toutes).
           Le fond : le plan IGN, les photos aériennes — les plus récentes, ou celles d’une année, d’une période, les photos historiques — ou les images satellite SPOT d’une année ; sur les photos et SPOT, les noms et réseaux par-dessus toutes les couches (noms de lieux, routes et cours d’eau par défaut ; voies ferrées, bâtiments, limites administratives au choix) — le plan IGN a les siens. Les couches de l’IGN, rangées par thème : relief ; forêts, haies et zones humides ; espaces protégés et propriété ; puis tout le catalogue.
@@ -455,17 +519,16 @@ export class GfSettings extends LitElement {
   /**
    * « Premiers pas »: the guided start (Découvrir), on or over; « Revoir les premiers pas » empties the three
    * activities around a place too, and makes the favourites their matches added the user's (core/discover.js
-   * #restartDiscover) — said under it, and asked first.
+   * #restartDiscover) — said under it, and asked first. The steps of each activity are another thing: « Activités », next.
    */
   #firstSteps() {
     const on = discovering();
-    return html`<h2 id="first-steps">Premiers pas</h2>
+    return html`<h2 id="first-steps" tabindex="-1">Premiers pas</h2>
       <p class="muted">${on ? 'Les premiers pas sont en cours : les onglets arrivent à mesure qu’ils servent, et restent. Un lien ouvre toujours son écran, et son onglet vient avec lui.'
         : `Tous les outils sont là. « Revoir les premiers pas » repart du début (Découvrir, puis les onglets un à un — Mes plantes reste si vous avez des favoris, des listes ou des lieux, la Carte si vous avez des lieux) : ${FIRST_STEPS_AGAIN}`}</p>
       <p>${on ? html`<button class="secondary" type="button" @click=${() => finishDiscover()}>Tout montrer maintenant</button>`
         : html`<button class="secondary" type="button" @click=${() => this.#restartFirstSteps()}>Revoir les premiers pas</button>`}</p>
-      ${this._firstStepsError ? html`<p class="error" role="alert">${this._firstStepsError}</p>` : nothing}
-      ${this.#showSteps()}`;
+      ${this._firstStepsError ? html`<p class="error" role="alert">${this._firstStepsError}</p>` : nothing}`;
   }
 
   /**
@@ -484,11 +547,15 @@ export class GfSettings extends LitElement {
     if (adopted) briefToast(adopted > 1 ? `Vos ${adopted} favoris venus des activités sont désormais à vous.` : 'Votre favori venu des activités est désormais à vous.');
   }
 
-  /** « Afficher les étapes » of the activities (Rencontres, Parcours…): the first time each one is done, always, never. */
-  #showSteps() {
+  /**
+   * « Activités », right after « Premiers pas »: « Afficher les étapes des activités » (Rencontres, Parcours…) — the
+   * first time each one is done, always, never.
+   */
+  #activities() {
     const value = this.#store.state.showSteps;
     const choices = /** @type {const} */ ([['auto', 'La première fois', 'pour chaque activité, jusqu’à ce qu’on l’ait menée une fois à son terme'], ['on', 'Toujours', ''], ['off', 'Jamais', 'chaque activité s’ouvre en entier']]);
-    return html`<fieldset class="steps-choice">
+    return html`<h2 id="activities" tabindex="-1">Activités</h2>
+    <fieldset class="steps-choice">
       <legend>Afficher les étapes des activités</legend>
       ${choices.map(([key, label, note]) => html`<label><input type="radio" name="show-steps" value=${key} .checked=${value === key}
         @change=${() => setShowSteps(key)} /> ${label}${note ? html` <small class="muted">(${note})</small>` : nothing}</label>`)}
@@ -507,9 +574,10 @@ export class GfSettings extends LitElement {
           <a class="button" href=${href.layout('')}>${icon('plus-lg')} Composer un écran</a>
           ${screens().length ? html`<div class="mine"><span id="mine">Mes écrans</span>${screenList(screens(), 'mine', '.builder > .button')}</div>` : nothing}</div>
         ${this.#firstSteps()}
+        ${this.#activities()}
         ${this.#sheetLayout()}
 
-        <h2>Données</h2>
+        <h2 id="data" tabindex="-1">Données</h2>
         ${meta ? html`
           <dl>
             <dt>Référentiel</dt><dd>TAXREF ${meta.taxrefVersion} (PatriNat / MNHN)</dd>
@@ -531,7 +599,7 @@ export class GfSettings extends LitElement {
           Ce sont des indications de floraison et de fructification, pas des dates de cueillette.
         </p>
 
-        <h2>Ma région</h2>
+        <h2 id="region" tabindex="-1">Ma région</h2>
         <p class="muted">Pour savoir si une plante est protégée ou si sa cueillette est réglementée chez vous (statuts INPN), et pour cadrer
           les cartes des fiches (« Ma région »). Dans un lieu, c’est sa position GPS qui compte. « Utiliser ma position » trouve la
           région sur l’appareil : votre position n’est envoyée nulle part.</p>
@@ -544,7 +612,7 @@ export class GfSettings extends LitElement {
         </div>
         ${this._regionNote ? html`<p class="muted" role="status">${this._regionNote}</p>` : nothing}
 
-        <h2>Affichage</h2>
+        <h2 id="display" tabindex="-1">Affichage</h2>
         <p class="mode-line">
           <gf-mode-switch scope="toute l’application" value=${this.#store.state.mode}
             @mode-change=${e => setMode(e.detail.mode || 'standard')}></gf-mode-switch>
@@ -558,15 +626,15 @@ export class GfSettings extends LitElement {
 
         ${this.#modules()}
 
-        <h2>Mode cueillette</h2>
+        <h2 id="harvest" tabindex="-1">Carnet de récolte</h2>
         <label class="switch">
           <input type="checkbox" .checked=${this.#store.state.harvestMode} @change=${e => setHarvestMode(e.target.checked)} />
           <span>Journal de récolte, qualité, plantes « en saison » / « bientôt »</span>
         </label>
         <p class="muted">Désactivé, vos lieux restent de simples « plantes vues ici » ; rien n’est effacé.
-          ${harvestModeChosen() ? nothing : 'Automatique tant que vous ne l’avez pas réglé : allumé dès que l’appareil contient des récoltes (un import, un lien de transfert), éteint au lancement s’il n’en contient aucune.'}</p>
+          ${harvestModeChosen() ? nothing : 'Automatique tant que vous ne l’avez pas réglé : activé dès que l’appareil contient des récoltes (un import, un lien de transfert), désactivé au lancement s’il n’en contient aucune.'}</p>
 
-        <h2>Mes plantes : favoris, listes et lieux</h2>
+        <h2 id="collections" tabindex="-1">Mes plantes : favoris, listes et lieux</h2>
         <p class="muted">
           ${this._kept ? `Sur cet appareil uniquement : ${this._kept}.` : 'Rien d’enregistré sur cet appareil.'}
           ${(() => { const d = lastExportDate(); return d ? `Dernière sauvegarde : ${new Date(d).toLocaleDateString('fr-FR')}.` : 'Aucune sauvegarde pour l’instant.'; })()}
@@ -580,7 +648,7 @@ export class GfSettings extends LitElement {
         </div>
         ${this._spotMessage ? html`<p class="muted" role="status">${this._spotMessage}</p>` : nothing}
 
-        <h2>Transférer vers un autre appareil</h2>
+        <h2 id="transfer" tabindex="-1">Transférer vers un autre appareil</h2>
         <p class="muted">Un lien contient toutes vos plantes (compressées, sans passer par un serveur). Ouvrez-le sur l’autre téléphone ou ordinateur : elles y sont ajoutées ou mises à jour. Gardé dans un e-mail ou une note, il sert aussi de sauvegarde.</p>
         <label class="switch">
           <input type="checkbox" .checked=${this._personal} @change=${e => { this._personal = e.target.checked; }} />

@@ -326,7 +326,7 @@ export class DlDeck extends LitElement {
       : `Aucune des plantes ${/^[aeiouy]/i.test(them) ? 'qu’' : 'que '}${them} ${plural ? 'ont' : 'a'} vues dans la zone${when} ne correspond à la recherche`;
     return html`<div class="empty" role="status"><p class="big warn">${icon('exclamation-triangle-fill')}</p><p><b>${why}</b></p>
       <p>${partial ? `${none} ; sans ${names}, pas de cartes${later}.` : `Les cartes sont les plantes ${seen}, pas de cartes${later}.`}</p>
-      ${off ? html`<p><a href=${href.settings()}>Réglages › Modules</a></p>`
+      ${off ? html`<p><a href=${href.settings('modules')}>Réglages › Modules</a></p>`
         : html`<button class="primary" type="button" @click=${() => s.retryScope()}>${icon('arrow-counterclockwise')} Réessayer</button>`}</div>`;
   }
 }

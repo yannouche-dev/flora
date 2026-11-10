@@ -1615,7 +1615,7 @@ export class GfPlantDetail extends SheetBase {
    */
   #cutTools(key, title, cut) {
     const kept = foldedByHand(this._view, key);
-    return html`<a class="tool" href=${href.settings()} aria-label=${`Réglages › Modules : ${cut}`} title="Réglages › Modules">${icon('gear')}</a>
+    return html`<a class="tool" href=${href.settings('modules')} aria-label=${`Réglages › Modules : ${cut}`} title="Réglages › Modules">${icon('gear')}</a>
       <button class="tool" type="button" aria-pressed=${kept ? 'true' : 'false'} aria-label=${`Garder « ${title} » masqué dans ce mode`}
         title=${kept ? 'Restera masqué dans ce mode quand le service reviendra' : 'Reviendra dans ce mode avec son service'}
         @click=${() => setHidden(this._view, key, !kept)}>${icon('trash3')}</button>`;

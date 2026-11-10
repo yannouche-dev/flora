@@ -7,7 +7,7 @@
 //    added after it goes away), to one that follows the last goes on, to another one takes the shortest way there.
 //    A step whose can(c) is false is not entered.
 //  - With the steps bar (guided): a step whose done(c) comes true goes on to the next by itself. Without it, the
-//    start leads straight to m.full. The bar is the setting of all (Réglages › Premiers pas), unless the activity's
+//    start leads straight to m.full. The bar is the setting of all (Réglages › Activités), unless the activity's
 //    ⋯ menu chose for it alone (`ownSteps`, kept with its state).
 //  - Kept under geoflora.app.<id>.state: { v, path, ctx (the persist keys), finished, ownSteps? }, written 300 ms
 //    after a change — at once when the box leaves, or the page (pagehide, or hidden: a reload, the tab closed or

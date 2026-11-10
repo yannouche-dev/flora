@@ -113,4 +113,4 @@ export const gpsStyles = css`
  * « Photos en ligne » switched off (Réglages › Modules): the one line said where photos would be — in the sheet (Photos,
  * Médias, Médias GBIF), a block alone, a screen's Médias cell —, the way back to it in it.
  */
-export const photosOffLine = () => html`Photos en ligne désactivées (<a href=${href.settings()}>Réglages › Modules</a>).`;
+export const photosOffLine = () => html`Photos en ligne désactivées (<a href=${href.settings('modules')}>Réglages › Modules</a>).`;

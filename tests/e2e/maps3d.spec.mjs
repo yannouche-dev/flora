@@ -69,7 +69,7 @@ test('Réglages › Cartes « 3D » : la Carte en MapLibre — relief, bâtiment
   await answerTiles(page, { seen: seen.tiles });
   await app.open('#/settings');
   const s = page.locator('gf-settings');
-  await expect(s.locator('#cartes')).toHaveText('Cartes');
+  await expect(s.locator('#maps')).toHaveText('Cartes');
   const group = s.getByRole('group', { name: 'Affichage des cartes' });
   await expect(group.getByRole('radio', { name: /^2D/ })).toBeChecked();
   await group.getByRole('radio', { name: /^3D/ }).check();
@@ -204,7 +204,7 @@ test('en 3D, le panneau « Carte » : les mêmes couches qu’en 2D ; les option
   await expect(panel.getByRole('checkbox', { name: /Bâtiments en 3D/ })).toBeHidden();
   await panel.getByText('Options de la 3D').click();
   await expect(panel.getByRole('checkbox', { name: /Bâtiments en 3D/ })).toBeChecked();
-  await expect(panel.getByRole('link', { name: 'Réglages › Cartes' })).toHaveAttribute('href', '#/settings');
+  await expect(panel.getByRole('link', { name: 'Réglages › Cartes' })).toHaveAttribute('href', '#/settings?section=maps');
   await expect(panel.getByRole('button', { name: /^(2D|3D)$/ })).toHaveCount(0);
   await panel.getByRole('checkbox', { name: /Courbes de niveau/ }).check();
   await expect.poll(async () => (await glState(map)).tiles.map((/** @type {any} */ t) => t.key), SLOW).toEqual(['photo', 'contours', 'routes', 'eau', 'lieux']);

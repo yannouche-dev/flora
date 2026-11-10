@@ -281,6 +281,8 @@ export class GfApp extends LitElement {
   render() {
     const route = this.#router.route;
     const tab = this.#tab(route);
+    // The gear and the Réglages tab, on Réglages: the address shown (its section too), so that history.js follows nothing.
+    const settingsHref = route.name === 'settings' ? href.settings(route.section) : href.settings();
     const { status, statusText, offline, updateReady, datasetDeferred, storageFull, restore } = this.#store.state;
     const phone = this.#phone.matches;
     // A mini-app: alone on the screen (its box has its own bar, its one way out).
@@ -309,7 +311,7 @@ export class GfApp extends LitElement {
           @mode-change=${e => setMode(e.detail.mode || 'standard')}></gf-mode-switch>` : nothing}
         ${tabShown('map') ? html`<button class="note primary" type="button" aria-label="Noter ici" @click=${() => this.#openCapture()}>${icon('plus-lg')}<span class="lbl"> Noter ici</span></button>` : nothing}
         <gf-scenarios></gf-scenarios>
-        <a class="settings" href=${href.settings()} title="À propos et réglages" aria-label="À propos et réglages">${icon('gear')}</a>`}</div>
+        <a class="settings" href=${settingsHref} title="À propos et réglages" aria-label="À propos et réglages">${icon('gear')}</a>`}</div>
       </header>
       <main>
         ${updateReady ? html`<div class="banner" role="status">Nouvelle version de GeoFlora disponible.
@@ -321,7 +323,7 @@ export class GfApp extends LitElement {
           : datasetDeferred && status === 'ready' && route.name === 'search' ? html`<div class="banner" role="status">Mise à jour de la flore reportée — recherche sur la copie locale.</div>` : nothing}
         ${this.#outlet(route)}
       </main>
-      ${phone ? html`<gf-tabbar current=${tab} .lit=${this._lit}></gf-tabbar>` : html`<span></span>`}
+      ${phone ? html`<gf-tabbar current=${tab} .lit=${this._lit} .settingsHref=${settingsHref}></gf-tabbar>` : html`<span></span>`}
       ${storageFull && status !== 'error' ? html`<div class="full" role="alert">
         <p><strong>Espace de stockage plein</strong> : GeoFlora n’a pas pu enregistrer une modification sur cet appareil.
           Exportez vos plantes pour ne rien perdre, puis libérez de l’espace (fichiers, applications, données d’autres sites) et rechargez la page.</p>
@@ -463,7 +465,8 @@ export class GfApp extends LitElement {
         return html`<gf-spot-editor spot-id=${route.id} add-plant=${route.add ?? ''} ?pick=${route.pick}></gf-spot-editor>`;
       case 'settings':
         document.title = 'Réglages — GeoFlora';
-        return html`<gf-settings></gf-settings>`;
+        // ?section=: the section a link named (« Réglages › Cartes »), reached; the same element on to another one.
+        return html`<gf-settings .section=${route.section}></gf-settings>`;
       case 'legal':
         return html`<gf-legal></gf-legal>`;
       case 'app':

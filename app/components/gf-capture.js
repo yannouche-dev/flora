@@ -270,7 +270,7 @@ export class GfCapture extends LitElement {
   }
 
   /**
-   * Records the plant here. With today's harvest (mode cueillette, box ticked), a plant our sources say is toxic, whose
+   * Records the plant here. With today's harvest (« Carnet de récolte » on, box ticked), a plant our sources say is toxic, whose
    * toxicity data cannot be read, or protected where you stand, first shows a warning that must be answered (its
    * verdict here, core/danger.js). Then, a lieu within NEAR_PLACE (placesNear): offered first, nothing saved until one is
    * chosen (`into`) or « Nouveau lieu ici » (`into: null`).

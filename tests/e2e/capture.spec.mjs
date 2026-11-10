@@ -1,4 +1,4 @@
-// « Noter ici » in mode cueillette (SAFE-4): the harvest box is never ticked for you, not even by the last opening;
+// « Noter ici » with the « Carnet de récolte » on (SAFE-4): the harvest box is never ticked for you, not even by the last opening;
 // a harvest of a plant our sources say is toxic — or protected where it is noted — waits for a warning to be answered
 // (gf-harvest-warning, the place editor's too, never the browser's confirm()) — noted without the harvest by default
 // (in the place editor, the plant noted already: « Annuler » first, nothing to note without it), with it only once the
@@ -9,7 +9,7 @@
 import { test, expect, plantId } from './fixtures.mjs';
 
 /**
- * Mode cueillette on (or off), « Noter ici » open.
+ * « Carnet de récolte » on (or off), « Noter ici » open.
  * @param {import('@playwright/test').Page} page @param {any} app @param {boolean} [harvest]
  */
 async function openCapture(page, app, harvest = true) {
@@ -38,7 +38,7 @@ async function pick(dialog, q, name) {
   await dialog.locator('gf-plant-pick-list li button').filter({ hasText: name }).first().click();
 }
 
-test('Noter ici, mode cueillette : case de récolte décochée ; plante toxique → avertissement bloquant, noté sans récolte', async ({ app, page }) => {
+test('Noter ici, carnet de récolte : case de récolte décochée ; plante toxique → avertissement bloquant, noté sans récolte', async ({ app, page }) => {
   const dialog = await openCapture(page, app);
   const box = dialog.getByRole('checkbox', { name: 'Noter aussi une récolte aujourd’hui' });
   await expect(box).not.toBeChecked();
@@ -66,7 +66,7 @@ test('Noter ici, mode cueillette : case de récolte décochée ; plante toxique 
   expect(await harvestsOf(page, plantId('Conium maculatum'))).toEqual([0]);
 });
 
-test('un téléphone, nouveau lieu, mode cueillette : « Récolté aujourd’hui » décoché ; le cocher pour une plante toxique ouvre l’avertissement de « Noter ici », jamais confirm()', async ({ app, page }) => {
+test('un téléphone, nouveau lieu, carnet de récolte : « Récolté aujourd’hui » décoché ; le cocher pour une plante toxique ouvre l’avertissement de « Noter ici », jamais confirm()', async ({ app, page }) => {
   // On a desktop, the place saved at once moves to the Carte's panel: the editor of a new place is the phone's.
   test.skip(!app.phone, 'éditeur d’un nouveau lieu : téléphone');
   /** The browser's own dialogs (confirm(): its OK would note the harvest): none. @type {string[]} */
@@ -101,7 +101,7 @@ test('un téléphone, nouveau lieu, mode cueillette : « Récolté aujourd’hui
   expect(native).toEqual([]);
 });
 
-test('Éditeur d’un lieu, mode cueillette : une espèce protégée en France — l’avertissement avant que la récolte soit notée, « Annuler » d’abord', async ({ app, page }) => {
+test('Éditeur d’un lieu, carnet de récolte : une espèce protégée en France — l’avertissement avant que la récolte soit notée, « Annuler » d’abord', async ({ app, page }) => {
   /** @type {string[]} */
   const native = [];
   page.on('dialog', dialog => { native.push(dialog.message()); dialog.dismiss(); });
@@ -164,7 +164,7 @@ test('Noter ici : la récolte d’une plante toxique seulement après « J’ai 
   expect(await harvestsOf(page, plantId('Bellis perennis'))).toEqual([1]);
 });
 
-test('Noter ici, mode cueillette éteint : l’ail des ours noté rappelle le colchique (sans case de récolte)', async ({ app, page }) => {
+test('Noter ici, sans carnet de récolte : l’ail des ours noté rappelle le colchique (sans case de récolte)', async ({ app, page }) => {
   const dialog = await openCapture(page, app, false);
   await expect(dialog.getByRole('checkbox', { name: 'Noter aussi une récolte aujourd’hui' })).toHaveCount(0);
   await pick(dialog, 'Ail des ours', 'Ail des ours');
@@ -353,7 +353,7 @@ test('Noter ici depuis le 📍 d’une plante des résultats : le même dialogue
   expect(await page.evaluate(() => location.hash)).toBe(before);
 });
 
-test('Éditeur d’un lieu, mode cueillette éteint : l’ail des ours ouvert montre le colchique, pas la qualité', async ({ app, page }) => {
+test('Éditeur d’un lieu, sans carnet de récolte : l’ail des ours ouvert montre le colchique, pas la qualité', async ({ app, page }) => {
   await app.open('#/');
   const id = await page.evaluate(async plant => {
     (await import('/app/core/store.js')).setHarvestMode(false);

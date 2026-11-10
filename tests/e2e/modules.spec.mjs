@@ -69,11 +69,13 @@ test('Personnaliser la fiche : masquer les blocs GBIF ne coupe pas GBIF ; coupé
   await expect(descriptions.locator('.off-note')).toHaveText(`${CUT} (Réglages › Modules)`);
   await expect(descriptions.getByRole('button', { name: 'Réafficher le bloc « Descriptions »' })).toHaveCount(0);
   const toSettings = descriptions.getByRole('link', { name: `Réglages › Modules : ${CUT}` });
-  await expect(toSettings).toHaveAttribute('href', '#/settings');
+  await expect(toSettings).toHaveAttribute('href', '#/settings?section=modules');
   const palette = sheet.locator('.palette');
   await expect(palette.getByRole('button', { name: 'Descriptions', exact: true })).toHaveCount(0);
   await expect(palette.getByRole('button', { name: 'Occurrences et répartition', exact: true })).toHaveCount(1);
   await toSettings.click();
+  // Réglages open on Modules, its heading focused.
+  await expect(page.locator('gf-settings').getByRole('heading', { level: 2, name: 'Modules : services en ligne' })).toBeFocused();
   await expect(gbifSwitch(page)).not.toBeChecked();
   await gbifSwitch(page).check();
 
