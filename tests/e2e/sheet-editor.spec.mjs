@@ -179,18 +179,19 @@ test('« Par défaut », dans la barre : le mode arrangé revient à sa mise en 
   await sheet.getByRole('button', { name: 'Masquer le bloc « Calendrier »' }).click();
   await expect(reset).toBeEnabled();
 
-  // Not confirmed: nothing changes.
-  page.once('dialog', dialog => dialog.dismiss());
+  // Asked in the app's question (it names the mode); « Annuler »: nothing changes, the focus back on « Par défaut ».
   await reset.click();
+  const ask = page.getByRole('alertdialog', { name: 'Remettre « Standard » par défaut ?' });
+  await expect(ask).toContainText('Ordre, blocs et sous-blocs masqués, styles, titres affichés ou cachés, « masqué si vide », panneaux et barre d’actions de ce mode reviennent par défaut ; les noms donnés aux blocs, les blocs Note et Carte restent.');
+  await ask.getByRole('button', { name: 'Annuler' }).click();
+  await expect(ask).toHaveCount(0);
+  await expect(reset).toBeFocused();
   expect(await sb(page, 'isCustom', 'standard')).toBe(true);
   await expect(sheet.locator('[data-pane]').first()).toBeVisible();
 
-  // Confirmed (the message names the mode): no pane, nothing hidden by hand, the button greyed, said; the focus on
-  // « Barre d’actions ».
-  let message = '';
-  page.once('dialog', dialog => { message = dialog.message(); dialog.accept(); });
+  // « Remettre par défaut »: no pane, nothing hidden by hand, the button greyed, said; the focus on « Barre d’actions ».
   await reset.click();
-  expect(message).toBe('Remettre « Standard » par défaut ? Ordre, blocs et sous-blocs masqués, styles, titres affichés ou cachés, « masqué si vide », panneaux et barre d’actions de ce mode reviennent par défaut ; les noms donnés aux blocs, les blocs Note et Carte restent.');
+  await ask.getByRole('button', { name: 'Remettre par défaut' }).click();
   await expect(sheet.locator('[data-pane]')).toHaveCount(0);
   expect(await sb(page, 'isCustom', 'standard')).toBe(false);
   expect(await hidden(page, 'standard', 'calendar')).toBe(false);
@@ -405,14 +406,16 @@ test('blocs Note et Carte créés puis supprimés ; « Ranger par catégorie » 
   await sheet.getByRole('textbox', { name: 'Nom du bloc Note' }).fill('Récolte');
   await sheet.getByRole('button', { name: 'Créer', exact: true }).click();
   await expect(sheet.locator('.blocks.king .block[data-key^="note:"] .block-title .name')).toHaveText('Récolte');
-  page.once('dialog', dialog => dialog.accept());
   await sheet.getByRole('button', { name: 'Supprimer le bloc « Récolte »' }).click();
+  const note = page.getByRole('alertdialog', { name: 'Supprimer le bloc « Récolte » ?' });
+  await expect(note).toContainText('Le bloc quittera tous les modes ; ce qui y est écrit, sur la fiche de chaque plante, sera effacé. Cette action est définitive.');
+  await note.getByRole('button', { name: 'Supprimer' }).click();
   await expect(sheet.locator('.block[data-key^="note:"]')).toHaveCount(0);
 
   await sheet.getByRole('button', { name: 'Bloc Carte', exact: true }).click();
   await expect(sheet.locator('.blocks.king .block[data-key^="map:"]')).toHaveCount(1);
-  page.once('dialog', dialog => dialog.accept());
   await sheet.locator('.block[data-key^="map:"]').getByRole('button', { name: 'Supprimer le bloc « Carte »' }).click();
+  await page.getByRole('alertdialog', { name: 'Supprimer la carte « Carte » ?' }).getByRole('button', { name: 'Supprimer' }).click();
   await expect(sheet.locator('.block[data-key^="map:"]')).toHaveCount(0);
 
   // Scientifique arranged, sorted by category; Standard's order untouched.
