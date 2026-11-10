@@ -499,7 +499,7 @@ export class GfSettings extends LitElement {
   /**
    * « Premiers pas »: the guided start (Découvrir), on or over; « Revoir les premiers pas » empties the three
    * activities around a place too, and makes the favourites their matches added the user's (core/discover.js
-   * #restartDiscover) — said under it, and asked first.
+   * #restartDiscover) — said under it, and asked first. The steps of each activity are another thing: « Activités », next.
    */
   #firstSteps() {
     const on = discovering();
@@ -508,8 +508,7 @@ export class GfSettings extends LitElement {
         : `Tous les outils sont là. « Revoir les premiers pas » repart du début (Découvrir, puis les onglets un à un — Mes plantes reste si vous avez des favoris, des listes ou des lieux, la Carte si vous avez des lieux) : ${FIRST_STEPS_AGAIN}`}</p>
       <p>${on ? html`<button class="secondary" type="button" @click=${() => finishDiscover()}>Tout montrer maintenant</button>`
         : html`<button class="secondary" type="button" @click=${() => this.#restartFirstSteps()}>Revoir les premiers pas</button>`}</p>
-      ${this._firstStepsError ? html`<p class="error" role="alert">${this._firstStepsError}</p>` : nothing}
-      ${this.#showSteps()}`;
+      ${this._firstStepsError ? html`<p class="error" role="alert">${this._firstStepsError}</p>` : nothing}`;
   }
 
   /**
@@ -528,11 +527,15 @@ export class GfSettings extends LitElement {
     if (adopted) briefToast(adopted > 1 ? `Vos ${adopted} favoris venus des activités sont désormais à vous.` : 'Votre favori venu des activités est désormais à vous.');
   }
 
-  /** « Afficher les étapes » of the activities (Rencontres, Parcours…): the first time each one is done, always, never. */
-  #showSteps() {
+  /**
+   * « Activités », right after « Premiers pas »: « Afficher les étapes des activités » (Rencontres, Parcours…) — the
+   * first time each one is done, always, never.
+   */
+  #activities() {
     const value = this.#store.state.showSteps;
     const choices = /** @type {const} */ ([['auto', 'La première fois', 'pour chaque activité, jusqu’à ce qu’on l’ait menée une fois à son terme'], ['on', 'Toujours', ''], ['off', 'Jamais', 'chaque activité s’ouvre en entier']]);
-    return html`<fieldset class="steps-choice">
+    return html`<h2 id="activities" tabindex="-1">Activités</h2>
+    <fieldset class="steps-choice">
       <legend>Afficher les étapes des activités</legend>
       ${choices.map(([key, label, note]) => html`<label><input type="radio" name="show-steps" value=${key} .checked=${value === key}
         @change=${() => setShowSteps(key)} /> ${label}${note ? html` <small class="muted">(${note})</small>` : nothing}</label>`)}
@@ -551,6 +554,7 @@ export class GfSettings extends LitElement {
           <a class="button" href=${href.layout('')}>${icon('plus-lg')} Composer un écran</a>
           ${screens().length ? html`<div class="mine"><span id="mine">Mes écrans</span>${screenList(screens(), 'mine', '.builder > .button')}</div>` : nothing}</div>
         ${this.#firstSteps()}
+        ${this.#activities()}
         ${this.#sheetLayout()}
 
         <h2 id="data" tabindex="-1">Données</h2>

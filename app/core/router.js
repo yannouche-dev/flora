@@ -28,8 +28,8 @@ import './history.js';
  * The sections of Réglages an address can open (#/settings?section=<id>): each one's heading, by its id in
  * gf-settings.js — reached and focused there. Any other value: the top of the page.
  */
-export const SETTINGS_SECTIONS = /** @type {const} */ (['first-steps', 'sheet-layout', 'data', 'region', 'display', 'maps', 'modules',
-  'harvest', 'collections', 'transfer']);
+export const SETTINGS_SECTIONS = /** @type {const} */ (['first-steps', 'activities', 'sheet-layout', 'data', 'region', 'display', 'maps',
+  'modules', 'harvest', 'collections', 'transfer']);
 /** @typedef {typeof SETTINGS_SECTIONS[number]} SettingsSection */
 
 /** A section of Réglages, as an address says it (null: none, or not one of them). @param {string | null} v @returns {SettingsSection | null} */
