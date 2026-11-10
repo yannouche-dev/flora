@@ -48,14 +48,32 @@ const VIEW_COLUMNS = {
 /** Results pane narrower than this: the least useful columns go. */
 const NARROW = 760;
 
+/** Columns given up, in this order, while the row's least width is more than the pane's (never sideways). */
+const SQUEEZE = ['genus', 'status', 'species', 'family'];
+
+/** A column's least width in px (its `minmax`'s first, a rem at 16px). @param {string} width */
+const leastWidth = width => {
+  const m = /^(?:minmax\()?([\d.]+)(px|rem)/.exec(width);
+  return m ? Number(m[1]) * (m[2] === 'rem' ? 16 : 1) : 0;
+};
+
+/** The row's columns fit `width`: their least widths, 12px between them and the row's 20px of padding (.head, gf-plant-card). */
+const fits = (/** @type {string[]} */ keys, /** @type {string} */ view, /** @type {number} */ width) =>
+  keys.reduce((sum, k) => sum + leastWidth(columnWidth(k, view)), 0) + 12 * (keys.length - 1) + 20 <= width;
+
 /**
  * Visible column keys for a view and a pane width — the observations' with them only (`obs`: a free layout's zone).
+ * Narrower than NARROW, the least useful go; then, while the row would not fit, those of SQUEEZE.
  * @param {string} view @param {number} width @param {{ obs?: boolean }} [o] @returns {string[]}
  */
 export function gridColumns(view, width, { obs = false } = {}) {
-  const keys = VIEW_COLUMNS[baseOf(view)] || VIEW_COLUMNS.standard;
   const drop = [...(width < NARROW ? (baseOf(view) === 'scientific' ? ['genus', 'status'] : ['genus']) : []), ...(obs ? [] : ['obs'])];
-  return keys.filter(k => !drop.includes(k));
+  let keys = (VIEW_COLUMNS[baseOf(view)] || VIEW_COLUMNS.standard).filter(k => !drop.includes(k));
+  for (const key of SQUEEZE) {
+    if (fits(keys, view, width)) break;
+    keys = keys.filter(k => k !== key);
+  }
+  return keys;
 }
 
 /** No columns (a list of cards): the same array each render, its rows not drawn again for it. @type {string[]} */
@@ -173,8 +191,13 @@ export class GfPlantList extends LitElement {
     const { width, height } = entry.contentRect;
     this._height = height;
     // Re-render on a width change only when it shows or hides columns (a pane being dragged changes it every frame).
-    if ((width < NARROW) !== (this._width < NARROW)) this._width = width;
+    const shown = () => this.grid ? gridColumns(gridViewOf(this.#store.state), this.#width, { obs: Boolean(this.obs) }).join() : '';
+    const before = shown();
+    this.#width = width;
+    if (shown() !== before) this._width = width;
   });
+  /** The pane's width now (`_width`: the one of the last render it changed). */
+  #width = 1000;
   /** @type {any[] | null} */
   #items = null;
   /** Search the shown results answer (see `searchKey`). @type {string | null} */
@@ -283,8 +306,9 @@ export class GfPlantList extends LitElement {
   #columns() {
     if (!this.grid) return NO_COLUMNS;
     const view = gridViewOf(this.#store.state);
-    const key = [view, this._width < NARROW, Boolean(this.obs)].join('|');
-    if (this.#columnsFor !== key) { this.#columnsFor = key; this.#columnsMemo = gridColumns(view, this._width, { obs: Boolean(this.obs) }); }
+    const columns = gridColumns(view, this.#width, { obs: Boolean(this.obs) });
+    const key = [view, ...columns].join('|');
+    if (this.#columnsFor !== key) { this.#columnsFor = key; this.#columnsMemo = columns; }
     return this.#columnsMemo;
   }
   #columnsFor = '';

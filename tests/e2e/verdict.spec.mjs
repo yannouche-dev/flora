@@ -2,7 +2,8 @@
 // the confusions too, in the colour of the gravest; the Prudence opens on the same chip; each confusion's chip is the
 // same level. TPPT « toxique » (2) is a danger on the sheet as on the cards and before a harvest. Never « comestible »,
 // even quoted: the laurier rose's only criterion (« Seul le laurier sauce est comestible… ») is not shown. Flore's
-// « Protection » column says the verdict with no place known, in its words and colours, light or dark.
+// « Protection » column says the verdict with no place known, in its words and colours, light or dark, and never pushes
+// a row sideways.
 import { test, expect, plantId } from './fixtures.mjs';
 
 /** A colour as the page computes it. @param {import('@playwright/test').Page} page @param {string} css */
@@ -81,4 +82,19 @@ test('Flore, colonne « Protection » : les mots et couleurs du verdict — « P
     expect(await squill.evaluate(el => getComputedStyle(el).color), scheme).toBe(await colour(page, 'var(--gf-danger)'));
     expect(await lily.first().evaluate(el => getComputedStyle(el).backgroundColor), scheme).toBe(await tint('var(--gf-warn-bg)'));
   }
+  // Its column never pushes a row sideways (♥ and 📍 out of the pane): narrower, the least useful columns go first — a
+  // plant open beside the list, on a laptop, too.
+  const list = page.locator('gf-flora gf-plant-list');
+  const sideways = async () => {
+    await page.evaluate(() => new Promise(done => requestAnimationFrame(() => requestAnimationFrame(done))));
+    return list.evaluate(el => el.scrollWidth - el.clientWidth);
+  };
+  for (const width of [800, 900, 1100]) {
+    await page.setViewportSize({ width, height: 800 });
+    await expect.poll(sideways, `${width} px`).toBeLessThanOrEqual(0);
+  }
+  await page.setViewportSize({ width: 1366, height: 768 });
+  await list.locator('gf-plant-card a.row').first().click();
+  await expect(page.locator('gf-flora gf-plant-detail').first()).toBeVisible();
+  await expect.poll(sideways, '1366 px, une plante ouverte').toBeLessThanOrEqual(0);
 });

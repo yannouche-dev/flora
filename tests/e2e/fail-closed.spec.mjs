@@ -1,6 +1,7 @@
 // Safety warnings fail closed (audit STO-1): when data/lookalikes.json or data/safety.json cannot be read, the sheet
 // says the list is unavailable — never « nothing to confuse it with » — and « Réessayer » reads it again; when
-// data/territories.json cannot be read, « Noter ici »'s message says a regional protection may be the one here.
+// data/territories.json cannot be read, « Noter ici »'s message and the Statut block say a regional protection may be
+// the one here.
 // Migrated from lookfold.cjs, uses.cjs, mediafail.cjs.
 import { test, expect, plantId } from './fixtures.mjs';
 
@@ -55,6 +56,14 @@ test('le message de « Noter ici » (statusWarning, dans la page) : la région d
   }, plantId('Allium flavum'));
   // Where it is, unreadable: never nothing — maybe here, a danger (as the verdict before the note: core/alerts.js).
   expect(await warning()).toEqual({ level: 'danger', text: 'Espèce protégée dans des régions ou départements (Ile-de-France, Auvergne), peut-être ici' });
+  // The Statut block of a place's plant (gf-spot-editor: its point) says it the same, in the danger box.
+  await page.evaluate(id => {
+    const status = Object.assign(document.createElement('gf-status'), { plantId: id, point: [2.35, 48.85] });
+    status.id = 'probe';
+    document.body.append(status);
+  }, plantId('Allium flavum'));
+  await expect(page.locator('#probe .sev-box.danger')).toHaveText(/Espèce protégée dans des régions ou départements \(Ile-de-France, Auvergne\), peut-être ici/);
+  await expect(page.locator('#probe')).not.toContainText('Choisissez votre région');
   failing = false;
   expect(await warning()).toEqual({ level: 'danger', text: 'Espèce protégée (Ile-de-France)' });
 });
