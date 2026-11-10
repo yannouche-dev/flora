@@ -241,8 +241,9 @@ export class GfSettings extends LitElement {
 
   /**
    * The section an address named, reached once drawn — « Réglages › Modules » from a sheet, « Réglages › Cartes » from
-   * a map's panel ▦ —: its heading near the top, at once (gliding only when it is near: within the page's height,
-   * motion allowed), then focused, so that a screen reader says where it is. What still grows above it once drawn (the facts of the flora, the maps' options) leaves it in place: the
+   * a map's panel ▦, « Réglages › Ma région » from a plant's statuses —: its heading near the top, at once (gliding
+   * only when it is near: within the page's height, motion allowed), then focused, so that a screen reader says where
+   * it is. What still grows above it once drawn (the facts of the flora, the maps' options) leaves it in place: the
    * browser keeps what is in sight (scroll anchoring). The address keeps the section: Back, Forward and a reload come
    * to it again; another one named, the page goes on to it.
    * @param {import('../core/router.js').SettingsSection} id

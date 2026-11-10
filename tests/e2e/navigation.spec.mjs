@@ -502,7 +502,7 @@ const SECTIONS = [['first-steps', 'Premiers pas'], ['sheet-layout', 'Mise en pag
 /** How far below the top of Réglages (its scrolling page) a heading is, px. @param {import('@playwright/test').Locator} heading */
 const belowTop = heading => heading.evaluate(h => Math.round(h.getBoundingClientRect().top - /** @type {ShadowRoot} */ (h.getRootNode()).host.getBoundingClientRect().top));
 
-test('Un lien vers une section de Réglages y mène, son titre au focus : « Réglages › Cartes » du panneau ▦ d’une carte ; Retour revient à la carte ; chaque section a son adresse', async ({ app, page }) => {
+test('Un lien vers une section de Réglages y mène, son titre au focus : « Réglages › Cartes » du panneau ▦ d’une carte, « Réglages › Ma région » des statuts d’une plante ; Retour revient d’où il partait ; chaque section a son adresse', async ({ app, page }) => {
   await app.open('#/map');
   const map = page.locator('gf-map-page gf-map');
   await map.evaluate(m => /** @type {any} */ (m).openPanel());
@@ -520,6 +520,15 @@ test('Un lien vers une section de Réglages y mène, son titre au focus : « Ré
   expect(await settings.evaluate(s => s.scrollTop)).toBeGreaterThan(500);
   await page.goBack();
   await expect.poll(() => hash(page)).toBe('#/map');
+
+  // A plant protected elsewhere, no region chosen: « Choisissez votre région », its link to Réglages › Ma région.
+  const plant = `#/plant/${plantId('Allium flavum')}`;
+  await app.go(plant);
+  await page.locator('gf-status').getByRole('link', { name: 'Réglages › Ma région' }).click();
+  await expect.poll(() => hash(page)).toBe('#/settings?section=region');
+  await expect(settings.getByRole('heading', { level: 2, name: 'Ma région', exact: true })).toBeFocused();
+  await page.goBack();
+  await expect.poll(() => hash(page)).toBe(plant);
 
   // Each section: its address, its heading in sight and focused — in the page's order, one after the other.
   await app.go('#/settings');

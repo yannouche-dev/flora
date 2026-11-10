@@ -130,7 +130,7 @@ export class GfLegal extends LitElement {
         <button class="secondary" type="button" @click=${this.#clearCache}>${icon('trash3')} Effacer le cache des services en ligne</button>
       </div>
       ${this._done ? html`<p class="done" role="status">${this._done}</p>` : nothing}
-      <p>Pour tout effacer, y compris vos plantes : effacez les données du site dans les réglages du navigateur (exportez d’abord vos plantes depuis <a href=${href.settings()}>Réglages</a> pour les garder).</p>
+      <p>Pour tout effacer, y compris vos plantes : effacez les données du site dans les réglages du navigateur (exportez d’abord vos plantes depuis <a href=${href.settings('collections')}>Réglages › Mes plantes</a> pour les garder).</p>
 
       <h2>Votre position</h2>
       <p>Le navigateur ne demande votre position qu’après un geste de votre part : « Autour de moi », « Me localiser », « Commencer ici », « Noter ici », « Près d’ici »… Une fois l’autorisation accordée, les cartes et les listes de lieux s’en servent aussi (distances, votre point sur la carte) ; vous pouvez la retirer à tout moment dans les réglages du navigateur. Avant chaque envoi, l’écran dit à quel service elle part. Elle n’est jamais envoyée à l’éditeur.</p>

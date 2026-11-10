@@ -3,6 +3,7 @@ import { LitElement, html, css, nothing } from 'lit';
 import { getPlant } from '../core/plants.js';
 import { myRegion, sortStatuses, territoryAt, territoryFor } from '../core/territory.js';
 import { harvestRules, tradeRules } from '../core/regulation.js';
+import { href } from '../core/router.js';
 import { ui } from '../styles/ui.js';
 import { severityStyles } from './ui-kit.js';
 
@@ -185,7 +186,7 @@ export class GfStatus extends LitElement {
           <div class="info">Liste rouge : ${redLists.map((s, i) => html`${i ? ', ' : ''}<strong>${s.label}</strong> (${this.#where(s)})`)}</div>` : nothing}
         ${away.length ? html`
           <div class="muted">
-            ${territory || unread ? '' : html`Choisissez votre région (Plus → Réglages) pour savoir ce qui s’applique chez vous. `}
+            ${territory || unread ? '' : html`Choisissez votre région (<a href=${href.settings('region')}>Réglages › Ma région</a>) pour savoir ce qui s’applique chez vous. `}
             ${territory ? 'Ailleurs : ' : ''}protégée ou réglementée dans ${new Set(away.map(s => s.area)).size} territoire${new Set(away.map(s => s.area)).size > 1 ? 's' : ''}.
             <button class="link" type="button" @click=${() => { this._open = !this._open; }}>${this._open ? 'Masquer' : 'Voir la liste'}</button>
             ${this._open ? html`<ul>${away.map(s => html`<li>${s.area} — ${s.type === 'REGL' ? 'cueillette réglementée' : LEVEL[s.type].toLowerCase()}</li>`)}</ul>` : nothing}
