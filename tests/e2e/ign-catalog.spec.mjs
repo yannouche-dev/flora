@@ -4,6 +4,7 @@
 // offline, or the service not answering — with « Réessayer », and never hides the list. (Browsing it: ign-layers.spec.mjs.)
 import { readFileSync } from 'node:fs';
 import { test, expect } from './fixtures.mjs';
+import { closeMapPanel } from './app.mjs';
 
 const CAPS = readFileSync(new URL('../fixtures/ign-capabilities.xml', import.meta.url), 'utf8');
 const CAPS_URL = /data\.geopf\.fr\/wmts\?SERVICE=WMTS&REQUEST=GetCapabilities/;
@@ -85,7 +86,7 @@ test('hors ligne : la liste gardée et « Hors ligne », sans appel', async ({ p
   const panel = await openCatalog(page);
   await expect(searchbox(panel)).toHaveAttribute('placeholder', /Chercher parmi 1 couche /);
   await expect(panel.locator('.catalog .state')).toContainText('ne répond pas');
-  await page.locator('gf-map-panel').evaluate(p => /** @type {any} */ (p).close());
+  await closeMapPanel(page.locator('gf-map-panel dialog'));
   await context.setOffline(true);
   await page.locator('gf-map').first().evaluate(map => /** @type {any} */ (map).openPanel());
   await expect(panel.locator('.catalog .state')).toContainText('Hors ligne : catalogue livré avec l’app (2 janvier 2026)');

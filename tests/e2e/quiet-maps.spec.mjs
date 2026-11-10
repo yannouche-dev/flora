@@ -11,6 +11,7 @@
 import { test, expect, plantId, answerAround, answerPlantNear, answerObservations, answerZoneGbif } from './fixtures.mjs';
 import { answerTiles } from './tiles.mjs';
 import { brief, coveredControls, mapSaid, mapState, openPanel, overMap } from './quiet.mjs';
+import { closeMapPanel } from './app.mjs';
 
 /** @typedef {import('@playwright/test').Page} Page @typedef {import('@playwright/test').Locator} Locator */
 
@@ -142,7 +143,7 @@ test.describe('la Carte', () => {
     await map.evaluate(m => /** @type {any} */ (m).announce('Dit panneau ouvert'));
     await expect(panel.locator('[aria-live]')).toHaveText('Dit panneau ouvert');
     await expect(mapSaid(map)).not.toContainText('Dit panneau ouvert');
-    await panel.getByRole('button', { name: 'Fermer', exact: true }).click();
+    await closeMapPanel(panel);
     await map.evaluate(m => /** @type {any} */ (m).announce('Dit panneau fermé'));
     await expect(mapSaid(map)).toContainText('Dit panneau fermé');
   });
@@ -320,7 +321,7 @@ test.describe('la carte d’une fiche plante', () => {
     await expect(block.locator('.legend, p.hint')).toHaveCount(0);
     const panel = await openPanel(map);
     await expect(panel.locator('.legend.page')).toContainText('iNaturalist (6)');
-    await panel.getByRole('button', { name: 'Fermer', exact: true }).click();
+    await closeMapPanel(panel);
     // A plant compared that GBIF does not know, a point: their chips name it, no suffix written over the map.
     await page.route(/^https:\/\/api\.gbif\.org\/v1\/species\/match\?.*(Urtica(\+|%20)urens)/, route => route.fulfill({ contentType: 'application/json', body: JSON.stringify({ matchType: 'NONE' }), headers: { 'access-control-allow-origin': '*' } }));
     await block.evaluate(el => {
@@ -527,7 +528,7 @@ test.describe('une carte en 3D', () => {
     await quiet(page, ['.panel']);
     const panel = await openPanel(map);
     await expect(panel.locator('.state')).toContainText('Relief injoignable : vue à plat.');
-    await panel.getByRole('button', { name: 'Fermer', exact: true }).click();
+    await closeMapPanel(panel);
 
     // Editing: 2D for the time of it — its state, said; nothing over the map.
     await map.getByRole('button', { name: 'Modifier les positions' }).click();

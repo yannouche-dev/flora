@@ -12,7 +12,7 @@
 // is chosen (kept when unticked, never written down: a cell's layers=estompage too). The plant sheet's map ⚙ no longer has the
 // background, the layers nor 2D / 3D. Every tile made here (tiles.mjs), real WebGL for 3D.
 import { test, expect, answerAround, plantId } from './fixtures.mjs';
-import { layoutOf } from './app.mjs';
+import { closeMapPanel, layoutOf } from './app.mjs';
 import { answerTiles } from './tiles.mjs';
 
 /** @typedef {import('@playwright/test').Page} Page @typedef {import('@playwright/test').Locator} Locator */
@@ -85,7 +85,7 @@ test('un réglage commun changé dans le panneau ▦ d’une carte : toutes les 
   // Kept as every map's, under the key of before; the layout's address unchanged.
   expect(await stored(page)).toEqual({ base: 'plan', overlays: ['contours'], distribution: false });
   expect(await layoutOf(page)).toBe('[map(r=2km,3d=1),map(r=2km)]');
-  await panel.getByRole('button', { name: 'Fermer' }).click();
+  await closeMapPanel(panel);
 
   // The 3D map's panel: the same settings — an opacity changed there, the 2D map draws it too.
   const panel3d = await openPanel(in3d);
@@ -125,7 +125,7 @@ test('l’opacité des réserves naturelles (deux couches) : suivie par chaque c
   await expect.poll(() => opacities(in2d, 'reserves')).toEqual(['0.4', '0.4']);
   await expect.poll(() => opacities(in3d, 'reserves')).toEqual(['0.4', '0.4']);
   await expect.poll(() => glOpacity(in3d, 'reserves'), SLOW).toEqual([0.4, 0.4]);
-  await panel.getByRole('button', { name: 'Fermer' }).click();
+  await closeMapPanel(panel);
   // Changed in the 3D map's own panel: MapLibre draws it, the other map follows.
   const panel3d = await openPanel(in3d);
   await panel3d.getByRole('slider', { name: 'Opacité de Réserves naturelles' }).fill('60');
@@ -215,7 +215,7 @@ test.describe('un grand écran', () => {
     // The map with its own background keeps it; its layers, not its own, follow.
     await expect.poll(() => shown(own)).toEqual({ base: 'photo', overlays: ['parcs'] });
     expect(await layoutOf(page)).toBe('[map(r=1km,base=photo),map(r=1km)]');
-    await panel.getByRole('button', { name: 'Fermer' }).click();
+    await closeMapPanel(panel);
 
     // Its panel says so; a change made there is its own (its address), not the common one.
     panel = await openPanel(own);
@@ -436,6 +436,6 @@ test('fiche plante : son ⚙ n’a plus ni fond, ni couches IGN, ni 2D / 3D ; un
   await expect.poll(() => stored(page)).toEqual({ base: 'plan', overlays: [], distribution: false });
   await expect.poll(() => shown(map)).toEqual({ base: 'plan', overlays: [] });
   expect(await page.evaluate(async () => (await import('/app/core/sheet-layout.js')).mapConfig('map').look)).toBe(null);
-  await panel.getByRole('button', { name: 'Fermer' }).click();
+  await closeMapPanel(panel);
   await expect(form).toContainText('dans le panneau ▦ de la carte (réglages communs à toutes les cartes)');
 });

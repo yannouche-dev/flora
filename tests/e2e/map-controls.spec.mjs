@@ -9,7 +9,7 @@
 import { test, expect, answerAround, plantId } from './fixtures.mjs';
 import { centre } from './touch.mjs';
 import { overMap } from './quiet.mjs';
-import { screen } from './app.mjs';
+import { closeMapPanel, screen } from './app.mjs';
 
 /** @typedef {import('@playwright/test').Page} Page */
 
@@ -208,7 +208,7 @@ test.describe('au bureau', () => {
     await expect.poll(() => layoutOf(page)).toBe('#/layout/[map(r=1km,ctl=rayon+fond),results]');
     await expect.poll(base).toBe('plan');
     await expect(panel.locator('.scope')).toContainText('Réglages communs à toutes les cartes');
-    await panel.getByRole('button', { name: 'Fermer' }).click();
+    await closeMapPanel(panel);
     // The thumbnail to the photos, then back to the plan — the common one: none written, it follows again.
     await tile.click();
     await expect.poll(() => layoutOf(page)).toBe('#/layout/[map(r=1km,base=photo,ctl=rayon+fond),results]');

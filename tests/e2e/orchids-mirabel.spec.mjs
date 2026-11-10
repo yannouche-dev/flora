@@ -17,6 +17,7 @@
 import { test, expect, plantId, answerOrchids } from './fixtures.mjs';
 import { longPress } from './touch.mjs';
 import { mapSaid } from './quiet.mjs';
+import { closeMapPanel } from './app.mjs';
 import { AXE, TAGS } from '../../tools/axe-rules.mjs';
 
 test.use({ reducedMotion: 'reduce' });
@@ -292,8 +293,7 @@ test('« Sur cette carte » : iNaturalist, GBIF, les cultivées, les positions a
   await expect(screen(page).locator('section.panel > p.credit')).toHaveText('Observations : iNaturalist seulement (GBIF décoché : ▦ › Sur cette carte) ; protection et statuts : INPN.');
   await expect(row(page, 'Ophrys bourdon')).toContainText('2 obs.');
   await expect(row(page, 'Ophrys bourdon')).not.toContainText('iNat.');
-  await panel.getByRole('button', { name: 'Fermer', exact: true }).click();
-  await expect(panel).toBeHidden();
+  await closeMapPanel(panel);
 
   // Kept on the device, with the activity: after a reload, as left.
   await expect.poll(() => page.evaluate(() => {
@@ -528,7 +528,7 @@ test('seules des positions approximatives, cachées : dit, et « Les montrer » 
   await expect(vague(page)).toHaveCount(2);
   const { panel, data } = await onThisMap(page);
   await data.getByRole('checkbox', { name: /^Positions approximatives/ }).uncheck();
-  await panel.getByRole('button', { name: 'Fermer', exact: true }).click();
+  await closeMapPanel(panel);
   // None left: said, and where they went — not « Agrandissez le cercle » (a wider one never brings them back).
   await expect(screen(page).locator('.count')).toHaveText('Aucune orchidée observée dans ce cercle, sauf 2 cachées : position approximative.');
   await expect(screen(page).locator('.empty')).toContainText('Cochez « Positions approximatives » (▦ › Sur cette carte) pour les voir.');
@@ -546,7 +546,7 @@ test('GBIF seul gardé, son module coupé : la carte dit de cocher iNaturalist d
   await expect(screen(page).locator('.count')).toHaveText(ALL);
   let { panel, data } = await onThisMap(page);
   await data.getByRole('checkbox', { name: /^iNaturalist/ }).uncheck();
-  await panel.getByRole('button', { name: 'Fermer', exact: true }).click();
+  await closeMapPanel(panel);
   await expect(screen(page).locator('section.panel > p.credit')).toHaveText('Observations : GBIF seulement (iNaturalist décoché : ▦ › Sur cette carte) ; protection et statuts : INPN.');
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('geoflora.app.orchidees.state') || 'null')?.ctx?.sources)).toEqual(['gbif']);
   // GBIF switched off (Réglages › Modules), a visit after: what to do, not only « aucune observation ».
@@ -558,7 +558,7 @@ test('GBIF seul gardé, son module coupé : la carte dit de cocher iNaturalist d
   await expect(alert.getByRole('button', { name: 'Réessayer' })).toHaveCount(0);
   ({ panel, data } = await onThisMap(page));
   await data.getByRole('checkbox', { name: /^iNaturalist/ }).check();
-  await panel.getByRole('button', { name: 'Fermer', exact: true }).click();
+  await closeMapPanel(panel);
   await expect(screen(page).locator('.count')).toHaveText('8 observations · 3 orchidées et 1 non identifiée à l’espèce');
   await expect(screen(page).locator('.note').first()).toHaveText('Le module GBIF est désactivé : les observations d’iNaturalist seules.');
 });

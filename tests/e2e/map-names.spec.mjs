@@ -14,7 +14,7 @@
 // (annee=2016,noms=0;3d=0). Every tile made here (tiles.mjs: see-through but for their lines), real WebGL for 3D.
 import { test, expect, answerAround, plantId } from './fixtures.mjs';
 import { answerTiles } from './tiles.mjs';
-import { layoutOf, screen } from './app.mjs';
+import { closeMapPanel, layoutOf, screen } from './app.mjs';
 
 /** @typedef {import('@playwright/test').Page} Page @typedef {import('@playwright/test').Locator} Locator */
 
@@ -77,15 +77,6 @@ const drawn = map => map.evaluate(m => [...m.querySelectorAll('.leaflet-tile-pan
   key: /gf-tiles-(\S+)/.exec(e.className)?.[1] ?? '', z: Number(getComputedStyle(e).zIndex), opacity: Number(getComputedStyle(e).opacity),
   layer: new URL(/** @type {HTMLImageElement} */ (e.querySelector('img.leaflet-tile'))?.src || 'https://x/').searchParams.get('LAYER')
 })).sort((a, b) => a.z - b.z));
-
-/**
- * A map's panel ▦ closed, and its step in history gone: closing a dialog goes back a step after a timer (core/history.js
- * openModal), which would undo an address set meanwhile. @param {Page} page @param {Locator} panel
- */
-async function closePanel(page, panel) {
-  await panel.getByRole('button', { name: 'Fermer' }).click();
-  await expect.poll(() => page.evaluate(() => history.state?.gfModal ?? null)).toBe(null);
-}
 
 /** A map's panel ▦, open. @param {Locator} map */
 async function openPanel(map) {
@@ -321,7 +312,7 @@ test('en 3D : leurs sources de MapLibre au-dessus des autres couches de l’IGN,
   await expect.poll(rasters, SLOW).toEqual([['plan', 'GEOGRAPHICALGRIDSYSTEMS.PLANIGNV2'], ['contours', 'ELEVATION.CONTOUR.LINE']]);
   await fond.getByRole('button', { name: /Photos aériennes/ }).click();
   await expect.poll(rasters, SLOW).toEqual(WITH);
-  await closePanel(page, panel);
+  await closeMapPanel(panel);
 
   // A cell showing the rivers itself (layers=hydro, the same WMTS layer): one source of them, where its layers are.
   await app.go(`#/layout/[map(r=1km;3d=1;layers=hydro)]?${AT}`);
@@ -389,7 +380,7 @@ test('une case de disposition : noms=0 les cache, son panneau ▦ les montre (no
   await panel.getByRole('button', { name: 'Revenir aux réglages communs' }).click();
   await expect.poll(() => layoutOf(page)).toBe('[map(r=1km)]');
   await expect.poll(() => lookOf(map)).toEqual({ base: 'photo', landmarks: KEYS });
-  await closePanel(page, panel);
+  await closeMapPanel(panel);
 
   // Its own background (SPOT of a year): unticked in its panel, noms=0 beside base= and annee= (« , » between them).
   await app.go(`#/layout/[map(r=1km;base=spot;annee=2020;ctl=fond)]?${AT}`);
@@ -400,7 +391,7 @@ test('une case de disposition : noms=0 les cache, son panneau ▦ les montre (no
   for (const key of KEYS) await box(panel2, key).uncheck();
   await expect.poll(() => layoutOf(page)).toBe('[map(r=1km,base=spot,annee=2020,noms=0,ctl=fond)]');
   await expect.poll(() => lookOf(cell.locator('gf-map'))).toEqual({ base: 'spot:2020', landmarks: [] });
-  await closePanel(page, panel2);
+  await closeMapPanel(panel2);
   seen.length = 0;
   // Its thumbnail: first the common background (the photos: base= and annee= let go), noms= kept; then the plan, noms=
   // kept (of no effect there: nothing asked), found again on the photos.
@@ -460,7 +451,7 @@ test('une case de disposition : noms= une liste (ceux-là seuls, chacun à sa pl
   const panel = await openPanel(map);
   expect(await ticked(panel)).toEqual(['lieux', 'rail']);
   await expect(stacked(panel)).toHaveText(['Noms de lieux', 'Voies ferrées']);
-  await closePanel(page, panel);
+  await closeMapPanel(panel);
   // The usual three and the buildings (noms=1+bati): four, the buildings at the bottom.
   await app.go(`#/layout/[map(r=1km;noms=1+bâtiments)]?${AT}`);
   await expect.poll(() => layoutOf(page)).toBe('[map(r=1km,noms=lieux+routes+eau+bati)]');

@@ -31,6 +31,21 @@ export const screenSearch = (page, group = 'a') => page.evaluate(g => {
   return layout?.searchOf(g) ?? null;
 }, group);
 
+/**
+ * A map's panel ▦ (gf-map-panel's dialog) closed for good: its ✕ pressed, the dialog hidden, and its step in history
+ * gone. Closing a dialog takes its step out a moment later (core/history.js openModal: a Back after a timer): a spec that
+ * reloads, sets an address or opens the panel again before that races it — the reload aborted (net::ERR_ABORTED), the
+ * address set undone, the panel opened again closed by that Back. @param {import('@playwright/test').Locator} panel
+ */
+export async function closeMapPanel(panel) {
+  const page = panel.page();
+  // Its step: the entry the panel opened (gfModal), the current one while it is open — none when the address moved since.
+  const step = await page.evaluate(() => history.state?.gfModal ?? null);
+  await panel.getByRole('button', { name: 'Fermer', exact: true }).click();
+  await expect(panel).toBeHidden();
+  if (step !== null) await expect.poll(() => page.evaluate(() => history.state?.gfModal ?? null)).not.toBe(step);
+}
+
 export class App {
   /** @param {import('@playwright/test').Page} page */
   constructor(page) {

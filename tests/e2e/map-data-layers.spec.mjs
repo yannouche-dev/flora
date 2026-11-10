@@ -7,7 +7,7 @@
 // points' sources (src=: GBIF's fetched for the whole group) and the current plant's (plante=), written in the address
 // and read from it. Réglages › Cartes has none. Every service answered here (fixtures.mjs, tiles.mjs).
 import { test, expect, answerAround, answerPlantNear, answerZoneGbif, plantId } from './fixtures.mjs';
-import { layoutOf } from './app.mjs';
+import { closeMapPanel, layoutOf } from './app.mjs';
 import { answerTiles } from './tiles.mjs';
 
 /** @typedef {import('@playwright/test').Page} Page @typedef {import('@playwright/test').Locator} Locator */
@@ -27,16 +27,6 @@ async function openPanel(map) {
   await expect(panel).toBeVisible();
   await expect(panel.getByRole('heading', { name: 'Affichage' })).toBeVisible();
   return panel;
-}
-
-/**
- * The panel closed (its ✕), and its step in history gone: closing a dialog goes back a step after a timer
- * (core/history.js openModal), which would abort a reload or undo an address set meanwhile. @param {Locator} panel
- */
-async function closePanel(panel) {
-  await panel.getByRole('button', { name: 'Fermer', exact: true }).click();
-  await expect(panel).toBeHidden();
-  await expect.poll(() => panel.page().evaluate(() => history.state?.gfModal ?? null)).toBe(null);
 }
 
 /** The headings shown in a panel, top first (as laid out: across the shadow roots of its parts). @param {Locator} panel */
@@ -111,7 +101,7 @@ test('la Carte : « Sur cette carte » après « Fond » — la répartition GBI
   await data.getByRole('checkbox', { name: /^Plantes observées autour/ }).check();
   await expect(around).toHaveAttribute('aria-pressed', 'true');
   await expect(panel.locator('.said')).toContainText(/Autour : 12 espèces observées/);
-  await closePanel(panel);
+  await closeMapPanel(panel);
   await expect(carte.locator('section.sheet.around')).toBeVisible();
   // Closed by the bar's button: unticked there.
   await around.click();
@@ -123,7 +113,7 @@ test('la Carte : « Sur cette carte » après « Fond » — la répartition GBI
   await expect(around).toHaveAttribute('aria-pressed', 'true');
   await data.getByRole('checkbox', { name: /^Plantes observées autour/ }).uncheck();
   await expect(around).toHaveAttribute('aria-pressed', 'false');
-  await closePanel(panel);
+  await closeMapPanel(panel);
 
   // Kept: my places still hidden after a reload; nothing on the map, the row unticked; no ✎ (nothing to move), the
   // panel's « État » says why.
@@ -139,7 +129,7 @@ test('la Carte : « Sur cette carte » après « Fond » — la répartition GBI
   panel = await openPanel(map);
   await expect(onThisMap(panel).getByRole('checkbox', { name: /^Mes lieux/ })).not.toBeChecked();
   await expect(panel).toContainText(hiddenSaid);
-  await closePanel(panel);
+  await closeMapPanel(panel);
 
   // Hidden, a place opened (a link, the list, Mes plantes): that one on the map beside its sheet, ✎ to move it; not
   // the other. Closed: none again.
@@ -215,7 +205,7 @@ test('la carte d’une fiche : « Sur cette carte » — la répartition (France
   await gbif.check();
   await expect(chip('gbif-near')).toHaveAttribute('aria-pressed', 'true');
   await expect.poll(async () => (await sheetConfig(page)).near).toBe('both');
-  await closePanel(panel);
+  await closeMapPanel(panel);
 
   // Back by the chips: the panel says the same.
   await chip('gbif-fr').click();
@@ -230,7 +220,7 @@ test('la carte d’une fiche : « Sur cette carte » — la répartition (France
   await expect(data.getByRole('checkbox', { name: /^Observations proches : GBIF/ })).toBeChecked();
   // No look-alike compared: no row for it.
   await expect(data.getByRole('checkbox', { name: /^Sosie/ })).toHaveCount(0);
-  await closePanel(panel);
+  await closeMapPanel(panel);
 
   // A look-alike compared (its chip, as « Plantes à confondre » would): its row, ticked; unticked, let go as by its ✕ —
   // by the keyboard, its row gone with it, the focus on the row above (never lost to the page).
@@ -295,7 +285,7 @@ test('une carte de disposition : « Sur cette carte » — les sources de ses po
   await gbif.uncheck();
   await expect.poll(() => layoutOf(page)).toBe('[map(r=1km,src=inat)]');
   await expect.poll(kinds).not.toContain('gbif');
-  await closePanel(panel);
+  await closeMapPanel(panel);
 
   // Read from the address: a map of GBIF's points alone, the current plant's not shown — while the address says the
   // group asks iNaturalist only (sources=): GBIF there, disabled, why said.
