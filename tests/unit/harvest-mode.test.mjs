@@ -4,9 +4,12 @@
 // key the app wrote by itself before is no choice: forgotten at start (config.obsoleteKeys).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { config } from '../../app/config.js';
-import { forgetObsolete } from '../../app/core/prefs.js';
-import { followHarvests, harvestModeChosen, setHarvestMode, store } from '../../app/core/store.js';
+
+// A window before the app loads (core/sync.js listens there for another tab's writes): a launch read again below.
+/** @type {any} */ (globalThis).window ??= globalThis;
+const { config } = await import('../../app/config.js');
+const { forgetObsolete } = await import('../../app/core/prefs.js');
+const { followHarvests, harvestModeChosen, setHarvestMode, store } = await import('../../app/core/store.js');
 
 const KEY = config.storageKeys.harvestMode;
 /** Where the app wrote it before, at the first launch or as Cueillette prudente began. */
@@ -30,6 +33,8 @@ test('carnet de récolte « auto » : activé par les récoltes qui arrivent, sa
 test('carnet de récolte d’une version d’avant : la valeur écrite par l’application n’est pas un choix, « auto » de nouveau', () => {
   localStorage.removeItem(KEY);
   localStorage.setItem(LEGACY, '1');
+  // Every setting read again, as at a launch (the storage cleared elsewhere: key null).
+  dispatchEvent(Object.assign(new Event('storage'), { key: null, storageArea: localStorage }));
   assert.equal(harvestModeChosen(), false, 'le « 1 » posé par Cueillette prudente ou au premier lancement');
   assert.ok(config.obsoleteKeys.includes(LEGACY));
   forgetObsolete(config.obsoleteKeys);

@@ -103,6 +103,15 @@ export const distanceLabel = m => m < 1000 ? Math.round(m) + ' m' : (Math.round(
 
 const BOOL = { oui: 'true', non: 'false', yes: 'true', no: 'false', on: 'true', off: 'false', vrai: 'true', faux: 'false', 1: 'true', 0: 'false', avec: 'true', sans: 'false', true: 'true', false: 'false' };
 
+/**
+ * Its rows without thumbnails (Flore's « Affichage compact »): the cell's own, written in the address (compact=1) — never
+ * Flore's, which is the whole device's (core/store.js setCompact). Said (and marked C) where it shows: `no` gives when it
+ * is of no effect (a search without its list, the results as a grid). @param {(params: Record<string, any>) => boolean} no
+ * @returns {ParamSpec}
+ */
+const compactParam = no => ({ kind: 'bool', label: 'Lignes compactes', def: false, mark: 'C', words: ['compacte', 'compactes', 'dense', 'serre', 'serree'],
+  say: (v, params) => no(params) ? '' : undefined });
+
 /** The radius of the scope: its group's default, until the address says another one (?r=). @type {ParamSpec} */
 const RADIUS = { kind: 'distance', label: 'Rayon de la zone', def: null, shared: true, words: ['radius', 'rayon', 'distance', 'zone'] };
 
@@ -315,7 +324,8 @@ export const COMPONENTS = [
     about: 'La recherche de l’écran : le texte, le tri, les filtres (familles, statuts, protection…) et la liste des plantes trouvées dans la zone.',
     params: {
       filters: { kind: 'bool', label: 'Filtres ouverts', def: false, words: ['filtres', 'facettes'] },
-      list: { kind: 'bool', label: 'Liste des résultats', def: true, words: ['liste', 'resultats', 'results'] }
+      list: { kind: 'bool', label: 'Liste des résultats', def: true, words: ['liste', 'resultats', 'results'] },
+      compact: compactParam(p => p.list === false)
     },
     // 280 px: its bar (gf-results-bar) gives way in a narrow cell (the sort menu beside its tools, the count being in the
     // cell's head, its longest words cut short as on a phone; the chips wrapped), every control inside the cell — and a
@@ -330,9 +340,10 @@ export const COMPONENTS = [
   },
   {
     id: 'results', title: 'Résultats', icon: 'list-ul', aliases: ['resultats', 'liste', 'list'],
-    about: 'Les plantes trouvées (la recherche, dans la zone) : en liste, ou en grille aux colonnes triables.',
+    about: 'Les plantes trouvées (la recherche, dans la zone) : en liste, compacte ou non, ou en grille aux colonnes triables.',
     params: {
-      view: { kind: 'enum', label: 'Présentation', def: 'auto', values: { auto: 'Selon la largeur', list: 'Liste', grid: 'Grille' }, aliases: { liste: 'list', grille: 'grid', table: 'grid', tableau: 'grid' }, words: ['vue', 'affichage'] }
+      view: { kind: 'enum', label: 'Présentation', def: 'auto', values: { auto: 'Selon la largeur', list: 'Liste', grid: 'Grille' }, aliases: { liste: 'list', grille: 'grid', table: 'grid', tableau: 'grid' }, words: ['vue', 'affichage'] },
+      compact: compactParam(p => p.view === 'grid')
     },
     main: 'view', reads: ['recherche', 'zone', 'regard', 'plante'], writes: ['recherche', 'plante', 'zone', 'regard'], min: { w: 240, h: 140 }
   },

@@ -42,6 +42,19 @@ test('un réglage changé par la case : écrit, retiré quand il revient à ce q
   assert.equal(changed('results', { '3d': true }), '[results]');
 });
 
+test('les lignes compactes d’une case recherche ou résultats (compact=1) : les siennes, lues, écrites court, retirées quand elle n’en a plus', () => {
+  assert.equal(read('results(compact)').text, '[results(compact=1)]');
+  assert.equal(read('resultats(liste,dense)').text, '[results(view=list,compact=1)]');
+  assert.equal(read('search(compacte,filtres)').text, '[search(filters=1,compact=1)]');
+  // Its bar's button (search), the editor: written, then taken out.
+  assert.equal(changed('search', { compact: true }), '[search(compact=1)]');
+  assert.equal(changed('search(compact=1)', { compact: false }), '[search]');
+  assert.equal(changed('results(view=list)', { compact: true }), '[results(view=list,compact=1)]');
+  // A map's « compact » stays its controls'; elsewhere, no such setting.
+  assert.equal(read('map(compact)').text, '[map(ui=compacte)]');
+  assert.deepEqual(read('filters(compact)').problems, ['Filtres : valeur « compact » sans nom de paramètre.']);
+});
+
 test('les couches de la case : absentes, les communes à toutes les cartes ; sa dernière décochée, aucune (layers=aucune), même avec une intention', () => {
   // Its panel ▦ (gf-map look-change: no overlay left) writes none, not the common layers.
   assert.equal(changed('map(layers=cadastre)', { layers: [] }), '[map(layers=aucune)]');

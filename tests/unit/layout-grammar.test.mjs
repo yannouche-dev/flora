@@ -210,6 +210,11 @@ test('le menu des colonnes (téléphone) : l’icône de chaque case, chaque blo
   assert.deepEqual(look('search(list=0)'), ['search', '−L', 'Recherche (sans liste des résultats)']);
   assert.deepEqual(look('search(list=0,filters=1)'), ['search', 'F−L', 'Recherche (filtres ouverts, sans liste des résultats)']);
   assert.deepEqual(look('search(list=1)'), ['search', null, 'Recherche']);
+  // Compact rows (C), said where they show: not in a grid, nor in a search without its list.
+  assert.deepEqual(look('results(liste,compact)'), ['list-ul', 'LC', 'Résultats (Liste, lignes compactes)']);
+  assert.deepEqual(look('results(grid,compact)'), ['list-ul', 'G', 'Résultats (Grille)']);
+  assert.deepEqual(look('search(filters=1,compact=1)'), ['search', 'FC', 'Recherche (filtres ouverts, lignes compactes)']);
+  assert.deepEqual(look('search(list=0,compact=1)'), ['search', '−L', 'Recherche (sans liste des résultats)']);
   // Every cell has an icon of the sprite's (icons.js names them).
   for (const n of names()) assert.match(cellIcon(resolve(G.parse(n).tree.kids[0])), /^[a-z0-9-]+$/, n);
 });

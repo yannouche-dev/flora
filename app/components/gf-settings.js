@@ -6,13 +6,13 @@ import { context, floreHref, floreName } from '../core/context.js';
 import { MODE_ICON_CHOICES, modeLabel } from '../core/modes.js';
 import { createMode, deleteMode, editMode } from '../core/mode-admin.js';
 import './gf-mode-switch.js';
-import { getTrefleToken, setTrefleToken } from '../core/sources.js';
+import { getTrefleToken, setTrefleToken, trefleEvents } from '../core/sources.js';
 import { MODULES, setModule } from '../core/modules.js';
 import { CATEGORIES, categoryOf } from '../core/categories.js';
 import { icon, modeIcon } from '../core/icons.js';
 import { exportGeoJSON, importGeoJSON, keptContents, lastExportDate, listCollections, protectStorage, spotEvents, storageReport, transferLink } from '../core/collections.js';
 import { share } from '../core/share.js';
-import { myRegion, setMyRegion, territories, territoryAt } from '../core/territory.js';
+import { myRegion, regionEvents, setMyRegion, territories, territoryAt } from '../core/territory.js';
 import { geoProblem, oneFix } from '../core/geo.js';
 import { resetAll } from '../core/sheet-blocks.js';
 import { exportLayout, importLayout } from '../core/sheet-layout.js';
@@ -47,7 +47,6 @@ export class GfSettings extends LitElement {
     _report: { state: true },
     _personal: { state: true },
     _regions: { state: true },
-    _region: { state: true },
     _regionNote: { state: true },
     _transfer: { state: true },
     _layoutNote: { state: true },
@@ -128,6 +127,10 @@ export class GfSettings extends LitElement {
   #onNotes = () => this.requestUpdate();
   /** Mes écrans changed (a screen kept, one taken out, another tab). */
   #onScreens = () => this.requestUpdate();
+  /** Ma région, the Trefle token: changed here or in another tab. */
+  #onSetting = () => this.requestUpdate();
+  /** Ma région changed, here or in another tab: the note of « Utiliser ma position » was about the one before. */
+  #onRegion = () => { this._regionNote = null; this.requestUpdate(); };
 
   connectedCallback() {
     super.connectedCallback();
@@ -135,6 +138,8 @@ export class GfSettings extends LitElement {
     discoverEvents.addEventListener('change', this.#onDiscover);
     notesEvents.addEventListener('change', this.#onNotes);
     screenEvents.addEventListener('change', this.#onScreens);
+    regionEvents.addEventListener('change', this.#onRegion);
+    trefleEvents.addEventListener('change', this.#onSetting);
     this.addEventListener('click', this.#onClick);
     this.#countSpots();
   }
@@ -145,6 +150,8 @@ export class GfSettings extends LitElement {
     discoverEvents.removeEventListener('change', this.#onDiscover);
     notesEvents.removeEventListener('change', this.#onNotes);
     screenEvents.removeEventListener('change', this.#onScreens);
+    regionEvents.removeEventListener('change', this.#onRegion);
+    trefleEvents.removeEventListener('change', this.#onSetting);
   }
 
   async #countSpots() {
@@ -227,7 +234,6 @@ export class GfSettings extends LitElement {
     this._personal = true;
     /** @type {{ iso: string, name: string }[]} */
     this._regions = [];
-    this._region = myRegion();
     /** @type {string | null} */
     this._regionNote = null;
     territories().then(t => { this._regions = t.regions; }).catch(() => {});
@@ -290,7 +296,6 @@ export class GfSettings extends LitElement {
   /** @param {string | null} iso */
   #setRegion(iso) {
     setMyRegion(iso);
-    this._region = iso;
     this._regionNote = null;
   }
 
@@ -604,9 +609,9 @@ export class GfSettings extends LitElement {
           les cartes des fiches (« Ma région »). Dans un lieu, c’est sa position GPS qui compte. « Utiliser ma position » trouve la
           région sur l’appareil : votre position n’est envoyée nulle part.</p>
         <div class="row">
-          <select aria-label="Ma région" .value=${this._region || ''} @change=${e => this.#setRegion(e.target.value || null)}>
+          <select aria-label="Ma région" .value=${myRegion() || ''} @change=${e => this.#setRegion(e.target.value || null)}>
             <option value="">— Non précisée —</option>
-            ${this._regions.map(r => html`<option value=${r.iso} ?selected=${r.iso === this._region}>${r.name}</option>`)}
+            ${this._regions.map(r => html`<option value=${r.iso} ?selected=${r.iso === myRegion()}>${r.name}</option>`)}
           </select>
           <button type="button" @click=${this.#regionFromGps}>Utiliser ma position</button>
         </div>

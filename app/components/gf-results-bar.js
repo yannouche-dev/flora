@@ -28,7 +28,12 @@ export class GfResultsBar extends LitElement {
     /** The count is shown just above the bar, by its host (a free layout's cell head: « Recherche · 66 espèces »). */
     countAbove: { type: Boolean, attribute: 'count-above' },
     /** The search it shows and changes (core/search-channel.js: a screen's group); none: the app's. */
-    channel: { attribute: false }
+    channel: { attribute: false },
+    /**
+     * Its list's rows compact, its host's own (a screen's cell: compact=), which its button asks to change (`compact-change`,
+     * detail { compact }); undefined: the app's (Flore: the whole device, setCompact); null: no button (no list beside it).
+     */
+    compact: { attribute: false }
   };
 
   static styles = [ui, css`
@@ -91,6 +96,8 @@ export class GfResultsBar extends LitElement {
     this.countAbove = false;
     /** @type {import('../core/search-channel.js').Channel | null} */
     this.channel = null;
+    /** @type {boolean | null | undefined} */
+    this.compact = undefined;
   }
 
   /** The sort the menu was last put on (updated), while it is drawn. @type {string | null} */
@@ -137,8 +144,15 @@ export class GfResultsBar extends LitElement {
     </div>`;
   }
 
+  /** Its button: the rows compact, or not — its host's (`compact` given), else the app's. @param {boolean} on */
+  #setCompact(on) {
+    if (this.compact === undefined) setCompact(on);
+    else this.dispatchEvent(new CustomEvent('compact-change', { detail: { compact: on } }));
+  }
+
   render() {
-    const { query, results, compact, status, gridView } = this.#store.state;
+    const { query, results, status, gridView } = this.#store.state;
+    const compact = this.compact ?? this.#store.state.compact;
     const view = gridViewOf(this.#store.state);
     const active = activeFilterCount(query);
     // « Pertinence » with a text only; « Plus observées » with the zone's counts only (a free layout's: never in Flore).
@@ -168,9 +182,9 @@ export class GfResultsBar extends LitElement {
             ${sorts.map(s => html`<option value=${s.value} ?selected=${s.value === results.sort}>${s.label}</option>`)}
             ${sorts.some(s => s.value === results.sort) ? nothing : html`<option value=${results.sort} selected>${columnSortLabel(results.sort)}</option>`}
           </select>
-          <button class="tool" type="button" aria-pressed=${compact ? 'true' : 'false'}
+          ${this.compact === null ? nothing : html`<button class="tool" type="button" aria-pressed=${compact ? 'true' : 'false'}
             title="Affichage compact (sans vignettes)" aria-label="Affichage compact (sans vignettes)"
-            @click=${() => setCompact(!compact)}>${icon('arrows-collapse')}</button>`}
+            @click=${() => this.#setCompact(!compact)}>${icon('arrows-collapse')}</button>`}`}
       </div>
 
       <!-- The last chip gone with the focus: to the count, which says the list it leaves. -->

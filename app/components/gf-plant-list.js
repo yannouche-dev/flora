@@ -116,6 +116,8 @@ export class GfPlantList extends LitElement {
     lit: { attribute: false },
     /** What it says with no plant (a free layout's list kept to what a map shows); null: none matches the search. */
     empty: { attribute: false },
+    /** Its rows without thumbnails, its host's own (a screen's cell: compact=); null: the app's (Flore: the whole device). */
+    compact: { attribute: false },
     _scrollTop: { state: true },
     _height: { state: true }
   };
@@ -226,6 +228,8 @@ export class GfPlantList extends LitElement {
     this.lit = null;
     /** @type {string | null} */
     this.empty = null;
+    /** @type {boolean | null} */
+    this.compact = null;
     this.addEventListener('scroll', () => {
       cancelAnimationFrame(this.#frame);
       this.#frame = requestAnimationFrame(() => { this._scrollTop = this.scrollTop; });
@@ -271,10 +275,13 @@ export class GfPlantList extends LitElement {
   /** The plants listed: those given (items), else the search's. @returns {any[]} */
   get #list() { return this.items ?? this.#store.state.results.items; }
 
+  /** Its rows without thumbnails: its host's say, else the app's. */
+  get #compact() { return this.compact ?? this.#store.state.compact; }
+
   /** Height of a row in the current display. */
   get #rowHeight() {
     const gridView = gridViewOf(this.#store.state);
-    return this.grid ? (baseOf(gridView) === 'epure' ? ILLUSTRATED_ROW_HEIGHT : GRID_ROW_HEIGHT) : this.#store.state.compact ? COMPACT_ROW_HEIGHT : ROW_HEIGHT;
+    return this.grid ? (baseOf(gridView) === 'epure' ? ILLUSTRATED_ROW_HEIGHT : GRID_ROW_HEIGHT) : this.#compact ? COMPACT_ROW_HEIGHT : ROW_HEIGHT;
   }
 
   /** The open plant's row stays in view as the plant sheet moves to the previous / next one. */
@@ -342,7 +349,8 @@ export class GfPlantList extends LitElement {
   }
 
   render() {
-    const { query: { q }, compact, status } = this.#store.state;
+    const { query: { q }, status } = this.#store.state;
+    const compact = this.#compact;
     const items = this.#list;
     const gridView = gridViewOf(this.#store.state);
     const columns = this.#columns();

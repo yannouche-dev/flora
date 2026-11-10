@@ -18,7 +18,7 @@
 // (their plants the list: state.js), those of 3 within 500 m; and 3 of a plant asked alone.
 import { test, expect, plantId, answerAround } from './fixtures.mjs';
 import { swipe } from './touch.mjs';
-import { screenSearch } from './app.mjs';
+import { layoutOf, screenSearch } from './app.mjs';
 import { MODELS } from '../../app/layout/models.js';
 import { parse } from '../../app/layout/grammar.js';
 
@@ -448,6 +448,33 @@ test.describe('un grand écran', () => {
     const [sort, tool] = await Promise.all([bar.locator('select'), bar.locator('.row .tool').first()].map(box));
     expect(Math.abs((sort.y + sort.height / 2) - (tool.y + tool.height / 2))).toBeLessThan(2);
     expect(sort.width).toBeGreaterThan(150);
+  });
+
+  test('les lignes compactes d’une case recherche ou résultats : les siennes, dans l’adresse (compact=1) — jamais celles de Flore, qui garde les siennes', async ({ app, page }) => {
+    // The search narrow and the results said as a list: lists, never a grid (which has no compact rows).
+    await app.open('#/layout/[search@40,results(list,compact)]');
+    const row = (/** @type {string} */ comp) => cellOf(page, comp).locator('gf-plant-card').first();
+    await expect(row('results')).toHaveAttribute('compact', '');
+    await expect(row('search')).toBeVisible();
+    await expect(row('search')).not.toHaveAttribute('compact', '');
+    // The search's bar: its own rows, written in the address — neither Flore's nor the device's.
+    const button = cellOf(page, 'search').getByRole('button', { name: 'Affichage compact (sans vignettes)' });
+    await expect(button).toHaveAttribute('aria-pressed', 'false');
+    await button.click();
+    await expect.poll(() => layoutOf(page)).toBe('[search(compact=1)@40,results(view=list,compact=1)]');
+    await expect(button).toHaveAttribute('aria-pressed', 'true');
+    await expect(row('search')).toHaveAttribute('compact', '');
+    expect([await app.state('compact'), await page.evaluate(() => localStorage.getItem('geoflora.compact'))]).toEqual([false, null]);
+    // Flore's, for the whole device: a screen's cells without compact= keep their thumbnails.
+    await app.go(`#/plant/${plantId(ORTIE)}`);
+    const flore = page.locator('gf-flora gf-results-bar').getByRole('button', { name: 'Affichage compact (sans vignettes)' });
+    await expect(flore).toHaveAttribute('aria-pressed', 'false');
+    await flore.click();
+    await expect(page.locator('gf-flora gf-plant-card').first()).toHaveAttribute('compact', '');
+    await app.go('#/layout/[search@40,results(list)]');
+    await expect(row('results')).toBeVisible();
+    await expect(row('results')).not.toHaveAttribute('compact', '');
+    await expect(row('search')).not.toHaveAttribute('compact', '');
   });
 
   test('une fenêtre trop étroite pour ses colonnes : leurs onglets, chacun son icône et son nom à côté, là où ils ont la place ; trop nombreux, leurs icônes seules', async ({ app, page }) => {

@@ -1,7 +1,7 @@
 // @ts-check
 import { LitElement, html, css, nothing } from 'lit';
 import { getPlant } from '../core/plants.js';
-import { myRegion, sortStatuses, territoryAt, territoryFor } from '../core/territory.js';
+import { myRegion, regionEvents, sortStatuses, territoryAt, territoryFor } from '../core/territory.js';
 import { harvestRules, tradeRules } from '../core/regulation.js';
 import { href } from '../core/router.js';
 import { ui } from '../styles/ui.js';
@@ -100,16 +100,17 @@ export class GfStatus extends LitElement {
     this._open = false;
   }
 
+  /** Réglages › Ma région changed, here or in another tab: the statuses said for it again. */
   #onRegion = () => this.#locate();
 
   connectedCallback() {
     super.connectedCallback();
-    addEventListener('geoflora-region', this.#onRegion);
+    regionEvents.addEventListener('change', this.#onRegion);
   }
 
   disconnectedCallback() {
     super.disconnectedCallback();
-    removeEventListener('geoflora-region', this.#onRegion);
+    regionEvents.removeEventListener('change', this.#onRegion);
   }
 
   /** @param {Map<string, any>} changed */
