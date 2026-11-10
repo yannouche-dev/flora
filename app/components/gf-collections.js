@@ -493,8 +493,10 @@ export class GfCollections extends LitElement {
     }
   }
 
+  /** « Oublier », once asked: what is missing here is no longer kept by the backup copy (collections.js discardMissingBackup). */
   async #discard() {
-    if (!confirm('Oublier ce qui manque ici ? La copie de secours ne le gardera plus.')) return;
+    if (!await confirmAsk({ title: 'Oublier ce qui manque ici ?', yes: 'Oublier', danger: true,
+      text: 'La copie de secours de cet appareil ne le gardera plus : il ne pourra plus être restauré.' })) return;
     await discardMissingBackup();
     this._missing = [];
   }

@@ -363,11 +363,13 @@ export class GfSettings extends LitElement {
   }
 
   /**
-   * « Tout rétablir », confirmed: every mode back to its defaults (its action bar too; an own mode keeps its name and
-   * icon, with its model's layout), the names and the built-in Carte's settings too; the Note blocks and their texts stay.
+   * « Tout rétablir », once confirmed in the app's question (gf-ask.js): every mode back to its defaults (its action bar
+   * too; an own mode keeps its name and icon, with its model's layout), the names and the built-in Carte's settings too;
+   * the Note blocks and their texts stay.
    */
-  #resetLayout() {
-    if (!confirm('Tout rétablir ? Dans tous les modes, ordre, blocs et sous-blocs masqués, styles, titres affichés ou cachés, « masqué si vide », panneaux et barre d’actions reviennent par défaut, les noms donnés aux blocs et les réglages ⚙ du bloc Carte aussi, et les blocs Carte ajoutés sont supprimés. Vos modes gardent leur nom et leur icône, avec la mise en page de leur modèle. Vos blocs Note et leurs textes restent.')) return;
+  async #resetLayout() {
+    if (!await confirmAsk({ title: 'Tout rétablir ?', yes: 'Tout rétablir', danger: true,
+      text: 'Dans tous les modes, ordre, blocs et sous-blocs masqués, styles, titres affichés ou cachés, « masqué si vide », panneaux et barre d’actions reviennent par défaut, les noms donnés aux blocs et les réglages ⚙ du bloc Carte aussi, et les blocs Carte ajoutés sont supprimés. Vos modes gardent leur nom et leur icône, avec la mise en page de leur modèle. Vos blocs Note et leurs textes restent.' })) return;
     resetAll();
     this._layoutNote = 'Mise en page rétablie.';
   }
@@ -418,11 +420,16 @@ export class GfSettings extends LitElement {
             <button type="button" class="small" title=${'Nouveau mode à partir de « ' + m.label + ' »'}
               @click=${() => { const key = createMode(m.label + ' (copie)', m.key); this._modeNote = `Mode « ${modeLabel(key)} » créé : choisissez-le dans les sélecteurs d’affichage, puis personnalisez-le sur la fiche (couronne, puis ce mode dans la barre de mise en page).`; }}>${icon('plus-lg')} Dupliquer</button>
             ${m.builtIn ? nothing : html`<button type="button" class="small" aria-label=${'Supprimer le mode ' + m.label}
-              @click=${() => { if (confirm(`Supprimer le mode « ${m.label} » et sa mise en page ?`)) deleteMode(m.key); }}>${icon('trash3')} Supprimer</button>`}
+              @click=${() => this.#deleteMode(m.key, m.label)}>${icon('trash3')} Supprimer</button>`}
           </span>
         </li>`)}
       </ul>
       ${this._modeNote ? html`<p class="muted" role="status">${this._modeNote}</p>` : nothing}`;
+  }
+
+  /** A mode of one's own deleted, once asked: its layout with it (mode-admin.js deleteMode). @param {string} key @param {string} label */
+  async #deleteMode(key, label) {
+    if (await confirmAsk({ title: `Supprimer le mode « ${label} » ?`, text: 'Sa mise en page sera supprimée avec lui.', yes: 'Supprimer', danger: true })) deleteMode(key);
   }
 
   /**

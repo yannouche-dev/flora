@@ -744,19 +744,20 @@ test('Réglages › « Tout rétablir » : tout revient par défaut, dans tous l
   const layout = () => page.evaluate(async () => (await import('/app/core/sheet-layout.js')).exportLayout());
   const saved = await layout();
 
-  // Not confirmed: nothing changes.
+  // Asked in the app's question; « Annuler »: nothing changes.
   await app.go('#/settings');
   const reset = card(page).getByRole('button', { name: 'Tout rétablir' });
-  let message = '';
-  page.once('dialog', dialog => { message = dialog.message(); dialog.dismiss(); });
   await reset.click();
-  expect(message).toBe('Tout rétablir ? Dans tous les modes, ordre, blocs et sous-blocs masqués, styles, titres affichés ou cachés, « masqué si vide », panneaux et barre d’actions reviennent par défaut, les noms donnés aux blocs et les réglages ⚙ du bloc Carte aussi, et les blocs Carte ajoutés sont supprimés. Vos modes gardent leur nom et leur icône, avec la mise en page de leur modèle. Vos blocs Note et leurs textes restent.');
+  const ask = page.getByRole('alertdialog', { name: 'Tout rétablir ?' });
+  await expect(ask).toContainText('Dans tous les modes, ordre, blocs et sous-blocs masqués, styles, titres affichés ou cachés, « masqué si vide », panneaux et barre d’actions reviennent par défaut, les noms donnés aux blocs et les réglages ⚙ du bloc Carte aussi, et les blocs Carte ajoutés sont supprimés. Vos modes gardent leur nom et leur icône, avec la mise en page de leur modèle. Vos blocs Note et leurs textes restent.');
+  await ask.getByRole('button', { name: 'Annuler' }).click();
+  await expect(ask).toHaveCount(0);
   expect(await layout()).toBe(saved);
 
-  // Confirmed: said; every mode as it was at first, the Carte block gone; the mode, the Note block (last, shown) and its
-  // text kept.
-  page.once('dialog', dialog => dialog.accept());
+  // « Tout rétablir »: said; every mode as it was at first, the Carte block gone; the mode, the Note block (last, shown)
+  // and its text kept.
   await reset.click();
+  await ask.getByRole('button', { name: 'Tout rétablir' }).click();
   await expect(card(page).locator('p[role=status]')).toHaveText('Mise en page rétablie.');
   expect(await page.evaluate(async ([key, ortie, made]) => {
     const sb = await import('/app/core/sheet-blocks.js');
