@@ -33,7 +33,8 @@ const REPLACED = [
   [word('dispositions? libres?'), '« écran sur mesure »'],
   [word('créer une app|ouvrir l[’\']app'), '« Composer un écran », « Terminé »'],
   [word('mode king'), '« Personnaliser la fiche » (« King » n’est qu’un nom de code)'],
-  [word('épingles?'), '« repère » (le point d’une carte) ; une case détachée dit ce qu’elle fait (« Plante fixée », « iNaturalist seul »)']
+  [word('épingles?'), '« repère » (le point d’une carte) ; une case détachée dit ce qu’elle fait (« Plante fixée », « iNaturalist seul »)'],
+  [word('mode cueillette'), '« carnet de récolte » (Réglages › Carnet de récolte ; « mode » ne dit qu’un mode d’affichage)']
 ];
 /** The console's prefix, never shown: `mini-app ${id}: …` (define.js, gf-miniapp.js, runtime.js). */
 const DEVELOPER = new Set(['mini-app ']);
@@ -80,10 +81,13 @@ test('le lexique reconnaît les mots qu’il remplace, pas leurs voisins', () =>
     'Recommencer la découverte', 'Créer un endroit ici', 'Direction votre herbier', 'Dans mes collections', 'J’ai des sosies dangereux (2)',
     'Quitter le plein écran', 'En mode modification', 'Quitter le mode King', 'Entrer en mode King', 'Titre caché hors mode King',
     'Chacun s’arrange ensuite en mode\n        King', 'Quitter le plein\n  écran', 'Disposition libre', 'les dispositions libres', 'Créer une app',
-    'Ouvrir l’app', 'En mode édition', 'ou ajustez l’épingle', 'Épingles']) assert.equal(caught(text).length, 1, text);
+    'Ouvrir l’app', 'En mode édition', 'ou ajustez l’épingle', 'Épingles', 'Mode cueillette', 'Allumer le mode cueillette',
+    'le mode\n      cueillette ajoute à vos lieux']) assert.equal(caught(text).length, 1, text);
   for (const text of ['Commencer : Rencontres', 'déjouer le piège', 'il reprend sa place', 'Planche d’herbier', 'Spécimens d’herbier',
     'Créer un lieu ici', 'J’ai des sosies toxiques (2)', 'Sortir du plein écran', 'Personnaliser la fiche', 'Mise en page de la fiche',
     'geoflora.app.rencontres.state', 'gf-scenarios', 'open-scenarios', 'openKing', 'king-bar', 'geoflora.kingMode', 'Écran sur mesure',
     'Composer un écran', 'la disposition des panneaux', 'Avancé : le texte de la disposition', 'Changer de modèle', 'geoflora.freeLayout',
-    'gf-layout', 'ou ajustez le repère', 'Plante fixée', 'iNaturalist seul', 'pin-angle-fill', 'epingle']) assert.deepEqual(caught(text), [], text);
+    'gf-layout', 'ou ajustez le repère', 'Plante fixée', 'iNaturalist seul', 'pin-angle-fill', 'epingle', 'Carnet de récolte',
+    'Activer le carnet de récolte', 'Cueillette prudente', 'la cueillette y est souvent interdite', 'harvestMode', 'geoflora.harvestModeChoice',
+    'Passer en mode Scientifique']) assert.deepEqual(caught(text), [], text);
 });

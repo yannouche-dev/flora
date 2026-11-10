@@ -606,13 +606,13 @@ export class GfSettings extends LitElement {
 
         ${this.#modules()}
 
-        <h2 id="harvest" tabindex="-1">Mode cueillette</h2>
+        <h2 id="harvest" tabindex="-1">Carnet de récolte</h2>
         <label class="switch">
           <input type="checkbox" .checked=${this.#store.state.harvestMode} @change=${e => setHarvestMode(e.target.checked)} />
           <span>Journal de récolte, qualité, plantes « en saison » / « bientôt »</span>
         </label>
         <p class="muted">Désactivé, vos lieux restent de simples « plantes vues ici » ; rien n’est effacé.
-          ${harvestModeChosen() ? nothing : 'Automatique tant que vous ne l’avez pas réglé : allumé dès que l’appareil contient des récoltes (un import, un lien de transfert), éteint au lancement s’il n’en contient aucune.'}</p>
+          ${harvestModeChosen() ? nothing : 'Automatique tant que vous ne l’avez pas réglé : activé dès que l’appareil contient des récoltes (un import, un lien de transfert), désactivé au lancement s’il n’en contient aucune.'}</p>
 
         <h2 id="collections" tabindex="-1">Mes plantes : favoris, listes et lieux</h2>
         <p class="muted">

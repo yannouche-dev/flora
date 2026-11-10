@@ -12,7 +12,7 @@ const KEY = config.storageKeys.harvestMode;
 /** Where the app wrote it before, at the first launch or as Cueillette prudente began. */
 const LEGACY = 'geoflora.harvestMode';
 
-test('mode cueillette « auto » : allumé par les récoltes qui arrivent, sans rien écrire, jamais éteint en cours de visite', () => {
+test('carnet de récolte « auto » : activé par les récoltes qui arrivent, sans rien écrire, jamais désactivé en cours de visite', () => {
   localStorage.removeItem(KEY);
   assert.equal(harvestModeChosen(), false);
   followHarvests(false);
@@ -27,7 +27,7 @@ test('mode cueillette « auto » : allumé par les récoltes qui arrivent, sans 
   store.set({ harvestMode: false });
 });
 
-test('mode cueillette d’une version d’avant : la valeur écrite par l’application n’est pas un choix, « auto » de nouveau', () => {
+test('carnet de récolte d’une version d’avant : la valeur écrite par l’application n’est pas un choix, « auto » de nouveau', () => {
   localStorage.removeItem(KEY);
   localStorage.setItem(LEGACY, '1');
   assert.equal(harvestModeChosen(), false, 'le « 1 » posé par Cueillette prudente ou au premier lancement');
@@ -36,7 +36,7 @@ test('mode cueillette d’une version d’avant : la valeur écrite par l’appl
   assert.equal(localStorage.getItem(LEGACY), null);
 });
 
-test('mode cueillette choisi, même quand le stockage refuse de l’écrire : les récoltes n’y changent rien', () => {
+test('carnet de récolte choisi, même quand le stockage refuse de l’écrire : les récoltes n’y changent rien', () => {
   localStorage.removeItem(KEY);
   const setItem = localStorage.setItem;
   localStorage.setItem = () => { throw new DOMException('plein', 'QuotaExceededError'); };
@@ -51,7 +51,7 @@ test('mode cueillette choisi, même quand le stockage refuse de l’écrire : le
   assert.equal(store.state.harvestMode, false, 'éteint par l’utilisateur : reste éteint');
 });
 
-test('mode cueillette choisi : gardé, les récoltes n’y changent plus rien', () => {
+test('carnet de récolte choisi : gardé, les récoltes n’y changent plus rien', () => {
   localStorage.removeItem(KEY);
   setHarvestMode(false);
   assert.equal(harvestModeChosen(), true);

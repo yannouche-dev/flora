@@ -79,7 +79,7 @@ test.describe('premier lancement', () => {
     const offer = g.getByRole('group', { name: /Vous avez choisi la science/ });
     await expect(offer).toBeVisible();
     await expect(offer.getByRole('button')).toHaveText([/Passer en mode Scientifique/, 'Garder tel quel']);
-    await expect(g.getByRole('button', { name: /Allumer le mode cueillette/ })).toHaveCount(0);
+    await expect(g.getByRole('button', { name: /Activer le carnet de récolte/ })).toHaveCount(0);
     expect(await whole(app)).toEqual(before);
     // On a phone too: the band within the screen — its buttons wrapped, none overflowing it nor cut off by the screen.
     expect(await g.locator('.g-end').evaluate(el => ({ over: el.scrollWidth - el.clientWidth,
@@ -108,12 +108,12 @@ test.describe('premier lancement', () => {
     await expect.poll(async () => (await kept(page, 'rencontres'))?.ctx.guided).toBe(false);
   });
 
-  test('fin des premiers pas, la cueillette : « Garder tel quel » ne change rien ; « Allumer le mode cueillette » ne change que lui', async ({ app, page }) => {
+  test('fin des premiers pas, la cueillette : « Garder tel quel » ne change rien ; « Activer le carnet de récolte » ne change que lui', async ({ app, page }) => {
     await app.open('#/app/rencontres');
     const before = await whole(app);
     const g = await toTheEnd(page, 'harvest');
     const offer = g.getByRole('group', { name: /Vous avez choisi la cueillette/ });
-    await expect(offer.getByRole('button')).toHaveText([/Allumer le mode cueillette/, 'Garder tel quel']);
+    await expect(offer.getByRole('button')).toHaveText([/Activer le carnet de récolte/, 'Garder tel quel']);
     await expect(g.getByRole('button', { name: /Passer en mode Scientifique/ })).toHaveCount(0);
 
     // « Garder tel quel », with the keyboard: the offer put away, said, the focus on what comes next; nothing changed.
@@ -129,10 +129,10 @@ test.describe('premier lancement', () => {
     await expect(g.locator('.g-steps li.on .l')).toHaveText('Cueillette');
     await expect(g.locator('.g-end')).toHaveCount(0);
     await g.locator('.g-steps [data-step="around"]').click();
-    await g.getByRole('button', { name: 'Allumer le mode cueillette' }).click();
+    await g.getByRole('button', { name: 'Activer le carnet de récolte' }).click();
     await expect.poll(() => app.state('harvestMode')).toBe(true);
     expect(await whole(app)).toEqual({ ...before, harvest: true, harvestKept: '1' });
-    await expect(g.locator('.g-end')).toContainText('Mode cueillette allumé pour toute l’application.');
+    await expect(g.locator('.g-end')).toContainText('Carnet de récolte activé pour toute l’application.');
 
     // A pane of the guided way folded: kept with the game, never in the mode's layout.
     await g.locator('gf-plant-detail').getByRole('button', { name: /^Replier le panneau/ }).first().click();
@@ -341,7 +341,7 @@ test('⋯ « Masquer les étapes » : pour cette activité seulement, le réglag
   expect(await stored(page, 'geoflora.showSteps')).toBe(null);
 });
 
-test('mode cueillette « auto » : il suit les récoltes qui arrivent, sans rien écrire ; réglé, il reste', async ({ app, page }) => {
+test('carnet de récolte « auto » : il suit les récoltes qui arrivent, sans rien écrire ; réglé, il reste', async ({ app, page }) => {
   /** A place with a harvest of this plant, saved (as an import or a transfer link brings one). @param {string} name */
   const harvest = name => page.evaluate(async id => {
     const c = await import('/app/core/collections.js');

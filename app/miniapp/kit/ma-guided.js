@@ -11,7 +11,7 @@
 // never the layout of the mode, which Flore keeps as the user made it; each step docks its own blocks there once, as it
 // is accepted (a module off: as it is switched back on, `leftOut`); the image of its « Médias » is the address's &m=.
 // Its end changes nothing by itself: at the last step, the way chosen at the fork is offered for the whole app, by a
-// button that says so (« Passer en mode Scientifique », « Allumer le mode cueillette »), or « Garder tel quel » — the
+// button that says so (« Passer en mode Scientifique », « Activer le carnet de récolte »), or « Garder tel quel » — the
 // offer in focus as the step arrives.
 // The steps: a bar above the blocks, always in sight (its own: the box's is left out, manifest `ownBar`) — done, the
 // one shown, to come; « Précédent » and the next one. Its first two are the app's steps « map » and « cards » (the
@@ -123,8 +123,8 @@ const trees = new WeakMap();
 const END = {
   science: { text: 'Vous avez choisi la science : le mode Scientifique montre toutes les données des fiches, dans toute l’application.',
     label: 'Passer en mode Scientifique', done: 'Mode Scientifique activé pour toute l’application.' },
-  harvest: { text: 'Vous avez choisi la cueillette : le mode cueillette ajoute à vos lieux le journal de récolte, la qualité et les plantes de saison.',
-    label: 'Allumer le mode cueillette', done: 'Mode cueillette allumé pour toute l’application.' }
+  harvest: { text: 'Vous avez choisi la cueillette : le carnet de récolte ajoute à vos lieux le journal de récolte, la qualité et les plantes de saison.',
+    label: 'Activer le carnet de récolte', done: 'Carnet de récolte activé pour toute l’application.' }
 };
 
 export class MaGuided extends LitElement {

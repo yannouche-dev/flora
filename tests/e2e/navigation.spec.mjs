@@ -496,7 +496,7 @@ test('Un onglet touché quand on y est : rien ne change', async ({ app, page }) 
 
 /** The sections of Réglages, in the page's order: their address (?section=) and their heading. */
 const SECTIONS = [['first-steps', 'Premiers pas'], ['activities', 'Activités'], ['sheet-layout', 'Mise en page de la fiche'], ['data', 'Données'],
-  ['region', 'Ma région'], ['display', 'Affichage'], ['maps', 'Cartes'], ['modules', 'Modules : services en ligne'], ['harvest', 'Mode cueillette'],
+  ['region', 'Ma région'], ['display', 'Affichage'], ['maps', 'Cartes'], ['modules', 'Modules : services en ligne'], ['harvest', 'Carnet de récolte'],
   ['collections', 'Mes plantes : favoris, listes et lieux'], ['transfer', 'Transférer vers un autre appareil']];
 
 /** How far below the top of Réglages (its scrolling page) a heading is, px. @param {import('@playwright/test').Locator} heading */

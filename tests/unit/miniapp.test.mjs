@@ -300,5 +300,5 @@ test('MINIAPPS : jouer ne change rien d’autre dans l’application (aucun croc
   const { MINIAPPS } = await import('../../app/miniapps/index.js');
   for (const a of MINIAPPS) assert.deepEqual(Object.keys(a).sort(), ['icon', 'id', 'load', 'pitch', 'scene', 'title', 'underWay'], a.id);
   const cueillette = /** @type {any} */ (MINIAPPS.find(a => a.id === 'cueillette'));
-  assert.doesNotMatch(cueillette.pitch, /mode cueillette/);
+  assert.doesNotMatch(cueillette.pitch, /mode cueillette|carnet de récolte/i);
 });
