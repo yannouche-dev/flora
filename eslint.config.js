@@ -7,7 +7,8 @@
 //    from the import map of index.html: tools/check-imports.mjs checks those against vendor/);
 //  - no-restricted-syntax (RESTRICTED below): what goes through one module only; a name exported once, where it is
 //    declared (no relay, no alias);
-//  - import-x/no-restricted-paths: core/ is the bottom layer, importing nothing of the screens above it.
+//  - import-x/no-restricted-paths: core/ is the bottom layer, importing nothing of the screens above it;
+//  - no-restricted-globals, no-restricted-properties (NATIVE_DIALOGS below): never the browser's own dialogs in app/.
 // The app has no build step and nothing here is deployed: the tools are dev dependencies (package.json).
 
 import js from '@eslint/js';
@@ -62,6 +63,15 @@ const RESTRICTED = {
 };
 const restricted = (/** @type {(keyof typeof RESTRICTED)[]} */ ...keys) => ['error', ...keys.map(k => RESTRICTED[k])];
 
+/**
+ * The browser's own dialogs, never in app/: a question is the app's (app/components/gf-ask.js ask, confirmAsk) — its
+ * look and theme, « Annuler » first with the focus, Échap and Back say no —; a phone shows confirm() bare, an installed
+ * app or a frame may block it, a test answers it by itself (5.13: the last 8 confirm() gone). The one left is written
+ * where it is, with its reason (app/core/share.js: the link to copy by hand).
+ */
+const NATIVE_DIALOGS = ['alert', 'confirm', 'prompt'];
+const NATIVE_DIALOG = 'Ask through app/components/gf-ask.js (ask, confirmAsk), never the browser’s alert(), confirm() or prompt().';
+
 export default [
   {
     ignores: ['vendor/**', 'node_modules/**', 'scripts/node_modules/**', '_site/**', 'data/**', 'assets/**',
@@ -92,7 +102,9 @@ export default [
     ...lit.configs['flat/recommended'],
     rules: {
       ...lit.configs['flat/recommended'].rules,
-      'no-restricted-syntax': restricted('nativeMember', 'tooltip', 'hash', 'replace', 'storage', 'geolocation', 'relay')
+      'no-restricted-syntax': restricted('nativeMember', 'tooltip', 'hash', 'replace', 'storage', 'geolocation', 'relay'),
+      'no-restricted-globals': ['error', ...NATIVE_DIALOGS.map(name => ({ name, message: NATIVE_DIALOG }))],
+      'no-restricted-properties': ['error', ...['window', 'globalThis', 'self'].flatMap(object => NATIVE_DIALOGS.map(property => ({ object, property, message: NATIVE_DIALOG })))]
     }
   },
   // Every import of the app finds its file. Not in tests/ (their page.evaluate imports resolve in the page, from the

@@ -292,3 +292,32 @@ test('Réglages : « Afficher les étapes » toujours, puis jamais', async ({ ap
   await expect(page.locator('gf-miniapp .go')).toBeVisible();
   await expect(page.locator('gf-miniapp ma-steps')).toHaveCount(0);
 });
+
+test('le grand bouton d’un écran, le même partout (.hero) : le départ d’une activité, les cartes de Faux amis, « Qui pousse par ici ? » ; au clavier, son anneau de focus', async ({ app, page }) => {
+  /** A button as drawn: its height, its words' size, its padding, its corners. @param {import('@playwright/test').Locator} button */
+  const size = button => button.evaluate(el => {
+    const s = getComputedStyle(el);
+    return { height: Math.round(el.getBoundingClientRect().height), font: s.fontSize, padding: s.padding, radius: s.borderRadius };
+  });
+  // A wide screen: 60 px high, 21 px (56 px, 19 px on a phone).
+  const HERO = { height: 60, font: '21px', padding: '16px 40px', radius: '999px' };
+  await app.open('#/app/faux-amis');
+  const go = page.locator('gf-miniapp .start .go');
+  expect(await size(go)).toEqual(HERO);
+  // Reached by the keyboard: the focus ring, in place of its shadow.
+  await go.focus();
+  await page.keyboard.press('Shift+Tab');
+  await page.keyboard.press('Tab');
+  await expect(go).toBeFocused();
+  expect(await go.evaluate(el => getComputedStyle(el).boxShadow)).toMatch(/0px 0px 0px 4px/);
+  await go.click();
+  await expect.poll(() => step(page)).toBe('play');
+  // A card answered (one of its plants, else « Je ne cueille pas »): « Carte suivante », the same button.
+  const game = page.locator('ma-faux-amis');
+  await game.locator('button.pick, button.skip').first().click();
+  expect(await size(game.locator('button.next'))).toEqual(HERO);
+  // Rencontres, « Autour de moi »: « Qui pousse par ici ? », the same again.
+  await app.go('#/app/rencontres');
+  await page.getByRole('button', { name: 'Autour de moi' }).click();
+  expect(await size(page.locator('ma-distance').getByRole('button', { name: 'Qui pousse par ici ?' }))).toEqual(HERO);
+});

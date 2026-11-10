@@ -9,6 +9,7 @@ import * as db from '../core/db.js';
 import { forgetFailures } from '../core/cache.js';
 import { forgetPlaces, keptPlace } from '../core/around-sessions.js';
 import { ui } from '../styles/ui.js';
+import { confirmAsk } from './gf-ask.js';
 
 /** The publisher's name or pseudonym, as the law asks it shown (LCEN, art. 6). To be filled in by the owner. */
 const PUBLISHER = 'yannouche-dev (propriétaire du dépôt GitHub du projet)';
@@ -80,9 +81,13 @@ export class GfLegal extends LitElement {
     this._done = 'Dernière position de Découvrir oubliée (Rencontres, Cueillette prudente, Mosaïque).';
   }
 
-  /** The answers of the online services kept on the device (some hold the coordinates searched), and their images and map tiles. */
+  /**
+   * The answers of the online services kept on the device (some hold the coordinates searched), and their images and map
+   * tiles: erased once asked (the app's question).
+   */
   async #clearCache() {
-    if (!confirm('Effacer les réponses des services en ligne gardées sur cet appareil, avec les images et les cartes déjà vues ? Vos favoris, listes, lieux et réglages restent.')) return;
+    if (!await confirmAsk({ title: 'Effacer le cache des services en ligne ?', yes: 'Effacer', danger: true,
+      text: 'Les réponses des services en ligne gardées sur cet appareil, avec les images et les cartes déjà vues, seront effacées. Vos favoris, listes, lieux et réglages restent.' })) return;
     await db.clear('plantDetails').catch(() => {});
     forgetFailures();
     try {

@@ -216,6 +216,43 @@ test('L’éditeur d’un lieu : retirer une plante annotée demande d’abord, 
   await expect.poll(plants).toEqual([]);
 });
 
+test('L’éditeur : « Supprimer » une liste demande dans la question de l’app, jamais la boîte du navigateur ; « Annuler » la garde, un double clic aussi', async ({ app, page }) => {
+  /** The browser's own dialogs (confirm(): a test would answer it by itself): none. @type {string[]} */
+  const native = [];
+  page.on('dialog', dialog => { native.push(dialog.message()); dialog.dismiss(); });
+  await app.open('#/');
+  const id = await page.evaluate(async ids => {
+    const c = await import('/app/core/collections.js');
+    const db = await import('/app/core/db.js');
+    const [a, o] = await Promise.all(ids.map(i => db.get('plants', i)));
+    return (await c.savePlace(c.withPlant(c.withPlant(c.newCollection('list', { name: 'À cueillir' }), a), o))).id;
+  }, [plantId('Allium ursinum'), plantId('Urtica dioica')]);
+  const stored = () => page.evaluate(async i => Boolean(await (await import('/app/core/collections.js')).getPlace(i)), id);
+  await app.go(`#/collection/${id}`);
+  const remove = page.locator('gf-spot-editor').getByRole('button', { name: 'Supprimer', exact: true });
+  await remove.click();
+  const ask = page.getByRole('alertdialog', { name: 'Supprimer cette liste ?' });
+  await expect(ask).toContainText('La liste et ses 2 plantes, avec leurs notes, seront effacées. Cette action est définitive.');
+  await expect(ask.getByRole('button', { name: 'Annuler' })).toBeFocused();
+  // « Annuler »: the list kept, the focus back on « Supprimer ».
+  await ask.getByRole('button', { name: 'Annuler' }).click();
+  await expect(ask).toHaveCount(0);
+  await expect(remove).toBeFocused();
+  expect(await stored()).toBe(true);
+  // A double click on « Supprimer »: its second click, in the question just opened, is no answer — it stays, unread.
+  await remove.dblclick();
+  await expect(ask).toBeVisible();
+  await ask.getByRole('button', { name: 'Annuler' }).click();
+  await expect(ask).toHaveCount(0);
+  expect(await stored()).toBe(true);
+  // « Supprimer »: gone, Mes plantes in its place.
+  await remove.click();
+  await ask.getByRole('button', { name: 'Supprimer' }).click();
+  await expect.poll(() => page.evaluate(() => location.hash)).toBe('#/collections');
+  await expect.poll(stored).toBe(false);
+  expect(native).toEqual([]);
+});
+
 test('Nouvelle liste versée dans une liste existante : ses notes la suivent, le brouillon supprimé', async ({ app, page }) => {
   await app.open('#/');
   const [ail, ortie] = [plantId('Allium ursinum'), plantId('Urtica dioica')];

@@ -948,10 +948,10 @@ export class SheetBase extends LitElement {
       }
       case 'photos': {
         if (baseOf(v) !== 'epure') return this.#gallery(ctx, baseOf(v) === 'standard' ? 6 : Infinity);
-        const hero = ctx.images[0];
-        return html`<figure class="hero">
-          ${hero ? html`<a href=${safeUrl(hero.sourceUrl || hero.url) || '#'} title="Voir en grand (Médias)" @click=${(/** @type {Event} */ e) => this.#openMedia(e, hero.url)}><img src=${hero.url} alt=${plant.scientificName} decoding="async" referrerpolicy="no-referrer" @error=${hideImg} @load=${showImg} /></a>
-            <figcaption><gf-attribution .media=${hero}></gf-attribution></figcaption>`
+        const first = ctx.images[0];
+        return html`<figure class="main-photo">
+          ${first ? html`<a href=${safeUrl(first.sourceUrl || first.url) || '#'} title="Voir en grand (Médias)" @click=${(/** @type {Event} */ e) => this.#openMedia(e, first.url)}><img src=${first.url} alt=${plant.scientificName} decoding="async" referrerpolicy="no-referrer" @error=${hideImg} @load=${showImg} /></a>
+            <figcaption><gf-attribution .media=${first}></gf-attribution></figcaption>`
             : html`<div class=${loading ? 'skeleton' : 'no-photo'} aria-hidden="true">${loading ? '' : icon('flower1')}</div>`}
         </figure>`;
       }

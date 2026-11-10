@@ -116,7 +116,8 @@ export class MaFauxAmis extends LitElement {
     figure.toxic .pick { border-color: color-mix(in srgb, var(--gf-danger) 65%, var(--gf-border)); }
     figure.chosen .pick { box-shadow: 0 0 0 3px color-mix(in srgb, var(--gf-text) 18%, transparent); }
 
-    .big { justify-self: center; min-height: 52px; min-width: min(100%, 260px); padding: 12px 28px; gap: 10px; border-radius: var(--gf-radius-pill); font-size: 1.0625rem; }
+    /* Its one action (« Je ne cueille pas », « Carte suivante », « Nouvelle partie », « Réessayer »): the screen's hero (styles/ui.js). */
+    .hero { justify-self: center; }
 
     /* The answer. */
     .answer { display: grid; gap: 10px; padding: 14px 16px; border-radius: 14px; background: var(--gf-surface); border: 1px solid var(--gf-border); }
@@ -260,7 +261,7 @@ export class MaFauxAmis extends LitElement {
 
   /** « Nouvelle partie » (busy while dealt). */
   #againButton() {
-    return html`<button class="primary big again" type="button" ?disabled=${this._dealing} aria-busy=${this._dealing ? 'true' : 'false'}
+    return html`<button class="primary hero again" type="button" ?disabled=${this._dealing} aria-busy=${this._dealing ? 'true' : 'false'}
       @click=${() => this.#again()}>${icon('arrow-counterclockwise')} ${this._dealing ? 'Les cartes…' : 'Nouvelle partie'}</button>`;
   }
 
@@ -273,7 +274,7 @@ export class MaFauxAmis extends LitElement {
     if (c.lookalikes.unread) return html`<div class="wrap"><section class="card-view">
       <h1 id="fa-title" tabindex="-1">Liste des confusions indisponible</h1>
       <p class="state alert" role="alert">${fr(UNREAD_LOOKALIKES)}</p>
-      <button class="primary big retry" type="button" @click=${() => this.#retry()}>${icon('arrow-counterclockwise')} Réessayer</button></section></div>`;
+      <button class="primary hero retry" type="button" @click=${() => this.#retry()}>${icon('arrow-counterclockwise')} Réessayer</button></section></div>`;
     /** @type {Card[] | null} */
     const cards = c.cards;
     if (!cards) return html`<div class="wrap"><section class="card-view"><h1 id="fa-title" tabindex="-1">Une partie à recommencer</h1>
@@ -295,7 +296,7 @@ export class MaFauxAmis extends LitElement {
       <div class="pair">${card.plants.map(p => this.#plant(card, at, p))}</div>
       ${card.answer != null ? this.#answer(card, cards)
         : card.clue ? nothing
-        : html`<button class="primary big skip" type="button" @click=${() => this.#choose(at, SKIP)}>${icon('shield-check')} Je ne cueille pas</button>`}
+        : html`<button class="primary hero skip" type="button" @click=${() => this.#choose(at, SKIP)}>${icon('shield-check')} Je ne cueille pas</button>`}
     </section>`;
   }
 
@@ -337,7 +338,7 @@ export class MaFauxAmis extends LitElement {
       </dl>
       <p class="src-head">${card.sources.length > 1 ? 'Sources' : 'Source'}</p>
       <ul class="src">${card.sources.map(s => html`<li>${fr(sourceLine(s))}</li>`)}</ul>
-      <button class="primary big next" type="button" @click=${() => this.#next()}>${more ? 'Carte suivante' : 'Le bilan'} ${icon('arrow-right')}</button>
+      <button class="primary hero next" type="button" @click=${() => this.#next()}>${more ? 'Carte suivante' : 'Le bilan'} ${icon('arrow-right')}</button>
     </div>`;
   }
 

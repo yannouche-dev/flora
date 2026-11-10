@@ -2,7 +2,8 @@
 // A question asked before the app does something the user may not want (« Revoir les premiers pas ? »…): a modal
 // dialog (<dialog class="ask" role="alertdialog">, ui-kit's askStyles), its title, its text, « Annuler » first — with the
 // focus — then the choices. Échap, a touch outside the box and Back are « Annuler » (core/history.js openModal: a step
-// in history). Never the browser's confirm(), which a phone shows bare and an automated test answers by itself.
+// in history). Never the browser's confirm(), which a phone shows bare, an installed app or a frame may block, and an
+// automated test answers by itself (eslint.config.js refuses confirm(), alert() and prompt() in app/).
 // ask() resolves with the value of the choice (null: Annuler), confirmAsk() with whether it was confirmed — once the
 // dialog's own step has left history (afterStep), so a caller may open another view at once; asked over another dialog
 // (« Ajouter à… »), whose step stays, it answers at once too. Added to the page's
@@ -46,8 +47,21 @@ export class GfAsk extends LitElement {
   /** Its step in history (openModal): the answer waits until it is left. @type {number | undefined} */
   step = undefined;
 
+  /** When it opened. */
+  #openedAt = 0;
+
   firstUpdated() {
     this.step = openModal(/** @type {HTMLDialogElement} */ (this.renderRoot.querySelector('dialog')));
+    this.#openedAt = performance.now();
+  }
+
+  /**
+   * The second click of a double click (or tap) on what asked, landing in the question just opened: not an answer — the
+   * question was never read (its « Supprimer » may be right under it, on a phone). A keyboard's click (detail 0) is one.
+   * @param {Event} e
+   */
+  #stray(e) {
+    return /** @type {MouseEvent} */ (e).detail > 1 && performance.now() - this.#openedAt < 1000;
   }
 
   /** @param {string | null} value */
@@ -59,14 +73,14 @@ export class GfAsk extends LitElement {
   render() {
     return html`<dialog class="ask" role="alertdialog" aria-labelledby="ask-title" aria-describedby="ask-text"
         @close=${() => this.dispatchEvent(new CustomEvent('ask-choice', { detail: { choice: this.#choice } }))}
-        @click=${(/** @type {Event} */ e) => { if (e.target === e.currentTarget) this.#choose(null); }}>
+        @click=${(/** @type {Event} */ e) => { if (e.target === e.currentTarget && !this.#stray(e)) this.#choose(null); }}>
       <div class="box">
         <h2 id="ask-title">${fr(this.heading)}</h2>
         <p id="ask-text">${fr(this.text)}</p>
         <div class="row">
-          <button type="button" autofocus @click=${() => this.#choose(null)}>${fr(this.cancel)}</button>
+          <button type="button" autofocus @click=${(/** @type {Event} */ e) => { if (!this.#stray(e)) this.#choose(null); }}>${fr(this.cancel)}</button>
           ${this.choices.map(c => html`<button type="button" class=${c.danger ? 'danger' : c.primary ? 'primary' : ''}
-            @click=${() => this.#choose(c.value)}>${fr(c.label)}</button>`)}
+            @click=${(/** @type {Event} */ e) => { if (!this.#stray(e)) this.#choose(c.value); }}>${fr(c.label)}</button>`)}
         </div>
       </div>
     </dialog>`;

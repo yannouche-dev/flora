@@ -3,6 +3,9 @@
 // One look for one role:
 //   <button>              secondary — outlined pill (the default)
 //   .primary              main action — filled with the accent
+//   .primary.large        a form's or a sheet's main button, larger (48 px: « Enregistrer », « Voir 12 espèces »)
+//   .primary.hero         a screen's one main action, the largest (56 → 60 px: an activity's first screen, the
+//                         cards of Faux amis, « Qui pousse par ici ? »)
 //   .danger               destructive — outlined, danger colour
 //   .link                 text action — accent, underlined
 //   .chip                 toggle / suggestion — small pill, aria-pressed="true" = accent-soft + accent border
@@ -57,6 +60,25 @@ export const ui = css`
   }
   :where(.primary:hover, a.primary:hover) { background: color-mix(in srgb, var(--gf-accent) 88%, var(--gf-text)); }
   :where(.primary.large) { min-height: 48px; padding: 12px 22px; font-size: 1rem; }
+  /* A screen's one main action: the eye goes to it, under the thumb. 56 px high, 19 px on a phone; 60 px high from a
+     container of 700 px, its words growing with the container's width (cqi) up to 21 px. Its shadow under it; on keyboard
+     focus, the focus ring instead. Two sizes stay apart: .primary.large (a form's or a sheet's main button) and
+     Rencontres' guided first steps (g-launch). */
+  :where(.hero) {
+    min-height: 56px;
+    min-width: min(100%, 280px);
+    padding: 14px 32px;
+    gap: 10px;
+    border-radius: var(--gf-radius-pill);
+    font-size: 1.1875rem;
+    font-size: clamp(1.1875rem, 1.1rem + 0.3cqi, 1.3125rem);
+    font-weight: 600;
+    line-height: 1.2;
+    box-shadow: 0 10px 22px -10px color-mix(in srgb, var(--gf-accent) 70%, transparent);
+  }
+  :where(.hero .bi) { font-size: 1.1em; }
+  :where(.hero:focus-visible) { box-shadow: var(--gf-focus); }
+  @container (min-width: 700px) { :where(.hero) { min-height: 60px; padding: 16px 40px; } }
 
   :where(.danger, a.danger) { color: var(--gf-danger); border-color: color-mix(in srgb, var(--gf-danger) 45%, var(--gf-border)); }
   :where(.danger:hover) { background: var(--gf-danger-bg); }

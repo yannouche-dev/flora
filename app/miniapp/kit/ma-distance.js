@@ -57,7 +57,8 @@ export class MaDistance extends LitElement {
     .welcome .leaf { font-size: 3rem; color: var(--gf-accent); }
     .welcome h1 { margin: 0; font-size: 1.7rem; line-height: 1.2; }
     .welcome p { margin: 0; color: var(--gf-text-muted); }
-    .welcome .go { justify-self: center; font-size: 1.05rem; padding: 12px 26px; min-height: 48px; display: inline-flex; gap: 8px; align-items: center; }
+    /* « Qui pousse par ici ? »: the screen's hero (styles/ui.js). */
+    .welcome .hero { justify-self: center; }
     .skip { font-size: 0.85rem; }
     .dist { display: grid; gap: 4px; justify-items: center; }
     .dist .value { display: grid; height: 3.1rem; }
@@ -332,7 +333,7 @@ export class MaDistance extends LitElement {
         <div class="moods">${fresh(distMood(c.radius), v => html`<span class="mood">${v}</span>`)}</div>
         ${this.#range(c.radius)}
       </div>
-      <button class="primary go" type="button" @click=${() => this.#go()}>${icon('binoculars')} Qui pousse par ici ?</button>
+      <button class="primary hero" type="button" @click=${() => this.#go()}>${icon('binoculars')} Qui pousse par ici ?</button>
       <button class="link skip" type="button" @click=${() => app.go('start')}>Changer de lieu</button>
     </section>`;
   }

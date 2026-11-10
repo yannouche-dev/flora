@@ -1394,17 +1394,34 @@ export class GfPlantDetail extends SheetBase {
 
   /**
    * « Par défaut »: the mode arranged back to its own layout — order, hidden blocks and sub-blocks, styles, titles
-   * shown or not, « masqué si vide », panes, its action bar —, once confirmed; the names given to blocks, the Note and
-   * Carte blocks stay. The focus goes to « Barre d’actions » (the button pressed is now greyed). @param {string} m
+   * shown or not, « masqué si vide », panes, its action bar —, once confirmed in the app's question (gf-ask.js); the
+   * names given to blocks, the Note and Carte blocks stay. The focus goes to « Barre d’actions » (the button pressed is
+   * now greyed). @param {string} m
    */
   async #resetMode(m) {
     const label = modeLabel(m);
-    if (!confirm(`Remettre « ${label} » par défaut ? Ordre, blocs et sous-blocs masqués, styles, titres affichés ou cachés, « masqué si vide », panneaux et barre d’actions de ce mode reviennent par défaut ; les noms donnés aux blocs, les blocs Note et Carte restent.`)) return;
+    if (!await confirmAsk({ title: `Remettre « ${label} » par défaut ?`, yes: 'Remettre par défaut', danger: true,
+      text: 'Ordre, blocs et sous-blocs masqués, styles, titres affichés ou cachés, « masqué si vide », panneaux et barre d’actions de ce mode reviennent par défaut ; les noms donnés aux blocs, les blocs Note et Carte restent.' })) return;
     resetBlocks(m);
     this._maxEdge = null;
     this._said = `« ${label} » : mise en page par défaut`;
     await this.updateComplete;
     /** @type {HTMLElement | null} */ (this.renderRoot.querySelector('.king-bar .kb-actions'))?.focus();
+  }
+
+  /**
+   * A Note block's ✕, once asked (the app's question): the block out of every mode, with what is written in it on each
+   * plant's sheet (sheet-blocks.js deleteNote). @param {string} key @param {string} title
+   */
+  async #deleteNote(key, title) {
+    if (await confirmAsk({ title: `Supprimer le bloc « ${title} » ?`, yes: 'Supprimer', danger: true,
+      text: 'Le bloc quittera tous les modes ; ce qui y est écrit, sur la fiche de chaque plante, sera effacé. Cette action est définitive.' })) deleteNote(key);
+  }
+
+  /** An added Carte block's ✕, once asked: out of every mode, with its settings ⚙ (sheet-blocks.js deleteMap). @param {string} key @param {string} title */
+  async #deleteMap(key, title) {
+    if (await confirmAsk({ title: `Supprimer la carte « ${title} » ?`, yes: 'Supprimer', danger: true,
+      text: 'Le bloc quittera tous les modes, avec ses réglages ⚙.' })) deleteMap(key);
   }
 
   /** A mode chosen in the bar: the focus, if it went with the button pressed (↺, gone once back), on the mode now arranged. */
@@ -1575,9 +1592,9 @@ export class GfPlantDetail extends SheetBase {
         ${isMap(key) && !off ? html`<button class="tool" type="button" aria-expanded=${this._mapsOpen.has(key) ? 'true' : 'false'} aria-label="Configurer la carte « ${title} »" title="Ce que la carte montre et permet"
           @click=${() => { const open = new Set(this._mapsOpen); if (open.has(key)) open.delete(key); else open.add(key); this._mapsOpen = open; }}>${icon('gear')}</button>` : nothing}
         ${isNote(key) ? html`<button class="tool" type="button" aria-label="Supprimer le bloc « ${title} »" title="Supprimer le bloc et ses textes"
-          @click=${() => { if (confirm(`Supprimer le bloc « ${title} » et tout ce qui y est écrit ?`)) deleteNote(key); }}>${icon('x-lg')}</button>` : nothing}
+          @click=${() => this.#deleteNote(key, title)}>${icon('x-lg')}</button>` : nothing}
         ${isAddedMap(key) ? html`<button class="tool" type="button" aria-label="Supprimer le bloc « ${title} »" title="Supprimer cette carte"
-          @click=${() => { if (confirm(`Supprimer la carte « ${title} » ?`)) deleteMap(key); }}>${icon('x-lg')}</button>` : nothing}
+          @click=${() => this.#deleteMap(key, title)}>${icon('x-lg')}</button>` : nothing}
       </h2>
       ${isLocked(key) ? html`<p class="lock-tip" role="status">${this._lockTip === key ? lockWhy : nothing}</p>` : nothing}
       ${subsOpen && SUBS[key] ? html`<div class="subs-editor">

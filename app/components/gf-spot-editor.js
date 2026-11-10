@@ -8,7 +8,7 @@ import { moduleOn } from '../core/modules.js';
 import { href } from '../core/router.js';
 import { back, openView, replaceHash, replaceView } from '../core/history.js';
 import {
-  ABUNDANCE, copyAsList, defaultPlantPosition, deletePlace, entryInSeason, entryName, entryPosition, exportGeoJSON, findEntry,
+  ABUNDANCE, copyAsList, defaultPlantPosition, deletePlace, deleteQuestion, entryInSeason, entryName, entryPosition, exportGeoJSON, findEntry,
   getPlace, lastHarvest, locationQuestion, matchCollections, plantMarkers, removeQuestion,
   newCollection, newPlace, placesNear, placeTitle, plantCount, savePatch, savePlace, shareCollection, spotEvents, updatePlace, walkEnded, withEntry, withLocation, withoutPlant, withPlant, entriesOf, lastEntry } from '../core/collections.js';
 import { formatDistance, metres } from '../core/distance.js';
@@ -854,13 +854,17 @@ export class GfSpotEditor extends LitElement {
     }
   }
 
+  /**
+   * « Supprimer »: asked first, in the app's question (collections.js deleteQuestion: what goes with it, as shown here),
+   * never confirm(). A save under way ends first (the question gives the autosave its time); then deleted, the Carte or
+   * Mes plantes in its place.
+   */
   async #delete() {
     if (!this._place || this._place.properties.kind === 'favorites') return;
-    const n = this._place.properties.plants.length;
-    const what = this.#isPlace ? 'ce lieu' : 'cette liste';
-    if (!confirm(`Supprimer ${what}${n ? ` (${plantCount(n)})` : ''}${this.#isPlace ? ', avec le journal de récolte' : ''} ?`)) return;
+    if (!await confirmAsk(deleteQuestion(this._place)) || !this._place) return;
     clearTimeout(this.#saveTimer);
     this.#dirty = false;
+    await this.#saving;
     const wasPlace = this.#isPlace;
     if (!this.#isNew) await deletePlace(this._place.id);
     // Gone: Back must not lead to it.

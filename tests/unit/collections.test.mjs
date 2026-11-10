@@ -229,6 +229,24 @@ test('removeQuestion : la note, le journal de récolte, les autres fois notées 
   assert.equal(C.removeQuestion({ ...doubled, properties: { ...doubled.properties, plants: doubled.properties.plants.map((/** @type {any} */ e) => ({ ...e, notes: '' })) } }, 1), null);
 });
 
+test('deleteQuestion : supprimer une liste, un lieu, un parcours — ce qui part avec, compté ; toujours demandé', () => {
+  const ask = (/** @type {string} */ title, /** @type {string} */ text) => ({ title, text: text + ' Cette action est définitive.', yes: 'Supprimer', danger: true });
+  const plants = (/** @type {number} */ n) => Array.from({ length: n }, (_, i) => ({ id: 'e' + i, plantId: i + 1 }));
+  const list = (/** @type {number} */ n) => /** @type {any} */ (normalizeCollection({ type: 'Feature', id: 'l', geometry: null, properties: { kind: 'list', name: 'Cuisine', plants: plants(n) } }));
+  assert.deepEqual(C.deleteQuestion(bois(plants(3))), ask('Supprimer ce lieu ?', 'Le lieu et ses 3 plantes notées, avec leurs notes et le journal de récolte, seront effacés.'));
+  assert.deepEqual(C.deleteQuestion(bois(plants(1))), ask('Supprimer ce lieu ?', 'Le lieu et sa plante notée, avec sa note et le journal de récolte, seront effacés.'));
+  assert.deepEqual(C.deleteQuestion(bois([])), ask('Supprimer ce lieu ?', 'Le lieu sera effacé.'));
+  assert.deepEqual(C.deleteQuestion(bois(plants(2), { walk: true })), ask('Supprimer ce parcours ?', 'Le parcours et ses 2 plantes notées, avec leurs notes et le journal de récolte, seront effacés.'));
+  assert.deepEqual(C.deleteQuestion(list(2)), ask('Supprimer cette liste ?', 'La liste et ses 2 plantes, avec leurs notes, seront effacées.'));
+  assert.deepEqual(C.deleteQuestion(list(1)), ask('Supprimer cette liste ?', 'La liste et sa plante, avec sa note, seront effacées.'));
+  assert.deepEqual(C.deleteQuestion(list(0)), ask('Supprimer cette liste ?', 'La liste sera effacée.'));
+  // A list holding a harvest log (a lieu whose position was removed): said.
+  const harvested = (/** @type {number} */ n) => /** @type {any} */ (normalizeCollection({ type: 'Feature', id: 'l', geometry: null, properties: { kind: 'list', name: 'Cuisine',
+    plants: plants(n).map((p, i) => i ? p : { ...p, harvests: [{ id: 'h', date: '2026-05-01', quantity: '1 poignée' }] }) } }));
+  assert.deepEqual(C.deleteQuestion(harvested(2)), ask('Supprimer cette liste ?', 'La liste et ses 2 plantes, avec leurs notes et leurs journaux de récolte, seront effacées.'));
+  assert.deepEqual(C.deleteQuestion(harvested(1)), ask('Supprimer cette liste ?', 'La liste et sa plante, avec sa note et son journal de récolte, seront effacées.'));
+});
+
 // ── Partager, exporter : la position, les notes et les récoltes, dites avant ──
 
 test('positionQuestion, fileQuestion : la position comptée, le départ d’un parcours ; ce qu’un fichier dit de vous', () => {

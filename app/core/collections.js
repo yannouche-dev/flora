@@ -343,6 +343,24 @@ export function removeQuestion(c, ref) {
     text: `${what[0].toUpperCase()}${what.slice(1)} seront ${harvests ? 'effacés' : 'effacées'}.` };
 }
 
+/**
+ * What « Supprimer » asks of a list, a lieu or a parcours (its editor), as the editor shows it: what goes with it — its
+ * plants, their notes, a lieu's harvest log —, for good (the backup copy follows: deletePlace). Pure.
+ * @param {Collection} c @returns {{ title: string, text: string, yes: string, danger: boolean }}
+ */
+export function deleteQuestion(c) {
+  const n = c.properties.plants.length;
+  // A list may hold harvest logs too (a lieu whose position was removed, a lieu poured into it): said when it does.
+  const harvests = c.properties.plants.some(e => e.harvests?.length);
+  const [it, what] = !c.geometry ? ['cette liste', 'La liste'] : c.properties.walk ? ['ce parcours', 'Le parcours'] : ['ce lieu', 'Le lieu'];
+  const plants = !n ? ''
+    : c.geometry ? (n > 1 ? ` et ses ${n} plantes notées, avec leurs notes et le journal de récolte,` : ' et sa plante notée, avec sa note et le journal de récolte,')
+    : n > 1 ? ` et ses ${n} plantes, avec leurs notes${harvests ? ' et leurs journaux de récolte' : ''},`
+    : ` et sa plante, avec sa note${harvests ? ' et son journal de récolte' : ''},`;
+  const gone = c.geometry ? (n ? 'seront effacés' : 'sera effacé') : n ? 'seront effacées' : 'sera effacée';
+  return { title: `Supprimer ${it} ?`, text: `${what}${plants} ${gone}. Cette action est définitive.`, yes: 'Supprimer', danger: true };
+}
+
 /** @param {Place} place @param {PlantEntry[]} plants @returns {Place} */
 const withPlants = (place, plants) => ({ ...place, properties: { ...place.properties, plants, plantIds: plantIdsOf(plants) } });
 
