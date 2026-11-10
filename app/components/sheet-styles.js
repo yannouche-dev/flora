@@ -238,13 +238,14 @@ export const sheetStyles = [ui, severityStyles, css`
     }
     @keyframes pulse { from { background-position: 100% 0; } to { background-position: -100% 0; } }
 
-    /* Épuré: big photo, the essentials, one-tap add to the current collection. */
+    /* Épuré: big photo (.main-photo: .hero is the screen's main button, styles/ui.js), the essentials, one-tap add to
+       the current collection. */
     .epure { max-width: 560px; }
-    .hero { margin: 4px 0 12px; border-radius: var(--gf-radius-lg); overflow: hidden; background: var(--gf-surface-2); box-shadow: var(--gf-shadow); }
-    .hero img, .hero .skeleton, .hero .no-photo { display: block; width: 100%; aspect-ratio: 4 / 3; object-fit: cover; height: auto; border-radius: 0; }
-    .hero .no-photo { display: grid; place-items: center; font-size: 3rem; }
-    .hero figcaption { padding: 4px 10px; }
-    .hero a, .gallery a { cursor: zoom-in; }
+    .main-photo { margin: 4px 0 12px; border-radius: var(--gf-radius-lg); overflow: hidden; background: var(--gf-surface-2); box-shadow: var(--gf-shadow); }
+    .main-photo img, .main-photo .skeleton, .main-photo .no-photo { display: block; width: 100%; aspect-ratio: 4 / 3; object-fit: cover; height: auto; border-radius: 0; }
+    .main-photo .no-photo { display: grid; place-items: center; font-size: 3rem; }
+    .main-photo figcaption { padding: 4px 10px; }
+    .main-photo a, .gallery a { cursor: zoom-in; }
     .all-media { display: inline-flex; align-items: center; gap: 6px; margin-top: 8px; }
     dialog.pane { width: 100vw; height: 100dvh; max-width: none; max-height: none; margin: 0; padding: 0; border: 0; display: flex; flex-direction: column; background: var(--gf-surface); }
     dialog.pane:not([open]) { display: none; }

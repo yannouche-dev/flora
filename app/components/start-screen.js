@@ -104,7 +104,7 @@ export function startScreen(o) {
     ${o.caution ? html`<p class="caution">${icon(o.caution.icon || 'exclamation-triangle-fill')}<span>${fr(o.caution.text)}</span></p>` : nothing}
     <div class="act">
       <!-- Busy: it says so and takes no second touch, but keeps the focus (aria-disabled, not disabled). -->
-      <button class="primary go" type="button" ?disabled=${Boolean(p.disabled)} aria-disabled=${p.busy ? 'true' : nothing} aria-busy=${p.busy ? 'true' : 'false'}
+      <button class="primary hero go" type="button" ?disabled=${Boolean(p.disabled)} aria-disabled=${p.busy ? 'true' : nothing} aria-busy=${p.busy ? 'true' : 'false'}
         @click=${() => { if (!p.busy) p.run(); }}>
         ${p.icon ? icon(p.icon) : nothing}<span>${fr(p.busy ? p.busyLabel || p.label : p.label)}</span></button>
       ${err ? html`<p class="alert" role="alert">${icon('exclamation-triangle-fill')} <span>${fr(err.text)}</span>${err.retry
@@ -123,9 +123,10 @@ export function startScreen(o) {
 /**
  * The scale: three sizes. Large: title, description, action. Small: the alternatives and the note. Smallest: the
  * exit. Fluid with the host's width (cqi; the host is an inline-size container): phone (390) → desk (≥ 900):
- * title 32 → 40 px, description 18 → 20 px, action 56 → 60 px high, label 19 → 21 px; alternatives 14 px (the
- * fields keep 16 px on a touch screen: iOS zooms into a smaller one), exit 13 px. A short screen gets a smaller
- * picture, never smaller words. Every value with a plain fallback first.
+ * title 32 → 40 px, description 18 → 20 px, action 56 → 60 px high, label 19 → 21 px (the screen's hero, the one
+ * big button of the app: styles/ui.js .hero); alternatives 14 px (the fields keep 16 px on a touch screen: iOS zooms
+ * into a smaller one), exit 13 px. A short screen gets a smaller picture, never smaller words. Every value with a plain
+ * fallback first.
  */
 export const startStyles = [sceneStyles, css`
   .start { display: grid; justify-items: stretch; align-content: start; width: 100%; max-width: 640px; margin: 0 auto; box-sizing: border-box; text-align: center;
@@ -145,10 +146,6 @@ export const startStyles = [sceneStyles, css`
   .start .caution .bi { flex: none; color: var(--gf-warn); margin-top: 0.15em; }
 
   .start .act { display: grid; justify-items: center; gap: 8px; margin-top: 24px; }
-  .start .go { min-height: 56px; min-width: min(100%, 280px); padding: 14px 32px; gap: 10px; border-radius: var(--gf-radius-pill);
-    font-size: 1.1875rem; font-size: clamp(1.1875rem, 1.1rem + 0.3cqi, 1.3125rem); font-weight: 600; line-height: 1.2;
-    box-shadow: 0 10px 22px -10px color-mix(in srgb, var(--gf-accent) 70%, transparent); }
-  .start .go .bi { font-size: 1.1em; }
   .start .go[aria-busy='true'] { opacity: 1; cursor: progress; }
   .start .go[aria-busy='true'] .bi { animation: start-pulse 1.1s ease-in-out infinite; }
   @keyframes start-pulse { 50% { opacity: 0.35; } }
@@ -158,7 +155,6 @@ export const startStyles = [sceneStyles, css`
   .start .note { margin: 0; font-size: 0.8125rem; line-height: 1.4; color: var(--gf-text-muted); }
   .start .cancel { margin: 0; font-size: 0.8125rem; }
   .start .cancel .link { font-size: inherit; min-height: 44px; padding: 0 14px; }
-  .start .go[aria-busy='true']:focus-visible { box-shadow: var(--gf-focus); }
 
   /* The other ways in: smaller, narrower, under a thin « ou ». */
   .start .alts { display: grid; gap: 10px; width: 100%; max-width: 400px; justify-self: center; margin-top: 28px; font-size: 0.875rem; }
@@ -194,7 +190,6 @@ export const startStyles = [sceneStyles, css`
     .start h1 { margin-top: 20px; }
     .start .lead { margin-top: 12px; }
     .start .act { margin-top: 28px; }
-    .start .go { min-height: 60px; padding: 16px 40px; }
     .start .alts { margin-top: 32px; }
   }
   /* A short screen (iPhone SE, a laptop with its bars): the picture gives way, the words keep their size. */
