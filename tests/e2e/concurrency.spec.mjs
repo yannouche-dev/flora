@@ -3,6 +3,7 @@
 // transaction), the editor saving its edits as a patch, and core/sync.js (BroadcastChannel, the storage event): each
 // has its test here. Migrated from samesearch.cjs, dbgkey.cjs, review-fixes/keep-hold.
 import { test, expect, plantId } from './fixtures.mjs';
+import { App } from './app.mjs';
 
 test('frappe rapide : seule la dernière recherche s’affiche', async ({ app, page }) => {
   await app.open('#/');
@@ -46,6 +47,31 @@ test('deux onglets : chacun garde ses lieux, aucun n’efface l’autre', async 
   const names = await other.evaluate(async () => (await (await import('/app/core/collections.js')).listCollections()).map((/** @type {any} */ c) => c.properties.name).sort());
   expect(names).toEqual(expect.arrayContaining(['Lieu A', 'Lieu B', 'Lieu C']));
   await other.close();
+});
+
+test('deux onglets : un réglage changé dans l’un, l’autre le suit sans recharger', async ({ app, page, context }) => {
+  // Flore, a plant open: its results a list beside its sheet (the grid has no compact button).
+  const plant = `#/plant/${plantId('Urtica dioica')}`;
+  await app.open(plant);
+  const other = new App(await context.newPage());
+  await other.open(plant);
+  const there = other.page;
+  // Flore's rows without thumbnails: the compact button there, here too.
+  const compact = (/** @type {import('@playwright/test').Page} */ p) => p.locator('gf-flora gf-results-bar').getByRole('button', { name: 'Affichage compact (sans vignettes)' });
+  await compact(there).click();
+  await expect(compact(page)).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('gf-flora gf-plant-list gf-plant-card').first()).toHaveAttribute('compact', '');
+  // Réglages › Affichage, Activités, Carnet de récolte: changed there, shown here.
+  await app.go('#/settings');
+  await other.go('#/settings');
+  await there.locator('gf-settings .mode-line gf-mode-switch').getByRole('button', { name: 'Scientifique — toute l’application' }).click();
+  await expect(page.locator('gf-settings .mode-line strong')).toHaveText('Scientifique');
+  await there.getByRole('radio', { name: 'Jamais' }).check();
+  await expect(page.getByRole('radio', { name: 'Jamais' })).toBeChecked();
+  const harvest = (/** @type {import('@playwright/test').Page} */ p) => p.locator('gf-settings').getByRole('checkbox', { name: /Journal de récolte/ });
+  await harvest(there).check();
+  await expect(harvest(page)).toBeChecked();
+  await there.close();
 });
 
 test('GAP1-4 : deux « Ajouter » rapprochés dans le parcours gardent les deux plantes', async ({ app, page }) => {

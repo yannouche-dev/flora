@@ -5,8 +5,8 @@
 // write refused for lack of room is reported (quota.js: the banner says what to do), never swallowed in silence.
 //  - readText / writeText, readJSON / writeJSON: one key, as text or JSON (null: the key removed);
 //  - storedKeys(prefix): the keys kept under a prefix (the first steps, a mini-app's keys);
-//  - definePref({ key, clean, fallback, store }): a setting kept in memory, read again when another tab changes it,
-//    and `change` fired on its events — here or there.
+//  - definePref({ key, clean, fallback, store, text }): a setting kept in memory, read again when another tab changes
+//    it, and `change` fired on its events — here or there.
 // The ESLint rule « storage » keeps localStorage out of every other file of app/ (sync.js aside: the channel between
 // tabs it relies on).
 
@@ -78,13 +78,15 @@ export function storedKeys(prefix) {
  * A setting kept in localStorage.
  *  - `clean` makes whatever was stored a valid value (none or unreadable: `fallback`, default null, given to it);
  *  - `store` says what to write (default: the value as is; null: the key removed — only what differs from the
- *    defaults is kept, so a default changed later reaches everyone).
+ *    defaults is kept, so a default changed later reaches everyone);
+ *  - `text`: kept as plain text, not JSON — the settings always kept so ('1', a mode's name, a region's code…), read
+ *    and written as before: `clean` is given the text (none: `fallback`), `store` gives it.
  * @template T
- * @param {{ key: string, clean: (stored: any) => T, fallback?: unknown, store?: (value: T) => unknown }} spec
+ * @param {{ key: string, clean: (stored: any) => T, fallback?: unknown, store?: (value: T) => unknown, text?: boolean }} spec
  * @returns {Pref<T>}
  */
-export function definePref({ key, clean, fallback = null, store = v => v }) {
-  const fresh = () => clean(readJSON(key, fallback));
+export function definePref({ key, clean, fallback = null, store = v => v, text = false }) {
+  const fresh = () => clean(text ? readText(key) ?? fallback : readJSON(key, fallback));
   let value = fresh();
   const events = new EventTarget();
   const changed = () => events.dispatchEvent(new CustomEvent('change', { detail: value }));
@@ -94,7 +96,8 @@ export function definePref({ key, clean, fallback = null, store = v => v }) {
     fresh,
     set(next) {
       value = next;
-      const written = writeJSON(key, store(next));
+      const kept = store(next);
+      const written = text ? writeText(key, kept == null ? null : String(kept)) : writeJSON(key, kept);
       changed();
       return written;
     },

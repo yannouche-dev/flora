@@ -4,7 +4,7 @@
 import { config, emptyFilters } from '../config.js';
 import { moduleEvents, modulesState } from './modules.js';
 import { baseOf, isMode, modeEvents, modeList } from './modes.js';
-import { readJSON, readText, writeText } from './prefs.js';
+import { definePref, readJSON } from './prefs.js';
 import { quotaEvents } from './quota.js';
 import { onStorage } from './sync.js';
 
@@ -80,9 +80,6 @@ export class Store extends EventTarget {
  * @typedef {{ sheet: string, mode: Mode | null }} KingState
  */
 
-/** @param {string} key @returns {Mode | null} */
-const readMode = key => { const v = readText(key); return isMode(v) ? v : null; };
-
 /**
  * The plant sheet layout: per view, block order and folded blocks, sub-block order and hidden sub-blocks;
  * block titles changed by hand; the note blocks created. Only what differs from the defaults is kept.
@@ -114,9 +111,23 @@ const readLayout = () => {
   return layout;
 };
 
-const initialMode = readMode(config.storageKeys.mode) || 'standard';
-/** An override equal to the mode is no override. @param {string} key */
-const readOverride = key => { const v = readMode(key); return v === initialMode ? null : v; };
+/** A mode as stored, if it is one (the app's three, or one made from them). @param {string | null} v @returns {Mode | null} */
+const modeOf = v => isMode(v) ? v : null;
+
+// The settings the store holds, kept as they always were (plain text: their keys and values of before) and followed in
+// the other tabs (core/prefs.js definePref): changed there, the store says it here too (below).
+const modePref = definePref({ key: config.storageKeys.mode, text: true, clean: v => modeOf(v) ?? 'standard' });
+const gridPref = definePref({ key: config.storageKeys.gridView, text: true, clean: modeOf });
+const compactPref = definePref({ key: config.storageKeys.compact, text: true, clean: v => v === '1', store: v => v ? '1' : '0' });
+/** The harvest mode as the user set it ('1', '0'); null: never — « auto » (followHarvests). */
+const harvestPref = definePref({ key: config.storageKeys.harvestMode, text: true, clean: v => v === null ? null : v === '1',
+  store: v => v === null ? null : v ? '1' : '0' });
+/** « Afficher les étapes » of the mini-apps: 'auto' unless chosen (then nothing kept). */
+const stepsPref = definePref({ key: config.storageKeys.showSteps, text: true, clean: v => v === 'on' || v === 'off' ? v : 'auto',
+  store: v => v === 'auto' ? null : v });
+
+/** The grid's override as stored: none when it is the mode (an override equal to the mode is no override). */
+const gridOverride = () => { const v = gridPref.get(); return v === modePref.get() ? null : v; };
 
 /** @type {Store} */
 export const store = new Store({
@@ -124,19 +135,27 @@ export const store = new Store({
   offline: false,
   query: { q: '', filters: emptyFilters(), sort: '' },
   results: { total: 0, items: [], facets: {}, suggestions: [], fuzzy: 0, sort: 'fr' },
-  compact: readText(config.storageKeys.compact) === '1',
+  compact: compactPref.get(),
   favorites: new Set(),
   placed: new Map(),
-  mode: initialMode,
-  gridView: readOverride(config.storageKeys.gridView),
+  mode: modePref.get(),
+  gridView: gridOverride(),
   sheetLayout: readLayout(),
   modules: modulesState(),
   modes: modeList(),
   collections: [],
   king: null,
-  harvestMode: readHarvestMode() ?? false,
-  showSteps: readShowSteps()
+  harvestMode: harvestPref.get() ?? false,
+  showSteps: stepsPref.get()
 });
+
+// Set here or in another tab: the store says it (a key removed elsewhere, the harvest mode left as this tab shows it —
+// « auto », followHarvests). Never written back: no tab answers another.
+modePref.events.addEventListener('change', () => store.set({ mode: modePref.get(), gridView: gridOverride() }));
+gridPref.events.addEventListener('change', () => store.set({ gridView: gridOverride() }));
+compactPref.events.addEventListener('change', () => store.set({ compact: compactPref.get() }));
+harvestPref.events.addEventListener('change', () => { const on = harvestPref.get(); if (on !== null) store.set({ harvestMode: on }); });
+stepsPref.events.addEventListener('change', () => store.set({ showSteps: stepsPref.get() }));
 
 moduleEvents.addEventListener('change', () => store.set({ modules: modulesState() }));
 // A mode made or deleted: the switches list it; a deleted one in use gives way to its model.
@@ -154,36 +173,17 @@ quotaEvents.addEventListener('full', () => store.set({ storageFull: true }));
 // The layout arranged in another tab: this one shows it too (and its next change starts from it).
 onStorage(config.storageKeys.sheetLayout, () => store.set({ sheetLayout: readLayout() }));
 
-/** Stored choice, or null when the user never chose (« auto »: it follows the harvests on the device, followHarvests). */
-function readHarvestMode() {
-  const value = readText(config.storageKeys.harvestMode);
-  return value === null ? null : value === '1';
-}
-
-/** Chosen during this visit (its write may have been refused: storage full or off — it holds for the visit all the same). */
-let chosenNow = false;
-
-/** The user's own choice (Réglages, a button of the guided discovery's end): kept, never decided again by the app. */
-export const harvestModeChosen = () => chosenNow || readHarvestMode() !== null;
+/**
+ * The user's own choice (Réglages, a button of the guided discovery's end, or another tab's): kept, never decided again
+ * by the app — for the visit even when storage refused it (the setting holds it in memory).
+ */
+export const harvestModeChosen = () => harvestPref.get() !== null;
 
 /** The user's choice, kept (only a button that says so calls it). @param {boolean} on */
-export function setHarvestMode(on) {
-  chosenNow = true;
-  writeText(config.storageKeys.harvestMode, on ? '1' : '0');
-  store.set({ harvestMode: on });
-}
-
-/** « Afficher les étapes » of the mini-apps: 'auto' unless chosen. @returns {ShowSteps} */
-function readShowSteps() {
-  const value = readText(config.storageKeys.showSteps);
-  return value === 'on' || value === 'off' ? value : 'auto';
-}
+export const setHarvestMode = on => { harvestPref.set(on); };
 
 /** @param {ShowSteps} value */
-export function setShowSteps(value) {
-  writeText(config.storageKeys.showSteps, value === 'auto' ? null : value);
-  store.set({ showSteps: value });
-}
+export const setShowSteps = value => { stepsPref.set(value); };
 
 /** « Personnaliser la fiche » opened on a host's sheet (its crown), arranging the app's mode. @param {string} sheet */
 export const openKing = sheet => store.set({ king: { sheet, mode: null } });
@@ -217,24 +217,16 @@ export function followHarvests(hasHarvests) {
 }
 
 /** @param {boolean} compact */
-export function setCompact(compact) {
-  writeText(config.storageKeys.compact, compact ? '1' : '0');
-  store.set({ compact });
-}
+export const setCompact = compact => { compactPref.set(compact); };
 
-/** App-wide mode: applies everywhere, so it clears the grid's override. @param {Mode} mode */
+/** App-wide mode: applies everywhere, so it clears the grid's override (first: the store never has the old one with the new mode). @param {Mode} mode */
 export function setMode(mode) {
-  writeText(config.storageKeys.mode, mode);
-  writeText(config.storageKeys.gridView, null);
-  store.set({ mode, gridView: null });
+  gridPref.set(null);
+  modePref.set(mode);
 }
 
 /** Results grid override; null (or the mode itself) follows the mode. @param {Mode | null} view */
-export function setGridView(view) {
-  const gridView = view === store.state.mode ? null : view;
-  writeText(config.storageKeys.gridView, gridView);
-  store.set({ gridView });
-}
+export const setGridView = view => { gridPref.set(view === store.state.mode ? null : view); };
 
 /** @param {AppState} state @returns {Mode} */
 export const gridViewOf = state => state.gridView ?? state.mode;
