@@ -24,7 +24,9 @@ export async function share({ title, text, url }) {
     await navigator.clipboard.writeText(absolute);
     return 'copied';
   } catch {
-    // Last resort (insecure context, denied clipboard): let the user copy it by hand.
+    // Last resort (insecure context, denied clipboard): let the user copy it by hand, from the browser's own field —
+    // the app's question has no field to select (and core/ asks nothing of components/).
+    // eslint-disable-next-line no-restricted-globals -- the link to copy by hand, in a field to select
     prompt('Copiez ce lien :', absolute);
     return 'failed';
   }

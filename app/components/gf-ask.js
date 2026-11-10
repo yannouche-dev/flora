@@ -2,7 +2,8 @@
 // A question asked before the app does something the user may not want (« Revoir les premiers pas ? »…): a modal
 // dialog (<dialog class="ask" role="alertdialog">, ui-kit's askStyles), its title, its text, « Annuler » first — with the
 // focus — then the choices. Échap, a touch outside the box and Back are « Annuler » (core/history.js openModal: a step
-// in history). Never the browser's confirm(), which a phone shows bare and an automated test answers by itself.
+// in history). Never the browser's confirm(), which a phone shows bare, an installed app or a frame may block, and an
+// automated test answers by itself (eslint.config.js refuses confirm(), alert() and prompt() in app/).
 // ask() resolves with the value of the choice (null: Annuler), confirmAsk() with whether it was confirmed — once the
 // dialog's own step has left history (afterStep), so a caller may open another view at once; asked over another dialog
 // (« Ajouter à… »), whose step stays, it answers at once too. Added to the page's
