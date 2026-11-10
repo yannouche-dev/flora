@@ -7,6 +7,8 @@ import { readFile } from 'node:fs/promises';
 import { LEVELS, UNREAD, dangerLevel, harvestStop, rank, reasonLine } from '../../app/core/danger.js';
 import { verdictOf } from '../../app/core/alerts.js';
 import { confusionLevel, lookalikesOf } from '../../app/core/lookalikes.js';
+import { legalChips } from '../../app/config.js';
+import { legalValues } from '../../app/workers/search-core.js';
 
 const read = async (/** @type {string} */ path) => JSON.parse(await readFile(new URL(path, import.meta.url), 'utf8'));
 const [plants, safety] = await Promise.all([read('../fixtures/plants.json'), read('../../data/safety.json')]);
@@ -97,6 +99,22 @@ test('espèce protégée : en France, ou là où elle est notée ; ailleurs seul
   // No point (the sheet): elsewhere, a warning — no harvest stopped for it alone.
   const regional = dangerLevel({ statuses: [{ type: 'PR', code: 'X', label: 'Protection régionale', area: 'Picardie', level: '', iso: '' }] });
   assert.deepEqual([regional.level, regional.word, harvestStop(regional)], ['warn', 'Protégée selon le lieu', false]);
+});
+
+test('la colonne « Protection » de Flore dit le verdict sans lieu : ses mots, ses niveaux (legalChips)', () => {
+  assert.deepEqual(legalChips(['nationale', 'protegee', 'reglementee', 'menacee']).map(c => [c.level, c.word]), [['danger', 'Protégée'], ['warn', 'Réglementée']]);
+  assert.deepEqual(legalChips(['protegee', 'menacee']).map(c => [c.level, c.word]), [['warn', 'Protégée selon le lieu']]);
+  assert.deepEqual(legalChips(['menacee']), []);
+  // Every plant of the reduced flora: each chip of its row is a reason of its verdict, same word, same level.
+  let chips = 0;
+  for (const p of plants) {
+    const { reasons } = dangerLevel({ statuses: p.statuses });
+    for (const c of legalChips(legalValues(p.statuses))) {
+      chips++;
+      assert.ok(reasons.some(r => r.level === c.level && r.word === c.word), `${p.scientificName} : ${c.word} (${c.level})`);
+    }
+  }
+  assert.ok(chips > 80, `${chips} étiquettes`);
 });
 
 test('jamais « comestible » : aucune raison de la flore réduite ne le dit', async () => {

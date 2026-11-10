@@ -29,7 +29,9 @@ export const COLUMNS = [
   // Its epithet, as shown (« × oblongata » at « oblongata »: workers/search-core.js), then its genus.
   { key: 'species', label: 'Espèce', sort: 'species', width: 'minmax(80px, 1fr)' },
   { key: 'status', label: 'Statut', sort: 'status', facet: 'status', width: 'minmax(80px, 0.8fr)' },
-  { key: 'legal', label: 'Protection', sort: 'legal', facet: 'legal', width: 'minmax(96px, 1.1fr)' },
+  // Its longest line whole, with room for a wider font: « Protégée selon le lieu », or « Réglementée » and « Menacée »
+  // (gf-plant-card: two lines at most).
+  { key: 'legal', label: 'Protection', sort: 'legal', facet: 'legal', width: 'minmax(12rem, 1.1fr)' },
   // A free layout's zone only (its plants' observations given: `obs`), before ♥ and 📍 (the row's link spans those before).
   { key: 'obs', label: 'Observations', sort: 'obs', desc: true, width: 'minmax(84px, 0.7fr)' },
   { key: 'fav', label: '', width: '36px' },
@@ -46,14 +48,36 @@ const VIEW_COLUMNS = {
 /** Results pane narrower than this: the least useful columns go. */
 const NARROW = 760;
 
+/** Columns given up, in this order, while the row's least width is more than the pane's (never sideways). */
+const SQUEEZE = ['genus', 'status', 'species', 'family'];
+
+/** The size of a rem in px: the page's font size, larger when the browser's is (16 outside a page: unit tests). */
+const remPx = () => (typeof document !== 'undefined' && parseFloat(getComputedStyle(document.documentElement).fontSize)) || 16;
+
+/** A column's least width in px (its `minmax`'s first). @param {string} width @param {number} rem */
+const leastWidth = (width, rem) => {
+  const m = /^(?:minmax\()?([\d.]+)(px|rem)/.exec(width);
+  return m ? Number(m[1]) * (m[2] === 'rem' ? rem : 1) : 0;
+};
+
+/** The row's columns fit `width`: their least widths, 12px between them and the row's 20px of padding (.head, gf-plant-card). */
+const fits = (/** @type {string[]} */ keys, /** @type {string} */ view, /** @type {number} */ width, /** @type {number} */ rem) =>
+  keys.reduce((sum, k) => sum + leastWidth(columnWidth(k, view), rem), 0) + 12 * (keys.length - 1) + 20 <= width;
+
 /**
  * Visible column keys for a view and a pane width — the observations' with them only (`obs`: a free layout's zone).
+ * Narrower than NARROW, the least useful go; then, while the row would not fit, those of SQUEEZE.
  * @param {string} view @param {number} width @param {{ obs?: boolean }} [o] @returns {string[]}
  */
 export function gridColumns(view, width, { obs = false } = {}) {
-  const keys = VIEW_COLUMNS[baseOf(view)] || VIEW_COLUMNS.standard;
   const drop = [...(width < NARROW ? (baseOf(view) === 'scientific' ? ['genus', 'status'] : ['genus']) : []), ...(obs ? [] : ['obs'])];
-  return keys.filter(k => !drop.includes(k));
+  let keys = (VIEW_COLUMNS[baseOf(view)] || VIEW_COLUMNS.standard).filter(k => !drop.includes(k));
+  const rem = remPx();
+  for (const key of SQUEEZE) {
+    if (fits(keys, view, width, rem)) break;
+    keys = keys.filter(k => k !== key);
+  }
+  return keys;
 }
 
 /** No columns (a list of cards): the same array each render, its rows not drawn again for it. @type {string[]} */
@@ -93,8 +117,7 @@ export class GfPlantList extends LitElement {
     /** What it says with no plant (a free layout's list kept to what a map shows); null: none matches the search. */
     empty: { attribute: false },
     _scrollTop: { state: true },
-    _height: { state: true },
-    _width: { state: true }
+    _height: { state: true }
   };
 
   static styles = css`
@@ -171,8 +194,13 @@ export class GfPlantList extends LitElement {
     const { width, height } = entry.contentRect;
     this._height = height;
     // Re-render on a width change only when it shows or hides columns (a pane being dragged changes it every frame).
-    if ((width < NARROW) !== (this._width < NARROW)) this._width = width;
+    const shown = () => this.grid ? gridColumns(gridViewOf(this.#store.state), this.#width, { obs: Boolean(this.obs) }).join() : '';
+    const before = shown();
+    this.#width = width;
+    if (shown() !== before) this.requestUpdate();
   });
+  /** The pane's width now. */
+  #width = 1000;
   /** @type {any[] | null} */
   #items = null;
   /** Search the shown results answer (see `searchKey`). @type {string | null} */
@@ -183,7 +211,6 @@ export class GfPlantList extends LitElement {
     super();
     this._scrollTop = 0;
     this._height = 800;
-    this._width = 1000;
     this.grid = false;
     /** @type {number | null} */
     this.current = null;
@@ -281,8 +308,9 @@ export class GfPlantList extends LitElement {
   #columns() {
     if (!this.grid) return NO_COLUMNS;
     const view = gridViewOf(this.#store.state);
-    const key = [view, this._width < NARROW, Boolean(this.obs)].join('|');
-    if (this.#columnsFor !== key) { this.#columnsFor = key; this.#columnsMemo = gridColumns(view, this._width, { obs: Boolean(this.obs) }); }
+    const columns = gridColumns(view, this.#width, { obs: Boolean(this.obs) });
+    const key = [view, ...columns].join('|');
+    if (this.#columnsFor !== key) { this.#columnsFor = key; this.#columnsMemo = columns; }
     return this.#columnsMemo;
   }
   #columnsFor = '';

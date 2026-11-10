@@ -15,7 +15,8 @@ import { severityChip, severityStyles } from './ui-kit.js';
 /**
  * « Peut être confondue avec… »: the confusions the Anses and the Centres antipoison report for this plant,
  * with how to tell them apart (never a criterion that says a plant can be eaten: lookalikes.js#edibleFilter, as Faux
- * amis and the cards) and the source; each confusion's severity as the verdict's chip (danger.js#confusionChip). Each confusion folds on its own: closed at first when `compact`
+ * amis and the cards) and the source; each confusion's severity as the verdict's chip (danger.js#confusionChip), in the
+ * box of its level (ui-kit.js .sev-box: a warning's, or the red one). Each confusion folds on its own: closed at first when `compact`
  * (Épuré: one line each), open otherwise. The symptoms of a deadly confusion in every mode (Épuré: one line outside
  * the fold, in full once open), the others' when `detailed` (Scientifique). Nothing for other plants; when the list
  * cannot be read, says so (never « nothing »), with « Réessayer » (it also tells the sheet: `safety-retry`).
@@ -38,15 +39,7 @@ export class GfLookalikes extends LitElement {
     :host { display: block; }
     :host([hidden]) { display: none; }
     .box { display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; }
-    .alert {
-      border-radius: var(--gf-radius);
-      padding: 8px 12px;
-      font-size: 0.9rem;
-      line-height: 1.35;
-      border: 1px solid #d97706;
-      background: color-mix(in srgb, #f59e0b 16%, var(--gf-surface));
-    }
-    .alert.mortel { border-color: #b91c1c; background: color-mix(in srgb, #dc2626 13%, var(--gf-surface)); }
+    .alert { font-size: 0.9rem; line-height: 1.35; }
     summary { list-style: none; cursor: pointer; display: flex; gap: 6px; align-items: flex-start; border-radius: 4px; }
     summary::-webkit-details-marker { display: none; }
     summary:focus-visible { outline: none; box-shadow: var(--gf-focus); }
@@ -138,8 +131,8 @@ export class GfLookalikes extends LitElement {
     const head = side === 'edible'
       ? html`<strong>${icon('exclamation-triangle-fill')} Peut être confondue avec ${names}</strong>`
       : html`<strong>${icon('exclamation-octagon-fill')} Plante ${sev.plant}, confondue avec ${names}</strong>`;
-    // A danger (« mortel », « très toxique », the toxic plant itself) has the red box (class mortel); the chip says which.
-    return html`<details class="alert ${chip.level === 'warn' ? 'toxique' : 'mortel'}" ?open=${!this.compact}>
+    // A danger (« mortel », « très toxique », the toxic plant itself) has the red box; the chip says which.
+    return html`<details class="alert sev-box ${chip.level}" ?open=${!this.compact}>
       <summary><span class="what">${head}${severityChip(chip)} <span class="muted">· ${pair.part}</span>
         ${symptoms && this.compact ? html`<span class="sym"><b>Symptômes :</b> ${pair.symptoms}</span>` : nothing}</span>
         <span class="chev" aria-hidden="true">${icon('chevron-down')}</span></summary>
@@ -163,7 +156,7 @@ export class GfLookalikes extends LitElement {
 
   render() {
     const list = this._list;
-    if (this._error) return html`<div class="box" aria-label="Plantes à confondre"><p class="alert mortel unread" role="alert">${icon('exclamation-octagon-fill')}
+    if (this._error) return html`<div class="box" aria-label="Plantes à confondre"><p class="alert sev-box danger unread" role="alert">${icon('exclamation-octagon-fill')}
       <b>${UNREAD_LOOKALIKES}</b> <button type="button" class="link" @click=${this.#retry}>Réessayer</button></p></div>`;
     if (!list.length) return nothing;
     return html`<div class="box" aria-label="Plantes à confondre">

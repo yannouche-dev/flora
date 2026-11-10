@@ -1,6 +1,6 @@
 // @ts-check
 import { LitElement, html, css, nothing } from 'lit';
-import { config, STATUS_LABELS, STATUS_SHORT } from '../config.js';
+import { config, legalChips, STATUS_LABELS, STATUS_SHORT } from '../config.js';
 import { highlight } from '../core/highlight.js';
 import { rememberSearch } from '../core/query.js';
 import { href } from '../core/router.js';
@@ -8,6 +8,7 @@ import { toggleFavorite } from '../core/collections.js';
 import { StoreController } from '../core/store.js';
 import { icon } from '../core/icons.js';
 import { hideImg, showImg } from '../core/img.js';
+import { severityChip, severityStyles } from './ui-kit.js';
 
 /** One result row. Resolves a remote thumbnail when the dataset has none. */
 export class GfPlantCard extends LitElement {
@@ -28,7 +29,7 @@ export class GfPlantCard extends LitElement {
     _thumb: { state: true }
   };
 
-  static styles = css`
+  static styles = [severityStyles, css`
     :host { display: block; }
     :host { position: relative; }
     .fav {
@@ -145,16 +146,16 @@ export class GfPlantCard extends LitElement {
     :host([view='epure']) .stack .full { font-family: var(--gf-font-serif); font-style: italic; color: var(--gf-text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     :host([grid]) .muted { color: var(--gf-text-muted); }
     :host([grid]) [hidden] { display: none; }
-    .legal { display: flex; gap: 4px; overflow: hidden; }
+    /* Protection: the verdict's chips (config.js legalChips), then « Menacée » — on two lines when they need it, each whole. */
+    .legal { display: flex; flex-wrap: wrap; align-content: center; gap: 2px 4px; overflow: hidden; }
     .tag { flex: none; font-size: 0.72rem; font-weight: 600; padding: 1px 7px; border-radius: var(--gf-radius-pill); background: var(--gf-surface-2); color: var(--gf-text); }
-    .tag.pn, .tag.pr { background: color-mix(in srgb, #dc2626 16%, var(--gf-surface)); color: color-mix(in srgb, #dc2626 70%, var(--gf-text)); }
-    .tag.re { background: color-mix(in srgb, #f59e0b 22%, var(--gf-surface)); }
+    .legal .sev-chip { font-size: 0.72rem; }
     /* Lit (its plant hovered on the map beside it): as hovered, with a thin line; the current plant's look wins. */
     :host([lit]) a.row, :host([lit][grid]) { background: var(--gf-surface-2); box-shadow: inset 2px 0 0 var(--gf-accent); }
     :host([lit][grid]) a.row { background: none; box-shadow: none; }
     :host([current]) a.row, :host([current][grid]) { background: var(--gf-accent-soft); box-shadow: inset 3px 0 0 var(--gf-accent); }
     :host([current][grid]) a.row { background: none; box-shadow: none; }
-  `;
+  `];
 
   #store = new StoreController(this);
   /** Photos en ligne used on this device (Réglages › Modules). */
@@ -270,9 +271,7 @@ export class GfPlantCard extends LitElement {
         ? html`<span class="cell obs" title=${this.obs.title}><b>${this.obs.n.toLocaleString('fr-FR')}</b>${this.obs.detail ? html`<small>${this.obs.detail}</small>` : nothing}</span>`
         : html`<span class="cell obs muted">—</span>`,
       legal: () => html`<span class="cell legal">
-        ${legal.includes('nationale') ? html`<span class="tag pn" title="Protégée en France (protection nationale)">Protégée FR</span>`
-          : legal.includes('protegee') ? html`<span class="tag pr" title="Protégée dans une région ou un département">Protégée</span>` : nothing}
-        ${legal.includes('reglementee') ? html`<span class="tag re" title="Cueillette réglementée quelque part">Réglementée</span>` : nothing}
+        ${legalChips(legal).map(c => severityChip(c))}
         ${legal.includes('menacee') ? html`<span class="tag" title="Menacée en France (Liste rouge nationale)">Menacée</span>` : nothing}
       </span>`
     };

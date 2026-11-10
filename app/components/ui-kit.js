@@ -67,8 +67,12 @@ export const severityGlyph = level =>
   level === 'deadly' || level === 'danger' ? icon('exclamation-octagon-fill') : level === 'warn' ? icon('exclamation-triangle-fill') : nothing;
 
 /**
- * The colours of a level, one per level: the chip (Faux amis' tag) and the line of a warning (`.sev-line`, the toast of
- * « Noter ici »), each on its own tint — readable on any surface, text at 4.5:1, light or dark; `deadly` filled.
+ * The colours of a level, one per level: the chip (Faux amis' tag, Flore's « Protection » column) and the line of a
+ * warning (`.sev-line`, the toast of « Noter ici »), each on its own tint — readable on any surface, text at 4.5:1,
+ * light or dark; `deadly` filled. The box of a level (`.sev-box`: the sheet's Prudence, Statut and confusions,
+ * Cueillette prudente's banner): its border and tint, the page's text — danger and deadly the same red box (the chip
+ * in it says which) —, its own sign (a glyph right in it) in its level's colour. Never `.danger` alone on a box:
+ * styles/ui.js gives that class the destructive look (its colour; `.sev-box` sets its own).
  */
 export const severityStyles = css`
   .sev-chip { display: inline-flex; align-items: center; gap: 4px; max-width: 100%; padding: 2px 8px; box-sizing: border-box; border-radius: var(--gf-radius-pill);
@@ -81,6 +85,12 @@ export const severityStyles = css`
   .sev-chip.warn, .sev-line.warn { background: var(--gf-warn-bg); color: color-mix(in srgb, var(--gf-warn) 78%, var(--gf-text)); }
   .sev-chip.danger, .sev-line.danger { background: var(--gf-danger-bg); color: var(--gf-danger); }
   .sev-chip.deadly, .sev-line.deadly { background: var(--gf-deadly); color: var(--gf-deadly-contrast); }
+  .sev-box { display: block; padding: 8px 12px; border: 1px solid var(--gf-border); border-radius: var(--gf-radius); background: var(--gf-surface-2);
+    color: var(--gf-text); }
+  .sev-box.warn { border-color: var(--gf-warn); background: var(--gf-warn-bg); }
+  .sev-box.danger, .sev-box.deadly { border-color: var(--gf-danger); background: var(--gf-danger-bg); }
+  .sev-box.warn > .bi { color: var(--gf-warn); }
+  .sev-box:is(.danger, .deadly) > .bi { color: var(--gf-danger); }
 `;
 
 /**

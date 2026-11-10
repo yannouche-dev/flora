@@ -332,16 +332,18 @@ export const sheetStyles = [ui, severityStyles, css`
     .wiki-x p { margin: 0 0 6px; font-size: 0.92rem; line-height: 1.5; }
     .wiki-x + .wiki-x { margin-top: 10px; }
     ${unsafeCSS(chartStyles)}
-    .prudence { border: 1px solid #d97706; background: color-mix(in srgb, #f59e0b 12%, var(--gf-surface)); border-radius: var(--gf-radius); padding: 8px 12px; margin-bottom: 10px; }
-    .prudence.grave { border-color: #b91c1c; background: color-mix(in srgb, #ef4444 10%, var(--gf-surface)); }
+    /* The Prudence: the box of the verdict's level (ui-kit.js .sev-box). */
+    .prudence { margin-bottom: 10px; }
     .prudence .verdict { margin: 0 0 6px; }
     .prudence ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
     .prudence li { display: flex; gap: 8px; align-items: baseline; font-size: 0.9rem; line-height: 1.35; }
-    .prudence li svg { flex: none; color: #d97706; }
-    /* data-level, not a class: .danger is the shared stylesheet's destructive look (styles/ui.js). */
-    .prudence li[data-level='danger'] svg { color: #b91c1c; }
+    /* Each reason's sign in its level's colour — data-level, not a class: .danger is the shared stylesheet's destructive
+       look (styles/ui.js); « à savoir » has none (severityGlyph), its words in line with the others'. */
+    .prudence li svg { flex: none; }
+    .prudence li[data-level='warn'] svg { color: var(--gf-warn); }
+    .prudence li[data-level='danger'] svg { color: var(--gf-danger); }
     .prudence li[data-level='deadly'] svg { color: var(--gf-deadly); }
-    .prudence li[data-level='info'] svg { color: var(--gf-text-muted); }
+    .prudence li[data-level='info'] { padding-left: calc(1em + 8px); }
     .prudence p { margin: 8px 0 0; }
     .prudence .sos a { color: inherit; }
     .prudence li button.link { min-height: 0; padding: 0 4px; font-size: inherit; }

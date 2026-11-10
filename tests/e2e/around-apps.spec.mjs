@@ -41,9 +41,22 @@ test('Cueillette prudente : ses avertissements de sécurité, tels qu’avant ; 
   const list = page.locator('ma-around-list');
   await expect(list.locator('.head h1')).toHaveText('Cueillette prudente · Autour de vous');
   // Never without a certain identification, each plant here has a dangerous look-alike, whom to call.
-  const banner = list.locator('.banner-warn[role="note"]');
+  const banner = list.locator('.banner[role="note"]');
   await expect(banner).toContainText('Ne cueillez jamais une plante sans identification certaine : chacune de ces plantes a un sosie toxique (liste de l’Anses et des Centres antipoison).');
   await expect(banner).toContainText('Centre antipoison : centres-antipoison.net (liste officielle) · 15 ou 112 en cas de détresse vitale.');
+  // The danger box of the verdict's colours (ui-kit.js .sev-box), light or dark — no longer a fixed pink.
+  await expect(banner).toHaveClass(/\bsev-box\b.*\bdanger\b/);
+  for (const scheme of /** @type {const} */ (['dark', 'light'])) {
+    await page.emulateMedia({ colorScheme: scheme });
+    expect(await banner.evaluate(el => {
+      const probe = document.createElement('span');
+      probe.style.backgroundColor = 'var(--gf-danger-bg)';
+      document.body.append(probe);
+      const want = getComputedStyle(probe).backgroundColor;
+      probe.remove();
+      return getComputedStyle(el).backgroundColor === want;
+    }), scheme).toBe(true);
+  }
   // Only the plants of a dangerous confusion (2 of the 12 around), the deadliest look-alike first.
   await expect(list.locator('.head .where')).toHaveText('2 plantes à moins de 1 km');
   const top = list.locator('.swipe-card.top');
@@ -92,6 +105,8 @@ test('Cueillette prudente : la colchique vue une fois, derrière plus de 120 pla
   await expect(top.locator('.bio li').first()).toHaveText('☠️ Je suis le sosie mortel de Ail des ours, Poireau sauvage.');
   // Its right: recognised, to avoid — never « J’aime », never a heart.
   await expect(top.locator('.avoid-tag')).toHaveText('À ne pas cueillir');
+  // A chip of its verdict: deadly, the colchique.
+  await expect(top.locator('.avoid-tag .sev-chip')).toHaveClass(/\bdeadly\b/);
   await expect(top.locator('.stamp.like')).toHaveText('À ÉVITER');
   const right = deck.getByRole('button', { name: 'Je reconnais Colchique d\'automne : à ne pas cueillir' });
   await expect(right).toHaveAttribute('title', 'Je la reconnais : à ne pas cueillir (→)');
@@ -99,6 +114,7 @@ test('Cueillette prudente : la colchique vue une fois, derrière plus de 120 pla
   await expect(deck.locator('.deck')).toHaveAttribute('aria-label', /Flèche droite : je la reconnais, à ne pas cueillir/);
   await right.click();
   await expect(top).toHaveAttribute('data-id', String(cigue));
+  await expect(top.locator('.avoid-tag .sev-chip')).toHaveClass(/\bdanger\b/);
   await expect(list.getByRole('status')).toHaveText('Reconnue, à ne pas cueillir : Colchique d\'automne. Carte suivante : Ciguë maculée.');
   await expect.poll(() => kept(page, 'cueillette')).toMatchObject({ matches: [], passed: [], avoided: [colchique] });
   // ↺: back on top, no longer recognised.

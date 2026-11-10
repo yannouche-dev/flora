@@ -36,7 +36,7 @@ import * as usesData from '../core/uses.js';
 import { gravest, lookalikesOf, severityNote } from '../core/lookalikes.js';
 import { harvestRuleText } from '../core/regulation.js';
 import { dangerLevel, rank } from '../core/danger.js';
-import { photosOffLine, severityChip } from './ui-kit.js';
+import { photosOffLine, severityChip, severityGlyph } from './ui-kit.js';
 import { formatAltitude } from '../core/altitude.js';
 import { climateChart, groupColor, groupLegend, networkChart, nicheChart } from '../core/charts.js';
 import './gf-media-viewer.js';
@@ -1393,10 +1393,11 @@ export class SheetBase extends LitElement {
         const tox = (/** @type {any[]} */ (o.safety?.ansm || [])).some(a => a.list === 'B' || a.toxicParts) || o.safety?.tppt
           || (Array.isArray(o.confusions) && o.confusions.some(l => l.side === 'toxic'));
         const none = o.safety !== undefined && o.safety !== UNREAD && Array.isArray(o.confusions) && !tox;
-        // The verdict's chip on top: the same word and colour as the badge of Alertes and the plant's cards.
-        const prudence = !danger.length && !none ? nothing : html`${danger.length ? html`<div class="prudence ${rank(verdict.level) >= rank('danger') ? 'grave' : ''}">
+        // The verdict's chip on top: the same word and colour as the badge of Alertes and the plant's cards; the box of
+        // its level (ui-kit.js .sev-box), each reason with its level's sign (severityGlyph: none for « à savoir »).
+        const prudence = !danger.length && !none ? nothing : html`${danger.length ? html`<div class="prudence sev-box ${verdict.level}">
           <p class="verdict">${severityChip(verdict)}</p>
-          <ul>${danger.map(d => html`<li data-level=${d.level}>${icon(rank(d.level) >= rank('danger') ? 'exclamation-octagon-fill' : 'exclamation-triangle-fill')}<span>${d.text}</span></li>`)}</ul>
+          <ul>${danger.map(d => html`<li data-level=${d.level}>${severityGlyph(d.level)}<span>${d.text}</span></li>`)}</ul>
           <p class="small">En cas de doute, ne la consommez pas. ${emergency()}. <span class="src">Anses</span></p>
         </div>` : nothing}${none ? html`<p class="small no-tox">Aucune donnée de toxicité dans nos sources (ANSM, TPPT) : cela ne veut pas dire qu’elle est comestible ni sans danger. En cas de doute, ne la consommez pas.</p>` : nothing}`;
         return this._usesBox ? html`${prudence}${this.#lookalikesBox(plant)}` : prudence;

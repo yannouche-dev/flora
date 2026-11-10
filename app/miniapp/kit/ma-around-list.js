@@ -37,7 +37,7 @@ import { StoreController } from '../../core/store.js';
 import { photoOf } from '../../core/thumb.js';
 import { emergency } from '../../core/poison.js';
 import { ui } from '../../styles/ui.js';
-import { severityChip, severityStyles } from '../../components/ui-kit.js';
+import { severityChip, severityGlyph, severityStyles } from '../../components/ui-kit.js';
 import { MONTH, PAGE, nextDistance, saidOf } from './cards.js';
 import { nameOf } from '../../core/plants.js';
 import { radiusLabel } from '../../core/distance.js';
@@ -127,11 +127,11 @@ export class MaAroundList extends LitElement {
     .seen { position: absolute; right: 8px; bottom: 54px; width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; background: var(--gf-accent); color: #fff; font-size: 0.75rem; }
     .more { display: block; margin: 16px auto 0; }
     .src { margin-top: 18px; font-size: 0.75rem; color: var(--gf-text-muted); text-align: center; }
-    /* Cueillette prudente: never without a certain identification. */
-    .banner-warn { margin: 0 0 12px; padding: 10px 12px; border-radius: var(--gf-radius); background: #fde2df; color: #7a1d16; font-size: 0.88rem; display: flex; gap: 8px; align-items: flex-start; }
-    .banner-warn .sos-line { display: block; margin-top: 2px; }
-    .banner-warn .sos a, .banner-warn .link { color: inherit; }
-    .banner-warn .link { font-size: inherit; font-weight: 600; margin-left: 4px; }
+    /* Cueillette prudente: never without a certain identification — the danger box (ui-kit.js .sev-box), its sign red. */
+    .banner { margin: 0 0 12px; padding: 10px 12px; font-size: 0.88rem; display: flex; gap: 8px; align-items: flex-start; }
+    .banner .sos-line { display: block; margin-top: 2px; }
+    .banner .sos a, .banner .link { color: inherit; }
+    .banner .link { font-size: inherit; font-weight: 600; margin-left: 4px; }
     /* Mosaïque. */
     .bloom-only { display: flex; gap: 6px; align-items: center; justify-content: center; margin: 0 0 10px; font-size: 0.9rem; }
     .grid.mosaic { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); grid-auto-flow: dense; gap: 6px; }
@@ -521,10 +521,10 @@ export class MaAroundList extends LitElement {
         <button class="link" type="button" @click=${() => app.go('map')}>Distance : ${km}</button>
         <button class="link" type="button" @click=${() => app.go('start')}>Changer de lieu</button>
       </div>
-      ${this.harvest ? html`<p class="banner-warn" role="note">${icon('exclamation-triangle-fill')}<span>Ne cueillez jamais une plante sans identification certaine${s.unread ? ''
+      ${this.harvest ? html`<p class="banner sev-box danger" role="note">${severityGlyph('danger')}<span>Ne cueillez jamais une plante sans identification certaine${s.unread ? ''
         : ' : chacune de ces plantes a un sosie toxique (liste de l’Anses et des Centres antipoison)'}.
         <span class="sos-line">${emergency()}.</span></span></p>` : nothing}
-      ${this.harvest && s.unread && !s.loading ? html`<p class="banner-warn" role="alert">${icon('exclamation-octagon-fill')}<span><b>${UNREAD_LOOKALIKES}</b>
+      ${this.harvest && s.unread && !s.loading ? html`<p class="banner sev-box danger" role="alert">${severityGlyph('danger')}<span><b>${UNREAD_LOOKALIKES}</b>
         <button class="link" type="button" @click=${() => s.load()}>Réessayer</button></span></p>` : nothing}
       ${harvestEmpty ? html`<div class="deck-end"><p><b>Aucune observation confirmée ici pour ces plantes : cela ne veut pas dire qu’elles sont absentes.</b></p>
         ${further ? html`<button class="primary" type="button" @click=${() => s.widen(further)}>Chercher jusqu’à ${radiusLabel(further)}</button>` : nothing}</div>` : nothing}

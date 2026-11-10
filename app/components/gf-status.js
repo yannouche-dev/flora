@@ -1,9 +1,10 @@
 // @ts-check
 import { LitElement, html, css, nothing } from 'lit';
 import { getPlant } from '../core/plants.js';
-import { myRegion, sortStatuses, territoryFor } from '../core/territory.js';
+import { myRegion, sortStatuses, territoryAt, territoryFor } from '../core/territory.js';
 import { harvestRules, tradeRules } from '../core/regulation.js';
 import { ui } from '../styles/ui.js';
+import { severityStyles } from './ui-kit.js';
 
 /** @typedef {import('../core/territory.js').Status} Status */
 
@@ -14,16 +15,33 @@ const LEVEL = { PN: 'Protection nationale', PR: 'Protection régionale', PD: 'Pr
 export const inpnStatusUrl = id => `https://inpn.mnhn.fr/espece/cd_nom/${id}/tab/statut`;
 
 /**
- * One-line warning for the toast of « Noter ici »: protection (danger) or picking rule (warn) where the plant is.
+ * Where a plant is noted or looked at: the territory of `point` (else « Ma région », or null: neither known), or
+ * 'unread' when the outlines (data/territories.json) could not be read — a regional protection may then be the one here.
+ * @param {[number, number] | null | undefined} point
+ * @returns {Promise<import('../core/territory.js').Territory | null | 'unread'>}
+ */
+const territoryHere = point => (point ? territoryAt(point).then(t => t ?? territoryFor(null)) : territoryFor(null))
+  .catch(() => /** @type {const} */ ('unread'));
+
+/** The regional and departmental protections of `elsewhere`, by area (each once). @param {Status[]} elsewhere */
+const protectedAreas = elsewhere => [...new Set(elsewhere.filter(s => PROTECTION.includes(s.type)).map(s => s.area || s.label))];
+
+/**
+ * One-line warning for the toast of « Noter ici »: protection (danger) or picking rule (warn) where the plant is. Where
+ * the point is could not be read (the outlines): a regional protection may be the one here — said so, a danger (fail
+ * closed, as the verdict before the note: core/alerts.js#verdictOf).
  * @param {any} plant TAXREF record with `statuses`
  * @param {[number, number] | null} [point] where it is recorded
  * @returns {Promise<{ level: 'danger' | 'warn', text: string } | null>}
  */
 export async function statusWarning(plant, point) {
   if (!plant?.statuses?.length) return null;
-  const { national, here } = sortStatuses(plant.statuses, await territoryFor(point).catch(() => null));
+  const territory = await territoryHere(point);
+  const { national, here, elsewhere } = sortStatuses(plant.statuses, territory === 'unread' ? null : territory);
   const protection = [...national, ...here].find(s => PROTECTION.includes(s.type));
   if (protection) return { level: 'danger', text: `Espèce protégée (${protection.type === 'PN' ? 'France' : protection.area})` };
+  const maybe = territory === 'unread' ? protectedAreas(elsewhere) : [];
+  if (maybe.length) return { level: 'danger', text: `Espèce protégée dans des régions ou départements (${maybe.slice(0, 3).join(', ')}), peut-être ici` };
   // Only a picking rule of this department or region (never a CITES annex, an overseas or invasive species list).
   const rule = harvestRules(here)[0];
   return rule ? { level: 'warn', text: `Cueillette réglementée (${rule.area})` } : null;
@@ -31,7 +49,10 @@ export async function statusWarning(plant, point) {
 
 /**
  * Protection / picking regulation / Red List of a plant, for the territory where it is (a place's point,
- * else "Ma région"). Source: INPN, Base de connaissance Statuts. Renders nothing for plants without status.
+ * else "Ma région"). Source: INPN, Base de connaissance Statuts. Renders nothing for plants without status. A
+ * protection here is in the danger box, a picking rule in the warning's (ui-kit.js .sev-box), as the verdict says them.
+ * Where it is could not be read (the outlines): a regional protection may be the one here — in the danger box, « peut-être
+ * ici » (fail closed, as statusWarning and the verdict before a harvest).
  */
 export class GfStatus extends LitElement {
   static properties = {
@@ -51,19 +72,11 @@ export class GfStatus extends LitElement {
     this.toggleAttribute('loading', this._territory === undefined);
   }
 
-  static styles = [ui, css`
+  static styles = [ui, severityStyles, css`
     :host { display: block; }
     .box { display: grid; gap: 6px; }
-    .alert {
-      border-radius: var(--gf-radius);
-      padding: 8px 12px;
-      font-size: 0.9rem;
-      line-height: 1.35;
-      border: 1px solid;
-    }
+    .alert { font-size: 0.9rem; line-height: 1.35; }
     .alert strong { display: block; }
-    .protected { background: color-mix(in srgb, #dc2626 12%, var(--gf-surface)); border-color: #dc2626; }
-    .regulated { background: color-mix(in srgb, #f59e0b 16%, var(--gf-surface)); border-color: #d97706; }
     .info { font-size: 0.85rem; color: var(--gf-text); }
     .muted { color: var(--gf-text-muted); font-size: 0.8rem; }
     ul { margin: 4px 0 0; padding-left: 18px; }
@@ -81,7 +94,7 @@ export class GfStatus extends LitElement {
     this.point = null;
     /** @type {any} */
     this._plant = null;
-    /** @type {import('../core/territory.js').Territory | null | undefined} */
+    /** @type {import('../core/territory.js').Territory | null | 'unread' | undefined} */
     this._territory = undefined;
     this._open = false;
   }
@@ -112,7 +125,7 @@ export class GfStatus extends LitElement {
   }
 
   async #locate() {
-    this._territory = await territoryFor(this.point).catch(() => null);
+    this._territory = await territoryHere(this.point);
   }
 
   /** @param {Status} s */
@@ -125,9 +138,12 @@ export class GfStatus extends LitElement {
     const statuses = plant?.statuses;
     this._empty = true;
     if (!statuses?.length || this._territory === undefined) return nothing;
-    const territory = this._territory;
+    const unread = this._territory === 'unread';
+    const territory = unread ? null : /** @type {import('../core/territory.js').Territory | null} */ (this._territory);
     const { national, here, elsewhere } = sortStatuses(statuses, territory);
     const protections = [...national, ...here].filter(s => PROTECTION.includes(s.type));
+    // Where it is unknown for want of the outlines: the regional protections may be this place's.
+    const maybe = unread && !protections.length ? protectedAreas(elsewhere) : [];
     // Picking rules: this department's or region's, then the national ones (PV1: a prefect may regulate it; NV3).
     // Trade rules (CITES) on a line of their own; overseas and invasive species lists rule no picking here.
     const rules = harvestRules(here);
@@ -135,25 +151,30 @@ export class GfStatus extends LitElement {
     const trade = tradeRules(national);
     const redLists = [...national, ...here].filter(s => s.type === 'LRN' || s.type === 'LRR');
     const away = [...elsewhere.filter(s => PROTECTION.includes(s.type)), ...harvestRules(elsewhere)];
-    if (!protections.length && !rules.length && !nationalRules.length && !trade.length && !redLists.length && !away.length) return nothing;
+    if (!protections.length && !maybe.length && !rules.length && !nationalRules.length && !trade.length && !redLists.length && !away.length) return nothing;
     this._empty = false;
     const place = territory ? (territory.deptName ? `${territory.deptName}, ${territory.regionName}` : territory.regionName) : null;
 
     return html`
       <div class="box">
         ${protections.length ? html`
-          <div class="alert protected" role="alert">
+          <div class="alert sev-box danger" role="alert">
             <strong>Espèce protégée${place ? ' ici' : ''}</strong>
             ${protections.map(s => html`<div>${LEVEL[s.type]} (${this.#where(s)})${s.label && s.label !== LEVEL[s.type] ? html`<small> — ${s.label}</small>` : nothing}</div>`)}
             <div class="muted">Ne la cueillez pas sans avoir vérifié ce que permet le texte officiel.</div>
           </div>` : nothing}
+        ${maybe.length ? html`
+          <div class="alert sev-box danger" role="alert">
+            <strong>Espèce protégée dans des régions ou départements (${maybe.slice(0, 3).join(', ')}${maybe.length > 3 ? '…' : ''}), peut-être ici</strong>
+            <div class="muted">Où elle est n’a pas pu être lu : ne la cueillez pas sans avoir vérifié ce que permet le texte officiel.</div>
+          </div>` : nothing}
         ${rules.length ? html`
-          <div class="alert regulated" role="alert">
+          <div class="alert sev-box warn" role="alert">
             <strong>Cueillette réglementée${place ? ' ici' : ''}</strong>
             ${rules.map(s => html`<div>${s.area} — ${s.label}</div>`)}
           </div>` : nothing}
         ${nationalRules.length ? html`
-          <div class="alert regulated">
+          <div class="alert sev-box warn">
             <strong>${nationalRules.some(s => s.code !== 'PV1') ? 'Cueillette réglementée en France métropolitaine' : 'Cueillette pouvant être réglementée par arrêté préfectoral'}</strong>
             ${nationalRules.map(s => html`<div>${s.area} — ${s.label}</div>`)}
             ${nationalRules.every(s => s.code === 'PV1') ? html`<div class="muted">Un arrêté du préfet peut en limiter ou en interdire la cueillette dans un département : renseignez-vous avant de cueillir.</div>` : nothing}
@@ -164,7 +185,7 @@ export class GfStatus extends LitElement {
           <div class="info">Liste rouge : ${redLists.map((s, i) => html`${i ? ', ' : ''}<strong>${s.label}</strong> (${this.#where(s)})`)}</div>` : nothing}
         ${away.length ? html`
           <div class="muted">
-            ${territory ? '' : html`Choisissez votre région (Plus → Réglages) pour savoir ce qui s’applique chez vous. `}
+            ${territory || unread ? '' : html`Choisissez votre région (Plus → Réglages) pour savoir ce qui s’applique chez vous. `}
             ${territory ? 'Ailleurs : ' : ''}protégée ou réglementée dans ${new Set(away.map(s => s.area)).size} territoire${new Set(away.map(s => s.area)).size > 1 ? 's' : ''}.
             <button class="link" type="button" @click=${() => { this._open = !this._open; }}>${this._open ? 'Masquer' : 'Voir la liste'}</button>
             ${this._open ? html`<ul>${away.map(s => html`<li>${s.area} — ${s.type === 'REGL' ? 'cueillette réglementée' : LEVEL[s.type].toLowerCase()}</li>`)}</ul>` : nothing}
