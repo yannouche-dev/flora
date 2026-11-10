@@ -73,6 +73,8 @@ export class GfMiniapp extends LitElement {
     .bar { display: flex; align-items: center; gap: 8px; min-height: 48px; padding: 4px 8px; background: var(--gf-surface); border-bottom: 1px solid var(--gf-border); min-width: 0; }
     .quit { flex: none; min-height: 40px; padding: 4px 12px 4px 8px; gap: 6px; border: 0; background: none; box-shadow: none; color: var(--gf-text-muted); font-weight: 500; }
     .quit:hover { background: var(--gf-surface-2); color: var(--gf-text); }
+    /* Their focus ring (ui.js), which « box-shadow: none » above would take away. */
+    .quit:focus-visible, .menu button:focus-visible { box-shadow: var(--gf-focus); }
     .title { flex: none; display: inline-flex; align-items: center; gap: 8px; margin: 0; font-size: 1rem; font-weight: 700; white-space: nowrap; color: var(--gf-text); }
     .title .bi { color: var(--gf-accent); }
     ma-steps { flex: 1; }

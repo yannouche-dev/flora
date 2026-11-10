@@ -240,6 +240,11 @@ test('deleteQuestion : supprimer une liste, un lieu, un parcours — ce qui part
   assert.deepEqual(C.deleteQuestion(list(2)), ask('Supprimer cette liste ?', 'La liste et ses 2 plantes, avec leurs notes, seront effacées.'));
   assert.deepEqual(C.deleteQuestion(list(1)), ask('Supprimer cette liste ?', 'La liste et sa plante, avec sa note, seront effacées.'));
   assert.deepEqual(C.deleteQuestion(list(0)), ask('Supprimer cette liste ?', 'La liste sera effacée.'));
+  // A list holding a harvest log (a lieu whose position was removed): said.
+  const harvested = (/** @type {number} */ n) => /** @type {any} */ (normalizeCollection({ type: 'Feature', id: 'l', geometry: null, properties: { kind: 'list', name: 'Cuisine',
+    plants: plants(n).map((p, i) => i ? p : { ...p, harvests: [{ id: 'h', date: '2026-05-01', quantity: '1 poignée' }] }) } }));
+  assert.deepEqual(C.deleteQuestion(harvested(2)), ask('Supprimer cette liste ?', 'La liste et ses 2 plantes, avec leurs notes et leurs journaux de récolte, seront effacées.'));
+  assert.deepEqual(C.deleteQuestion(harvested(1)), ask('Supprimer cette liste ?', 'La liste et sa plante, avec sa note et son journal de récolte, seront effacées.'));
 });
 
 // ── Partager, exporter : la position, les notes et les récoltes, dites avant ──

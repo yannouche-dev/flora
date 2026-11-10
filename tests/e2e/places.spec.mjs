@@ -216,7 +216,7 @@ test('L’éditeur d’un lieu : retirer une plante annotée demande d’abord, 
   await expect.poll(plants).toEqual([]);
 });
 
-test('L’éditeur : « Supprimer » une liste demande dans la question de l’app, jamais la boîte du navigateur ; « Annuler » la garde', async ({ app, page }) => {
+test('L’éditeur : « Supprimer » une liste demande dans la question de l’app, jamais la boîte du navigateur ; « Annuler » la garde, un double clic aussi', async ({ app, page }) => {
   /** The browser's own dialogs (confirm(): a test would answer it by itself): none. @type {string[]} */
   const native = [];
   page.on('dialog', dialog => { native.push(dialog.message()); dialog.dismiss(); });
@@ -238,6 +238,12 @@ test('L’éditeur : « Supprimer » une liste demande dans la question de l’a
   await ask.getByRole('button', { name: 'Annuler' }).click();
   await expect(ask).toHaveCount(0);
   await expect(remove).toBeFocused();
+  expect(await stored()).toBe(true);
+  // A double click on « Supprimer »: its second click, in the question just opened, is no answer — it stays, unread.
+  await remove.dblclick();
+  await expect(ask).toBeVisible();
+  await ask.getByRole('button', { name: 'Annuler' }).click();
+  await expect(ask).toHaveCount(0);
   expect(await stored()).toBe(true);
   // « Supprimer »: gone, Mes plantes in its place.
   await remove.click();

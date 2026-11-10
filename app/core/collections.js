@@ -350,16 +350,19 @@ export function removeQuestion(c, ref) {
  */
 export function deleteQuestion(c) {
   const n = c.properties.plants.length;
+  // A list may hold harvest logs too (a lieu whose position was removed, a lieu poured into it): said when it does.
+  const harvests = c.properties.plants.some(e => e.harvests?.length);
   const [it, what] = !c.geometry ? ['cette liste', 'La liste'] : c.properties.walk ? ['ce parcours', 'Le parcours'] : ['ce lieu', 'Le lieu'];
   const plants = !n ? ''
     : c.geometry ? (n > 1 ? ` et ses ${n} plantes notées, avec leurs notes et le journal de récolte,` : ' et sa plante notée, avec sa note et le journal de récolte,')
-    : n > 1 ? ` et ses ${n} plantes, avec leurs notes,` : ' et sa plante, avec sa note,';
+    : n > 1 ? ` et ses ${n} plantes, avec leurs notes${harvests ? ' et leurs journaux de récolte' : ''},`
+    : ` et sa plante, avec sa note${harvests ? ' et son journal de récolte' : ''},`;
   const gone = c.geometry ? (n ? 'seront effacés' : 'sera effacé') : n ? 'seront effacées' : 'sera effacée';
   return { title: `Supprimer ${it} ?`, text: `${what}${plants} ${gone}. Cette action est définitive.`, yes: 'Supprimer', danger: true };
 }
 
 /** @param {Place} place @param {PlantEntry[]} plants @returns {Place} */
-const withPlants =(place, plants) => ({ ...place, properties: { ...place.properties, plants, plantIds: plantIdsOf(plants) } });
+const withPlants = (place, plants) => ({ ...place, properties: { ...place.properties, plants, plantIds: plantIdsOf(plants) } });
 
 /** The record as stored: rounded point, derived plant ids, the time of this change. @param {Collection} place @returns {Collection} */
 const stamped = place => ({

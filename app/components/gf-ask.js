@@ -47,8 +47,21 @@ export class GfAsk extends LitElement {
   /** Its step in history (openModal): the answer waits until it is left. @type {number | undefined} */
   step = undefined;
 
+  /** When it opened. */
+  #openedAt = 0;
+
   firstUpdated() {
     this.step = openModal(/** @type {HTMLDialogElement} */ (this.renderRoot.querySelector('dialog')));
+    this.#openedAt = performance.now();
+  }
+
+  /**
+   * The second click of a double click (or tap) on what asked, landing in the question just opened: not an answer — the
+   * question was never read (its « Supprimer » may be right under it, on a phone). A keyboard's click (detail 0) is one.
+   * @param {Event} e
+   */
+  #stray(e) {
+    return /** @type {MouseEvent} */ (e).detail > 1 && performance.now() - this.#openedAt < 1000;
   }
 
   /** @param {string | null} value */
@@ -60,14 +73,14 @@ export class GfAsk extends LitElement {
   render() {
     return html`<dialog class="ask" role="alertdialog" aria-labelledby="ask-title" aria-describedby="ask-text"
         @close=${() => this.dispatchEvent(new CustomEvent('ask-choice', { detail: { choice: this.#choice } }))}
-        @click=${(/** @type {Event} */ e) => { if (e.target === e.currentTarget) this.#choose(null); }}>
+        @click=${(/** @type {Event} */ e) => { if (e.target === e.currentTarget && !this.#stray(e)) this.#choose(null); }}>
       <div class="box">
         <h2 id="ask-title">${fr(this.heading)}</h2>
         <p id="ask-text">${fr(this.text)}</p>
         <div class="row">
-          <button type="button" autofocus @click=${() => this.#choose(null)}>${fr(this.cancel)}</button>
+          <button type="button" autofocus @click=${(/** @type {Event} */ e) => { if (!this.#stray(e)) this.#choose(null); }}>${fr(this.cancel)}</button>
           ${this.choices.map(c => html`<button type="button" class=${c.danger ? 'danger' : c.primary ? 'primary' : ''}
-            @click=${() => this.#choose(c.value)}>${fr(c.label)}</button>`)}
+            @click=${(/** @type {Event} */ e) => { if (!this.#stray(e)) this.#choose(c.value); }}>${fr(c.label)}</button>`)}
         </div>
       </div>
     </dialog>`;

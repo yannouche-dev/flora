@@ -304,7 +304,7 @@ test('le grand bouton d’un écran, le même partout (.hero) : le départ d’u
   await app.open('#/app/faux-amis');
   const go = page.locator('gf-miniapp .start .go');
   expect(await size(go)).toEqual(HERO);
-  // Reached by the keyboard: the focus ring over its shadow.
+  // Reached by the keyboard: the focus ring, in place of its shadow.
   await go.focus();
   await page.keyboard.press('Shift+Tab');
   await page.keyboard.press('Tab');

@@ -60,8 +60,10 @@ export const ui = css`
   }
   :where(.primary:hover, a.primary:hover) { background: color-mix(in srgb, var(--gf-accent) 88%, var(--gf-text)); }
   :where(.primary.large) { min-height: 48px; padding: 12px 22px; font-size: 1rem; }
-  /* A screen's one main action: the eye goes to it, under the thumb. Fluid with its container's width (cqi): 56 px high,
-     19 px on a phone → 60 px, 21 px from a container of 700 px. Its shadow under it, the focus ring over it. */
+  /* A screen's one main action: the eye goes to it, under the thumb. 56 px high, 19 px on a phone; 60 px high from a
+     container of 700 px, its words growing with the container's width (cqi) up to 21 px. Its shadow under it; on keyboard
+     focus, the focus ring instead. Two sizes stay apart: .primary.large (a form's or a sheet's main button) and
+     Rencontres' guided first steps (g-launch). */
   :where(.hero) {
     min-height: 56px;
     min-width: min(100%, 280px);
