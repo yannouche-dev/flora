@@ -30,7 +30,7 @@ import { safeUrl } from '../core/safe-url.js';
 import { ui } from '../styles/ui.js';
 import { config } from '../config.js';
 import { PaneSizer, splitStyles } from '../core/panes.js';
-import { readText, writeText } from '../core/prefs.js';
+import { definePref } from '../core/prefs.js';
 import './gf-attribution.js';
 
 /** @typedef {import('../core/media-items.js').MediaItem} MediaItem */
@@ -53,16 +53,14 @@ const nf = new Intl.NumberFormat('fr-FR');
 const FADE = 350;
 const still = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-/** The image's height in the sheet, as a proportion of its width (the grip); null: the default shape. */
-const RATIO_KEY = config.storageKeys.mediaRatio;
-let stageRatio = (() => { const r = Number(readText(RATIO_KEY)); return r >= 0.3 && r <= 2 ? r : null; })();
-const ratioEvents = new EventTarget();
+/**
+ * The image's height in the sheet, as a proportion of its width (the grip: 0.3 to 2), kept as it always was (its text,
+ * « 0.750 ») and followed in the other tabs; null: the default shape.
+ */
+const ratioPref = definePref({ key: config.storageKeys.mediaRatio, text: true, clean: v => { const r = Number(v); return r >= 0.3 && r <= 2 ? r : null; },
+  store: r => r == null ? null : r.toFixed(3) });
 /** @param {number | null} r */
-function setStageRatio(r) {
-  stageRatio = r == null ? null : Math.min(2, Math.max(0.3, r));
-  writeText(RATIO_KEY, stageRatio == null ? null : stageRatio.toFixed(3));
-  ratioEvents.dispatchEvent(new Event('change'));
-}
+const setStageRatio = r => { ratioPref.set(r == null ? null : Math.min(2, Math.max(0.3, r))); };
 /** @param {number} v @param {number} a @param {number} b */
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
 /** An image that fails, hidden (no broken-image sign); shown again when its next address loads. @param {Event} e */
@@ -399,7 +397,9 @@ export class GfMediaViewer extends LitElement {
     if (sheetSession.media.playing && this.presentation === 'slideshow') this.#play(true);
   }
 
+  /** The image's height (the grip, here or in another tab). */
   #applyRatio = () => {
+    const stageRatio = ratioPref.get();
     this.toggleAttribute('sized', stageRatio != null);
     if (stageRatio != null) this.style.setProperty('--stage-ratio', `1 / ${stageRatio}`); else this.style.removeProperty('--stage-ratio');
     // The grip says its value (aria-valuenow): drawn again.
@@ -408,7 +408,7 @@ export class GfMediaViewer extends LitElement {
 
   connectedCallback() {
     super.connectedCallback();
-    ratioEvents.addEventListener('change', this.#applyRatio);
+    ratioPref.events.addEventListener('change', this.#applyRatio);
     this.#applyRatio();
     // The keys belong to the viewer only while it has the focus: the page (and ← → for plants) keeps its own.
     this.addEventListener('keydown', this.#onKey);
@@ -418,7 +418,7 @@ export class GfMediaViewer extends LitElement {
 
   disconnectedCallback() {
     super.disconnectedCallback();
-    ratioEvents.removeEventListener('change', this.#applyRatio);
+    ratioPref.events.removeEventListener('change', this.#applyRatio);
     this.removeEventListener('keydown', this.#onKey);
     this.#size.disconnect();
     this.#abort?.abort();
@@ -1114,6 +1114,7 @@ export class GfMediaViewer extends LitElement {
    * Kept as a proportion of the width (so it follows the screen), for every plant and visit.
    */
   #grip() {
+    const stageRatio = ratioPref.get();
     return html`<div class="grip" role="separator" aria-orientation="horizontal" tabindex="0" title="Glisser pour agrandir ou réduire l’image (double-clic : taille par défaut)"
       aria-label="Hauteur de l’image" aria-valuemin="30" aria-valuemax="200" aria-valuenow=${Math.round((stageRatio ?? 0.75) * 100)}
       aria-valuetext=${stageRatio == null ? 'taille par défaut' : `${Math.round(stageRatio * 100)} % de la largeur`}

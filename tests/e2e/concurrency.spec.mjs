@@ -61,6 +61,13 @@ test('deux onglets : un réglage changé dans l’un, l’autre le suit sans rec
   await compact(there).click();
   await expect(compact(page)).toHaveAttribute('aria-pressed', 'true');
   await expect(page.locator('gf-flora gf-plant-list gf-plant-card').first()).toHaveAttribute('compact', '');
+  // The sheet's photos, taller by their grip there: here too.
+  const grip = (/** @type {import('@playwright/test').Page} */ p) => p.locator('gf-plant-detail gf-media-viewer[compact]').getByRole('separator', { name: 'Hauteur de l’image' });
+  await grip(there).focus();
+  await there.keyboard.press('ArrowDown');
+  const height = await grip(there).getAttribute('aria-valuenow');
+  await expect(page.locator('gf-plant-detail gf-media-viewer[compact]')).toHaveAttribute('sized', '');
+  await expect(grip(page)).toHaveAttribute('aria-valuenow', String(height));
   // Réglages › Affichage, Activités, Carnet de récolte: changed there, shown here.
   await app.go('#/settings');
   await other.go('#/settings');
