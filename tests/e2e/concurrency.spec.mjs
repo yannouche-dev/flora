@@ -71,6 +71,15 @@ test('deux onglets : un réglage changé dans l’un, l’autre le suit sans rec
   const harvest = (/** @type {import('@playwright/test').Page} */ p) => p.locator('gf-settings').getByRole('checkbox', { name: /Journal de récolte/ });
   await harvest(there).check();
   await expect(harvest(page)).toBeChecked();
+  // Ma région; the Trefle token (a placeholder, never a real one): its card here no longer asks for one.
+  await there.getByRole('combobox', { name: 'Ma région' }).selectOption('FR-BRE');
+  await expect(page.getByRole('combobox', { name: 'Ma région' })).toHaveValue('FR-BRE');
+  const trefle = (/** @type {import('@playwright/test').Page} */ p) => p.locator('gf-settings li.module').filter({ hasText: 'trefle.io' });
+  await expect(trefle(page).getByText('jeton requis')).toBeVisible();
+  await trefle(there).getByPlaceholder('Jeton Trefle').fill('jeton-factice-e2e');
+  await trefle(there).getByRole('button', { name: 'Enregistrer' }).click();
+  await expect(trefle(page).getByText('jeton requis')).toHaveCount(0);
+  await expect(trefle(page).getByRole('checkbox')).toBeEnabled();
   await there.close();
 });
 

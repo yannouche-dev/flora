@@ -6,7 +6,7 @@
 
 import { config } from '../config.js';
 import { bundledJSON } from './bundled.js';
-import { readText, writeText } from './prefs.js';
+import { definePref } from './prefs.js';
 
 /**
  * @typedef {{ code: string, name: string, region: string, former: string, polygons: number[][][][] }} Department
@@ -131,15 +131,18 @@ export async function bundledOutline(kind, name = '') {
 
 // ── "Ma région" (Réglages) ───────────────────────────────────────────────────
 
+/** Its ISO code, kept as it always was (plain text); read again when another tab changes it. */
+const regionPref = definePref({ key: config.storageKeys.region, text: true, clean: v => v || null, store: v => v || null });
+
+/** Fires `change` when « Ma région » changes — here, or in another tab. */
+export const regionEvents = regionPref.events;
+
 /** @returns {string | null} ISO code of the chosen region */
-export function myRegion() {
-  return readText(config.storageKeys.region) || null;
-}
+export const myRegion = () => regionPref.get();
 
 /** @param {string | null} iso */
 export function setMyRegion(iso) {
-  writeText(config.storageKeys.region, iso || null); // not written: not persisted
-  dispatchEvent(new Event('geoflora-region'));
+  regionPref.set(iso || null); // not written: for this visit only
 }
 
 /** Territory of a place (its point), else the chosen region. @param {[number, number] | null | undefined} point */

@@ -1,7 +1,8 @@
 // Réglages suivis d'un onglet à l'autre (core/prefs.js definePref, core/sync.js): the settings kept as plain text since
-// their first days — here the display mode, the grid's, compact, the Carnet de récolte and the activities' steps
-// (core/store.js) — read and written as before (their keys, their values: nothing lost), and, changed in another tab,
-// followed in this one: the store says it, once, and nothing is written back.
+// their first days — the display mode, the grid's, compact, the Carnet de récolte and the activities' steps
+// (core/store.js), Ma région (core/territory.js), the Trefle token (core/sources.js) — read and written as before (their
+// keys, their values: nothing lost), and, changed in another tab, followed in this one: the store (or the setting's
+// events) says it, once, and nothing is written back.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
@@ -116,4 +117,30 @@ test('Carnet de récolte et étapes des activités changés dans un autre onglet
   assert.deepEqual([S.store.state.showSteps, localStorage.getItem(K.showSteps)], ['on', 'on']);
   S.setShowSteps('auto');
   assert.deepEqual([S.store.state.showSteps, localStorage.getItem(K.showSteps)], ['auto', null]);
+});
+
+test('Ma région et le jeton Trefle : gardés en texte comme avant ; changés dans un autre onglet, suivis, `change` à chaque fois', async () => {
+  const { myRegion, regionEvents, setMyRegion } = await import('../../app/core/territory.js');
+  const { getTrefleToken, setTrefleToken, trefleEvents } = await import('../../app/core/sources.js');
+  /** @type {unknown[]} */ const heard = [];
+  regionEvents.addEventListener('change', e => heard.push(['région', /** @type {CustomEvent} */ (e).detail]));
+  trefleEvents.addEventListener('change', e => heard.push(['jeton', /** @type {CustomEvent} */ (e).detail]));
+  assert.deepEqual([myRegion(), getTrefleToken()], [null, null]);
+  setMyRegion('FR-BRE');
+  assert.equal(localStorage.getItem(K.region), 'FR-BRE', 'son code tel quel');
+  setMyRegion('');
+  assert.equal(localStorage.getItem(K.region), null);
+  assert.deepEqual(fromAnotherTab(K.region, 'FR-OCC'), { written: 0, changed: 0 });
+  assert.equal(myRegion(), 'FR-OCC');
+  // A placeholder, never a real token.
+  setTrefleToken('jeton-factice');
+  assert.equal(localStorage.getItem(K.trefleToken), 'jeton-factice', 'tel que saisi');
+  setTrefleToken(null);
+  assert.equal(localStorage.getItem(K.trefleToken), null);
+  assert.equal(fromAnotherTab(K.trefleToken, 'autre-jeton-factice').written, 0);
+  assert.equal(getTrefleToken(), 'autre-jeton-factice');
+  fromAnotherTab(K.trefleToken, '');
+  assert.equal(getTrefleToken(), null, 'vide : aucun');
+  assert.deepEqual(heard, [['région', 'FR-BRE'], ['région', null], ['région', 'FR-OCC'], ['jeton', 'jeton-factice'], ['jeton', null],
+    ['jeton', 'autre-jeton-factice'], ['jeton', null]]);
 });

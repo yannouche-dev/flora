@@ -9,7 +9,7 @@ import { moduleOn } from '../core/modules.js';
 import { observationsAround, savedRadius, saveRadius } from '../core/nearby.js';
 import { AROUND_STOPS, formatDistance } from '../core/distance.js';
 import { zoneShape } from '../core/geoservices.js';
-import { bundledOutline, mapRegion, myRegion } from '../core/territory.js';
+import { bundledOutline, mapRegion, myRegion, regionEvents } from '../core/territory.js';
 import { keptPlace } from '../core/around-sessions.js';
 import * as sources from '../core/sources.js';
 import { MAP_CONFIG_DEFAULTS } from '../core/sheet-layout.js';
@@ -202,7 +202,7 @@ export class GfSheetMap extends LitElement {
     spotEvents.addEventListener('change', this.#onChange);
     this.#listen();
     this.#items = this.#search.results.items;
-    addEventListener('geoflora-region', this.#onRegion);
+    regionEvents.addEventListener('change', this.#onRegion);
     this.#findRegion();
     this.#loadCollections();
   }
@@ -232,7 +232,7 @@ export class GfSheetMap extends LitElement {
     this.dispatchEvent(new CustomEvent('map-region', { detail: region, bubbles: true }));
   }
   #regionFor = '';
-  /** Réglages › Ma région changed (setMyRegion): asked again. */
+  /** Réglages › Ma région changed (setMyRegion), here or in another tab: asked again. */
   #onRegion = () => { this.#findRegion(); };
 
   /** A setting of this map changed here (the scope bar): the sheet keeps it, per map. @param {any} patch */
@@ -257,7 +257,7 @@ export class GfSheetMap extends LitElement {
   disconnectedCallback() {
     super.disconnectedCallback();
     spotEvents.removeEventListener('change', this.#onChange);
-    removeEventListener('geoflora-region', this.#onRegion);
+    regionEvents.removeEventListener('change', this.#onRegion);
     this.#listen();
   }
 

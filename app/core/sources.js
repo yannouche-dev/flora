@@ -6,22 +6,27 @@ import { config } from '../config.js';
 import * as cache from './cache.js';
 import { moduleEvents, moduleOn, modulesSignature } from './modules.js';
 import { fetchJson } from './net.js';
-import { readText, writeText } from './prefs.js';
+import { definePref } from './prefs.js';
+
+/** The user's Trefle token (Réglages › Modules), kept as typed (plain text); read again when another tab changes it. */
+const tokenPref = definePref({ key: config.storageKeys.trefleToken, text: true, clean: v => v || null, store: v => v || null });
+
+/** Fires `change` when the Trefle token changes — here, or in another tab. */
+export const trefleEvents = tokenPref.events;
 
 /** @returns {string | null} */
-export function getTrefleToken() {
-  return readText(config.storageKeys.trefleToken) || null;
-}
+export const getTrefleToken = () => tokenPref.get();
 
 /** @param {string | null} token */
 export function setTrefleToken(token) {
-  // Storage unavailable: the token simply won't persist.
-  writeText(config.storageKeys.trefleToken, token || null);
-  instance = null;
+  // Storage unavailable: the token holds for this visit only.
+  tokenPref.set(token || null);
 }
 
 /** The PlantSources calling only the modules on (made again when a module or the Trefle token changes). @type {PlantSources | null} */
 let instance = null;
+// The token changed, here or in another tab: the next call takes it.
+tokenPref.events.addEventListener('change', () => { instance = null; });
 const sourcesFor = () => instance ??= new PlantSources({ trefleToken: getTrefleToken(), enabled: (/** @type {any} */ k) => moduleOn(k), fetchJson });
 // A module switched on again must not get an empty answer from the in-memory cache of an old instance.
 moduleEvents.addEventListener('change', () => { instance = null; });
