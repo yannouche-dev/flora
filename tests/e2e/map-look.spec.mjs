@@ -269,7 +269,7 @@ test('Réglages › Cartes : les mêmes options que le panneau ▦ de chaque car
   await expect.poll(() => shown(map)).toEqual({ base: 'plan', overlays: ['forets'] });
   const panel = await openPanel(map);
   await expect(panel.locator('.scope')).toContainText('Réglages communs à toutes les cartes');
-  await expect(panel.getByRole('link', { name: 'Réglages › Cartes' })).toHaveAttribute('href', '#/settings');
+  await expect(panel.getByRole('link', { name: 'Réglages › Cartes' })).toHaveAttribute('href', '#/settings?section=maps');
   await expect(panel.getByRole('button', { name: /Plan IGN/ })).toHaveAttribute('aria-pressed', 'true');
   await expect(panel.getByRole('checkbox', { name: /Forêts publiques/ })).toBeChecked();
 });

@@ -494,6 +494,45 @@ test('Un onglet touché quand on y est : rien ne change', async ({ app, page }) 
   }
 });
 
+/** The sections of Réglages, in the page's order: their address (?section=) and their heading. */
+const SECTIONS = [['first-steps', 'Premiers pas'], ['sheet-layout', 'Mise en page de la fiche'], ['data', 'Données'],
+  ['region', 'Ma région'], ['display', 'Affichage'], ['maps', 'Cartes'], ['modules', 'Modules : services en ligne'], ['harvest', 'Mode cueillette'],
+  ['collections', 'Mes plantes : favoris, listes et lieux'], ['transfer', 'Transférer vers un autre appareil']];
+
+/** How far below the top of Réglages (its scrolling page) a heading is, px. @param {import('@playwright/test').Locator} heading */
+const belowTop = heading => heading.evaluate(h => Math.round(h.getBoundingClientRect().top - /** @type {ShadowRoot} */ (h.getRootNode()).host.getBoundingClientRect().top));
+
+test('Un lien vers une section de Réglages y mène, son titre au focus : « Réglages › Cartes » du panneau ▦ d’une carte ; Retour revient à la carte ; chaque section a son adresse', async ({ app, page }) => {
+  await app.open('#/map');
+  const map = page.locator('gf-map-page gf-map');
+  await map.evaluate(m => /** @type {any} */ (m).openPanel());
+  const link = map.locator('gf-map-panel dialog').getByRole('link', { name: 'Réglages › Cartes' });
+  await expect(link).toHaveAttribute('href', '#/settings?section=maps');
+  await link.click();
+  await expect.poll(() => hash(page)).toBe('#/settings?section=maps');
+  // Cartes, near the top of the page — not the top of Réglages, far above it —, its heading focused (a screen reader
+  // says where it is).
+  const settings = page.locator('gf-settings');
+  const maps = settings.getByRole('heading', { level: 2, name: 'Cartes', exact: true });
+  await expect(maps).toBeFocused();
+  await expect(maps).toBeInViewport({ ratio: 1 });
+  expect(await belowTop(maps)).toBeLessThan(40);
+  expect(await settings.evaluate(s => s.scrollTop)).toBeGreaterThan(500);
+  await page.goBack();
+  await expect.poll(() => hash(page)).toBe('#/map');
+
+  // Each section: its address, its heading in sight and focused — in the page's order, one after the other.
+  await app.go('#/settings');
+  await expect(settings.locator('h2[id]')).toHaveText(SECTIONS.map(([, name]) => name));
+  for (const [id, name] of SECTIONS) {
+    await app.go('#/settings?section=' + id);
+    const heading = settings.getByRole('heading', { level: 2, name, exact: true });
+    await expect(heading, id).toBeFocused();
+    await expect(heading, id).toBeInViewport({ ratio: 1 });
+    await expect(heading, id).toHaveId(id);
+  }
+});
+
 test('Une seule recherche : une disposition libre ne change pas celle de Flore', async ({ app, page }) => {
   await app.open('#/?family=Rosaceae');
   // The screen's search is its own (here: ortie): Flore's stays as it was, never emptied nor changed.

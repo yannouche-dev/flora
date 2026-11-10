@@ -463,7 +463,8 @@ export class GfApp extends LitElement {
         return html`<gf-spot-editor spot-id=${route.id} add-plant=${route.add ?? ''} ?pick=${route.pick}></gf-spot-editor>`;
       case 'settings':
         document.title = 'Réglages — GeoFlora';
-        return html`<gf-settings></gf-settings>`;
+        // ?section=: the section a link named (« Réglages › Cartes »), reached; the same element on to another one.
+        return html`<gf-settings .section=${route.section}></gf-settings>`;
       case 'legal':
         return html`<gf-legal></gf-legal>`;
       case 'app':

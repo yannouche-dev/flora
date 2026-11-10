@@ -4,7 +4,7 @@
 import './history.js';
 
 /**
- * @typedef {{ name: 'search' } | { name: 'plant', id: number, pane: string | null, at: number | null } | { name: 'settings' } | { name: 'legal' } | { name: 'collections', open: string | null, plant: number | null }
+ * @typedef {{ name: 'search' } | { name: 'plant', id: number, pane: string | null, at: number | null } | { name: 'settings', section: SettingsSection | null } | { name: 'legal' } | { name: 'collections', open: string | null, plant: number | null }
  *   | { name: 'map', spot: string | null, plants: number[], focus: string | null, season: boolean, add: number | null, pick: boolean }
  *   | { name: 'spot-new', plant: number | null, kind: 'list' | 'place', at: [number, number] | null }
  *   | { name: 'spot', id: string, add: number | null, pick: boolean }
@@ -23,6 +23,17 @@ import './history.js';
  * open it with ?p= alone).
  * @typedef {{ name: 'app', id: string, step: string | null, plant: number | null, view: string | null, media: number | null, sheet: boolean }} AppRoute
  */
+
+/**
+ * The sections of Réglages an address can open (#/settings?section=<id>): each one's heading, by its id in
+ * gf-settings.js — reached and focused there. Any other value: the top of the page.
+ */
+export const SETTINGS_SECTIONS = /** @type {const} */ (['first-steps', 'sheet-layout', 'data', 'region', 'display', 'maps', 'modules',
+  'harvest', 'collections', 'transfer']);
+/** @typedef {typeof SETTINGS_SECTIONS[number]} SettingsSection */
+
+/** A section of Réglages, as an address says it (null: none, or not one of them). @param {string | null} v @returns {SettingsSection | null} */
+const sectionParam = v => SETTINGS_SECTIONS.find(s => s === v) ?? null;
 
 /** A noting of a lieu in an address (focus=: its entry id, PlantEntry.id). @param {string | null} v */
 const focusParam = v => v && /^[\w-]{1,48}$/.test(v) ? v : null;
@@ -62,7 +73,8 @@ export function parse(hash) {
   if (spot) return { name: 'spot', id: spot[1], add: number('add'), pick: params.get('pick') === '1' };
   if (path === 'shared') return { name: 'shared', data: params.get('d') || '' };
 
-  if (path === 'settings') return { name: 'settings' };
+  // ?section=<id>: a section of Réglages, reached (its heading focused), as the link that opened it says.
+  if (path === 'settings') return { name: 'settings', section: sectionParam(params.get('section')) };
   if (path === 'legal') return { name: 'legal' };
   // A mini-app (app/miniapps), alone on the screen: #/app/<id>[/<step>][?p=<plant>&v=<view>&m=<image>&fiche=1].
   const app = /^app\/([a-z][a-z0-9-]{1,23})(?:\/([a-z][a-z0-9-]{1,23}))?$/.exec(path);
@@ -98,7 +110,8 @@ export const href = {
   /** A block of the plant's sheet in a pane beside it (`at`: the media viewer's n-th image). */
   plantPane: (/** @type {number} */ id, /** @type {string} */ pane, /** @type {number | null} */ at = null) =>
     '#/plant/' + id + '?pane=' + encodeURIComponent(pane) + (at != null ? '&i=' + at : ''),
-  settings: () => '#/settings',
+  /** Réglages; `section`: the one reached, its heading focused (« Réglages › Modules »: 'modules'). */
+  settings: (/** @type {SettingsSection | null} */ section = null) => '#/settings' + (section ? '?section=' + section : ''),
   /** Mentions légales et confidentialité (from Réglages). */
   legal: () => '#/legal',
   /** « Découvrir »: the list of the activities. */

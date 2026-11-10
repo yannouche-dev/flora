@@ -484,7 +484,7 @@ export class MaGuided extends LitElement {
     const off = [...new Set(this.#stepKeys.flatMap(k => modulesOffFor(k)))];
     if (!off.length) return nothing;
     const names = off.map(m => `« ${MODULES.find(x => x.key === m)?.name || m} »`);
-    return html`<p class="g-off" role="note">${icon('eye-slash')} ${names.length > 1 ? `Modules ${names.slice(0, -1).join(', ')} et ${names.at(-1)} désactivés` : `Module ${names[0]} désactivé`} : ${names.length > 1 ? 'leurs panneaux ne sont pas ajoutés' : 'son panneau n’est pas ajouté'}. Vous pouvez ${names.length > 1 ? 'les' : 'le'} réactiver dans <a href=${href.settings()}>Réglages › Modules</a>.</p>`;
+    return html`<p class="g-off" role="note">${icon('eye-slash')} ${names.length > 1 ? `Modules ${names.slice(0, -1).join(', ')} et ${names.at(-1)} désactivés` : `Module ${names[0]} désactivé`} : ${names.length > 1 ? 'leurs panneaux ne sont pas ajoutés' : 'son panneau n’est pas ajouté'}. Vous pouvez ${names.length > 1 ? 'les' : 'le'} réactiver dans <a href=${href.settings('modules')}>Réglages › Modules</a>.</p>`;
   }
 
   /** Where the discovery is: 0 the map, 1 the cards, 2 the photos, 3 the encyclopedia, 4 the fork, 5 the plants around. */

@@ -3,7 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { activeFilterCount, applySuggestion, clearFilters, fromHash, heldSuggestions, letGoSuggestions, toHash, toggleValue } from '../../app/core/query.js';
-import { href, isStart, parse } from '../../app/core/router.js';
+import { href, isStart, parse, SETTINGS_SECTIONS } from '../../app/core/router.js';
 import { FACETS, emptyFilters } from '../../app/config.js';
 import { emptyQuery } from '../../app/core/search-channel.js';
 import { store } from '../../app/core/store.js';
@@ -106,6 +106,20 @@ test('une activité : l’adresse dit tout l’écran (la plante, la vue, l’im
   const odd = /** @type {any} */ (parse('#/app/rencontres/cards?p=x&v=<b>&m=-1&fiche=yes'));
   assert.deepEqual([odd.plant, odd.view, odd.media, odd.sheet], [null, null, null, false]);
   assert.equal(/** @type {any} */ (parse('#/app/rencontres/cards?m=0')).media, null, 'la première image : rien à dire');
+});
+
+test('Réglages : la section qu’un lien nomme est dans l’adresse (#/settings?section=…), lue telle quelle ; une autre, le haut de la page', () => {
+  assert.equal(href.settings(), '#/settings');
+  assert.deepEqual(parse('#/settings'), { name: 'settings', section: null });
+  assert.equal(href.settings('maps'), '#/settings?section=maps');
+  assert.equal(new Set(SETTINGS_SECTIONS).size, SETTINGS_SECTIONS.length);
+  // What href writes, parse reads: each section once, its own word.
+  for (const section of SETTINGS_SECTIONS) assert.deepEqual(parse(href.settings(section)), { name: 'settings', section }, section);
+  // Not one of them (a word of before — « cartes » —, another case, a path, a key of every object): Réglages as it opens.
+  for (const odd of ['', 'nope', 'cartes', 'Modules', 'modules ', '../modules', 'constructor', 'toString']) {
+    assert.deepEqual(parse('#/settings?section=' + encodeURIComponent(odd)), { name: 'settings', section: null }, odd);
+  }
+  assert.deepEqual(parse('#/settings?section=modules&section=maps'), { name: 'settings', section: 'modules' }, 'la première');
 });
 
 test('isStart : l’adresse de départ, `#/` seule (une recherche qui ne demande rien) — jamais une autre adresse de Flore', () => {

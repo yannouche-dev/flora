@@ -203,7 +203,7 @@ export class GfIgnLayers extends LitElement {
     const retry = html`<button type="button" @click=${() => this.#load(true)}>${icon('arrow-counterclockwise')} Réessayer</button>`;
     if (c.problem === 'module-off') {
       return html`<div class="state"><p class="note" role="status">Module « IGN – fonds de carte » désactivé : ${c.layers ? 'une couche ajoutée n’affichera que les zones déjà vues' : 'le catalogue n’est pas demandé'}.
-        <a href=${href.settings()}>Réglages › Modules</a></p></div>`;
+        <a href=${href.settings('modules')}>Réglages › Modules</a></p></div>`;
     }
     if (c.problem === 'offline') {
       return html`<div class="state"><p class="note" role="status">${c.layers ? `Hors ligne : ${kept}.` : 'Hors ligne : le catalogue de l’IGN n’est pas encore sur l’appareil.'}</p>${c.layers ? nothing : retry}</div>`;

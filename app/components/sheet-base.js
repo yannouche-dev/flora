@@ -1014,7 +1014,7 @@ export class SheetBase extends LitElement {
         const facts = trefleFacts(details);
         if (facts.length) return html`<dl class="facts">${facts.map(([k, val]) => html`<dt>${k}</dt><dd>${val}</dd>`)}</dl>
           <p class="credit">Source : Trefle (données en anglais, avec votre jeton).</p>`;
-        if (!sources.getTrefleToken()) return html`<p class="muted">Ajoutez votre jeton Trefle dans <a href=${href.settings()}>Réglages › Modules</a>.</p>`;
+        if (!sources.getTrefleToken()) return html`<p class="muted">Ajoutez votre jeton Trefle dans <a href=${href.settings('modules')}>Réglages › Modules</a>.</p>`;
         return loading ? pending : empty('Aucune donnée Trefle pour cette plante.');
       }
       case 'ids': return this.#ids(ctx);

@@ -305,7 +305,7 @@ export class GfMapOptions extends LitElement {
         ${this.lookWhy ? nothing : html`<button type="button" class="link" @click=${() => this.#emit('look-common')}>${icon('arrow-counterclockwise')} Revenir aux réglages communs</button>`}</p>`;
     }
     return html`<p class="scope">${icon('globe-europe-africa')}<span>Réglages communs à toutes les cartes</span>
-      <a href=${href.settings()}>Réglages › Cartes</a></p>`;
+      <a href=${href.settings('maps')}>Réglages › Cartes</a></p>`;
   }
 
   /**
@@ -327,7 +327,7 @@ export class GfMapOptions extends LitElement {
           <summary>Options de la 3D</summary>
           ${map3dOptions(s, change, { relief: moduleOn('relief3d'), ign: moduleOn('ignMaps'), id: id + '3d' })}
         </details>`}
-        ${this.own ? html`<p class="note">2D ou 3D : le même choix pour toutes les cartes (<a href=${href.settings()}>Réglages › Cartes</a>).</p>` : nothing}
+        ${this.own ? html`<p class="note">2D ou 3D : le même choix pour toutes les cartes (<a href=${href.settings('maps')}>Réglages › Cartes</a>).</p>` : nothing}
       </div>`;
   }
 

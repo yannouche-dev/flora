@@ -432,7 +432,7 @@ export class GfMapPage extends LitElement {
     if (a.status === 'loading') return html`<section class="sheet around" aria-label="Autour" aria-busy="true">${head}</section>`;
     if (a.status === 'error') return html`<section class="sheet around" aria-label="Autour">${head}
       <div class="actions">${a.off
-        ? html`<a class="button" href=${href.settings()} title=${a.error || ''}>Réglages › Modules</a>`
+        ? html`<a class="button" href=${href.settings('modules')} title=${a.error || ''}>Réglages › Modules</a>`
         : html`<button type="button" title=${a.error || ''} @click=${() => this.#searchAround(a.center, a.where)}>Réessayer</button>`}</div></section>`;
 
     const result = /** @type {import('../core/nearby.js').NearbyResult} */ (a.result);

@@ -136,7 +136,7 @@ export class GfLegal extends LitElement {
       <p>Le navigateur ne demande votre position qu’après un geste de votre part : « Autour de moi », « Me localiser », « Commencer ici », « Noter ici », « Près d’ici »… Une fois l’autorisation accordée, les cartes et les listes de lieux s’en servent aussi (distances, votre point sur la carte) ; vous pouvez la retirer à tout moment dans les réglages du navigateur. Avant chaque envoi, l’écran dit à quel service elle part. Elle n’est jamais envoyée à l’éditeur.</p>
 
       <h2>Ce que reçoivent les services en ligne</h2>
-      <p>Chaque service ci-dessous est un module, que vous pouvez couper dans <a href=${href.settings()}>Réglages › Modules</a> : il n’est alors plus appelé. Tous voient, comme pour toute page web, votre adresse IP et votre navigateur, et appliquent leur propre politique de confidentialité.</p>
+      <p>Chaque service ci-dessous est un module, que vous pouvez couper dans <a href=${href.settings('modules')}>Réglages › Modules</a> : il n’est alors plus appelé. Tous voient, comme pour toute page web, votre adresse IP et votre navigateur, et appliquent leur propre politique de confidentialité.</p>
       <ul class="services">
         ${SERVICES.map(s => html`<li><strong>${s.name}</strong><span class="hosts">${s.hosts}</span>${s.what}<span class="pos">${icon('geo-alt-fill')} Position : ${s.position}</span></li>`)}
       </ul>

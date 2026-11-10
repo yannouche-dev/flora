@@ -127,7 +127,7 @@ export class GfSheetBlock extends SheetBase {
     const note = aloneNote(key);
     if (note) {
       return html`<p class="muted only-pad">${note.kind === 'photos' ? photosOffLine() : note.kind === 'off'
-        ? html`${icon('eye-slash')} ${note.text} (<a href=${href.settings()}>Réglages › Modules</a>).` : note.text}</p>`;
+        ? html`${icon('eye-slash')} ${note.text} (<a href=${href.settings('modules')}>Réglages › Modules</a>).` : note.text}</p>`;
     }
     if (key === 'media') {
       return html`<gf-media-viewer ?local=${this.local} plant-id=${ctx.plant.id} presentation=${blockStyle(v, 'media')} .index=${this.at ?? 0} .startUrl=${this.startUrl}></gf-media-viewer>`;
